@@ -7,9 +7,10 @@ from datetime import datetime
 @dataclass 
 class CSVData:
     name: str
-    timestep: Optional[float] = None
-    timerange: Optional[list] = None
     data: dict
+    timestep: Optional[float] = None
+    time_range: Optional[list] = None
+
 
 @dataclass
 class Uncertainty:

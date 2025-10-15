@@ -10,8 +10,8 @@ class InputHandler:
         self.variables = []     #list: Holds variables
         
     def parse(self, filepath):
-        """Main parser that dispatches to sub-parsers."""
-        print("Started input parsing")
+        """ Main parser that dispatches to sub-parsers """
+        print("Started parsing input")
         with open(filepath, "r") as f:
             lines = f.readlines()
 
@@ -25,20 +25,22 @@ class InputHandler:
             # Dispatch logic
             if line.lower().startswith("csv"):
                 handler = CSVHandler()
-                i = handler.parse(lines, i+1)
-                handler.readCSV()
-                self.csv_data = handler.data
+                i = handler.parse(lines, i)
+                self.csv_data = handler.compileCSVData()
+                #self.csv_data = handler.data
                 del handler
-            elif line.lower().startswith("var"):
+            elif line.lower().startswith("var") or line.lower().startswith("eq"):
                 handler = VariableHandler(csv_data = self.csv_data)
                 i = handler.parse(lines, i)
                 new_variable = handler.createVariable()
                 self.variables.append(new_variable)
-            elif line.lower().startswith("eq"):
-                handler = VariableHandler(csv_data = self.csv_data)
-                i = handler.parse(lines, i)
-                new_variable = handler.createVariable()
-                self.variables.append(new_variable)
+                del handler
+            #elif line.lower().startswith("eq"):
+            #    handler = VariableHandler(csv_data = self.csv_data)
+            #    i = handler.parse(lines, i)
+            #    new_variable = handler.createVariable()
+            #    self.variables.append(new_variable)
+            #    del handler
                 
                 #handler.parse(lines[i:], i)
             #elif line.lower().startswith("eq"):
@@ -52,26 +54,50 @@ class InputHandler:
 
 class CSVHandler:
     def __init__(self):
-        self.reset()
-    
-    def reset(self):
+        self.csv_name = None            #str: CSV name
         self.has_header = None          #bool: defines if csv has header
-        self.delimiter = None           #str: defines csv delimiter
+        self.has_timedata = None        #bool: defines whether CSV contains timedata
+        self.data = None                #dict: data paired with variable names
         self.structure_list = None      #list: lists csv structure interpretation
         self.data = None                #dict: data paired with variable names
         self.timeformat = None          #str: time format
         self.file_path = None           #str: path to csv file
         
-    def postParseCheck(self):
+    def _postParseCheck(self):
         if self.delimiter is None:
             raise ValueError("Did not receive delimiter in input.")
         if self.structure_list is None:
             raise ValueError("Did not receive file structure in input.")
         if self.file_path is None:
             raise ValueError("Did not receive file location in input.")
+    
+    def _readCSV(self):
+        """ Reads a CSV and populates the object data block """
+        with open(self.file_path, 'r', newline='') as csvfile:
+            reader = csv.reader(csvfile, delimiter=self.delimiter)
+            if self.has_header:
+                next(reader)
+            for row in reader:
+                for idx, name in enumerate(self.structure_list):
+                    #Skip element if it should be excluded, flagged by '-'
+                    if name != '-':
+                        #Time section handling
+                        if name.lower() == 'time':
+                            value = datetime.strptime(row[idx], self.timeformat)
+                        #All other data is attempted to be stored as a float
+                        else:
+                            try:
+                                value = float(row[idx])
+                            except ValueError:
+                                #In case of value errors, paste data as string
+                                value = row[idx]
+                        self.data[name].append(value)
             
     def parse(self, lines, i):
         """ Parses single CSV input section and obtains variables """ 
+        self.csv_name = lines[i].strip()[4:]
+        i += 1
+        
         while True:
             line = lines[i].strip()
             
@@ -107,33 +133,27 @@ class CSVHandler:
                 print(f"{line}")
                 i += 1 ; continue
             
-        self.postParseCheck()
+        self._postParseCheck()
         return i  #If finished correctly, then the index now rests at an 'end csv' line
+    
+    def compileCSVData(self):
+        """ Read CSV and populate self.data block """
+        self._readCSV()
         
-    def readCSV(self):
-        """ Reads a CSV and populates the object data block """
-        with open(self.file_path, 'r', newline='') as csvfile:
-            reader = csv.reader(csvfile, delimiter=self.delimiter)
-            if self.has_header:
-                next(reader)
-            for row in reader:
-                for idx, name in enumerate(self.structure_list):
-                    #Skip element if it should be excluded, flagged by '-'
-                    if name != '-':
-                        #Time section handling
-                        if name.lower() == 'time':
-                            value = datetime.strptime(row[idx], self.timeformat)
-                        #All other data is attempted to be stored as a float
-                        else:
-                            try:
-                                value = float(row[idx])
-                            except ValueError:
-                                #In case of value errors, paste data as string
-                                value = row[idx]
-                        self.data[name].append(value)
-
-                                
-            
+        #Check whether time was given as an input
+        for name in self.structure_list:
+            if name=="Time":                                        ###!!! Not robust: Time, time
+                self.has_timedata = True
+        
+        #If csv contains timedata, get range and timestep
+        if self.has_timedata:
+            time_range = [self.data["Time"][0], self.data["Time"][-1]]      ###!!! Not robust: Time, time
+            timestep = self.data["Time"][1] - self.data["Time"][0]          ###!!! Not robust: Time, time
+            timestep = timestep.total_seconds()
+        else:
+            time_range = None ; timestep = None
+        
+        return CSVData(self.csv_name, self.data, timestep, time_range)
         
     
 class VariableHandler:
@@ -144,6 +164,8 @@ class VariableHandler:
         self.timestep = None            #[float, str]: timestep of variable, or setting
         self.description = None         #str: variable description
         self.is_basic_variable = None   #bool: flags if variable is basic or derived
+        self.equation = None            #str: equation of the variable
+        self.equation_variables = None  #list: lists all variables used in the equation
         self.uncertainties = []         #list: contains all uncertainty sources
         return  
         
@@ -173,11 +195,17 @@ class VariableHandler:
             elif line.startswith("description"):
                 self.description = line.split(":", maxsplit=1)[1].strip()
                 i += 1 ; continue
+            elif line.startswith("equation"):
+                self.equation = line.split(":", maxsplit=1)[1].strip()
+                i += 1 ; continue
+            elif line.startswith("variables"):
+                self.equation_variables = line.split(":", maxsplit=1)[1].strip()
+                i += 1 ; continue
             elif line.lower().startswith("uncertainties"):
                 i = self._uncertaintyParser(lines, i+1)
                 i += 1 ; continue
             
-            elif line.lower().startswith("end var"):
+            elif line.lower().startswith("end "):
                 break
             elif i>len(lines):
                 raise ValueError("VariableHandler failed to quit. Please inspect.")
@@ -193,7 +221,7 @@ class VariableHandler:
         self._handleTimestep()
         
         new_variable = Variable(name=self.var_name, description=self.description, values=self.var_values, \
-                                is_basic=self.is_basic_variable)
+                                is_basic=self.is_basic_variable, equation=self.equation, variables=self.equation_variables)
         if not self.timestep is None:
             new_variable.AddTimestep(self.timestep, self.time_range)
         if len(self.uncertainties)>0:
@@ -209,16 +237,18 @@ class VariableHandler:
                 raise ValueError(f"CSV data referenced for variable {self.var_name}, but no CSV dataset was passed. Please input CSV data.")
             data_name = self.value_string.split('.')[1]
             try:
-                self.var_values = self.csv_data[data_name]
+                self.var_values = self.csv_data.data[data_name]
             except:
                 raise ValueError(f"CSV data does not contain data named {data_name}.")
         elif self.value_string.startswith("DETERMINE"):
+            self.var_values = None
+        elif self.value_string.startswith("NO"):
             self.var_values = None
         else:
             self.var_values = float(self.value_string)
     
     def _handleTimestep(self):
-        #Handles timestep settings, sets up timestep settings in object variables
+        """ Handles timestep settings, sets up timestep settings in object variables """
         if not self.timestep is None:
             if self.timestep.lower().startswith("none"):
                 self.timestep = None
@@ -231,15 +261,15 @@ class VariableHandler:
                 if self.csv_data is None:
                     raise ValueError(f"CSV data referenced for variable {self.var_name}, but no CSV dataset was passed. Please input CSV data.")
                 try:
-                    self.time_range = [self.csv_data["Time"][0], self.csv_data["Time"][-1]]      ###!!! Not robust: Time, time
-                    self.timestep = "auto"
+                    self.time_range = self.csv_data.time_range #[self.csv_data.data["Time"][0], self.csv_data.data["Time"][-1]]      ###!!! Not robust: Time, time
+                    self.timestep = self.csv_data.timestep #"auto"
                 except:
                     raise ValueError(f"CSV dataset provided for variable {self.var_name} does not contain time data.")
             else:
                 raise ValueError(f"Timestep string {self.timestep} not recognized, please check input.")
     
     def _uncertaintyParser(self, lines, i):
-        #Parses uncertainties block and dispatches uncertainty handler
+        """ Parses uncertainties block and dispatches uncertainty handler """
         while True:
             line = lines[i].strip()
             if line.startswith("-"):
@@ -256,7 +286,7 @@ class VariableHandler:
         return i
     
     def _handleUncertainty(self, line):
-        #Handles a single line in an uncertainty block
+        """ Handles a single line in an uncertainty block """
         #Check inclusion
         if line.lower().endswith("false"):
             return None
@@ -306,8 +336,9 @@ if __name__=="__main__":
     inputhandler = InputHandler()
     inputhandler.parse(inputfile)
     
-    
-
+    #print(inputhandler.csv_data.name)
+    #rint(inputhandler.csv_data.time_range)
+    #print(inputhandler.csv_data.timestep)
 
 """ 
 
