@@ -6,8 +6,8 @@ from my_dataclasses import CSVData, Uncertainty, Variable
 
 class InputHandler:
     def __init__(self):
-        self.csv_data = None    #list: Holds CSV datasets
-        self.variables = []     #list: Holds variables
+        self.csv_data = None    #CSVData dataclass: Holds CSV datasets
+        self.variables = {}     #dict: Holds variables
         
     def parse(self, filepath):
         """ Main parser that dispatches to sub-parsers """
@@ -27,29 +27,20 @@ class InputHandler:
                 handler = CSVHandler()
                 i = handler.parse(lines, i)
                 self.csv_data = handler.compileCSVData()
-                #self.csv_data = handler.data
                 del handler
             elif line.lower().startswith("var") or line.lower().startswith("eq"):
                 handler = VariableHandler(csv_data = self.csv_data)
                 i = handler.parse(lines, i)
                 new_variable = handler.createVariable()
-                self.variables.append(new_variable)
+                self.variables.update({new_variable.name: new_variable})
                 del handler
-            #elif line.lower().startswith("eq"):
-            #    handler = VariableHandler(csv_data = self.csv_data)
-            #    i = handler.parse(lines, i)
-            #    new_variable = handler.createVariable()
-            #    self.variables.append(new_variable)
-            #    del handler
-                
-                #handler.parse(lines[i:], i)
-            #elif line.lower().startswith("eq"):
-            #    i = EquationHandler(lines[i:], i)
             i += 1  # Move to next after handler finishes
-        
-        print()
         print("Finished parsing input")
-        for var in self.variables: print(var)
+    
+    def checkInputConsistency(self):
+        #Check whether derived variables are all well-defined
+        #Check whether TBD basic variables can be calculated
+        return
             
 
 class CSVHandler:
@@ -219,9 +210,10 @@ class VariableHandler:
         """ Dispatches the internal functions that handle the parsed input strings, creates a new variable and populates it """
         self._handleValueData()
         self._handleTimestep()
+        self._handleEquationVariables()
         
         new_variable = Variable(name=self.var_name, description=self.description, values=self.var_values, \
-                                is_basic=self.is_basic_variable, equation=self.equation, variables=self.equation_variables)
+                                is_basic=self.is_basic_variable, equation=self.equation, equation_variables=self.equation_variables)
         if not self.timestep is None:
             new_variable.AddTimestep(self.timestep, self.time_range)
         if len(self.uncertainties)>0:
@@ -267,6 +259,15 @@ class VariableHandler:
                     raise ValueError(f"CSV dataset provided for variable {self.var_name} does not contain time data.")
             else:
                 raise ValueError(f"Timestep string {self.timestep} not recognized, please check input.")
+    
+    def _handleEquationVariables(self):
+        """ Converts equation variable string to a list of variable names """
+        if self.equation_variables is None:
+            return
+        input_variables = self.equation_variables.split(",")
+        self.equation_variables = []
+        for var in input_variables:
+            self.equation_variables.append(var.strip()[1:-1])
     
     def _uncertaintyParser(self, lines, i):
         """ Parses uncertainties block and dispatches uncertainty handler """
@@ -329,51 +330,4 @@ class VariableHandler:
 
 
 
-
-if __name__=="__main__":
-    inputfile = "Z:\\personal directories\\Matthijs Ates\\Only you\\python\\myinput.txt"
-    
-    inputhandler = InputHandler()
-    inputhandler.parse(inputfile)
-    
-    #print(inputhandler.csv_data.name)
-    #rint(inputhandler.csv_data.time_range)
-    #print(inputhandler.csv_data.timestep)
-
-""" 
-
-def InputHandler2(filepath):
-
-    with open(filepath, "r") as f:
-        lines = f.readlines()
-
-    i = 0
-    while i < len(lines):
-        line = lines[i].strip()
-        if not line or line.startswith("#"):  # skip empty/comment lines
-            i += 1
-            continue
-
-        # Dispatch logic
-        if line.lower().startswith("csv"):
-            i = CsvHandler(lines[i:], i)
-        elif line.lower().startswith("var"):
-            i = VariableHandler(lines[i:], i)
-        elif line.lower().startswith("eq"):
-            i = EquationHandler(lines[i:], i)
-        else:
-            # Other top-level logic or unknown lines
-            print("Ignoring line:", line)
-
-        i += 1  # Move to next after handler finishes
-
-def VariableHandler2(lines, i):
-    return
-
-def EquationHandler2(lines, i):
-    return
-
-
-
-""" 
 
