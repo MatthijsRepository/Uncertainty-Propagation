@@ -63,9 +63,10 @@ class Variable:
         if not self.is_basic:
             if not (equation or dependency_names):
                 raise ValueError(f"{self.name} is defined as a derived variable, please include equation and variables")
-            self.equation = equation        #str: defines variable equation
+            self.equation = equation            #str: defines variable equation
             self.dependency_names = dependency_names      #list: lists variables in equation
-            self.is_root_consistent = None     #bool: whether the variable is traces consistently to basic variables
+            self.dependencies = []              #list: list of variables that are the direct dependencies
+            self.is_root_consistent = None      #bool: whether the variable is traces consistently to basic variables
             
         self.values = values                #[int, float, array]: variable values
         
@@ -84,8 +85,64 @@ class Variable:
             return (f"Derived variable: {self.name} = {self.equation} \nDescription: {self.description}")
         
     def __add__(self, other):
-        return self.values + other.values
-
+        #If floats or ints are involved the logic is simple
+        if isinstance(other, (int, float)):
+            return self.values + other
+        if isinstance(self.values, (int, float)) or isinstance(other.values, (int, float)):
+            return self.values + other
+        #Check array lengths and start/end time comparison
+        if len(self.values) == len(other.values):
+            if self.timestep != other.timestep:
+                print(f"WARNING: summing variables {self.name} and {other.name} with different timesteps, {self.timestep} and {other.timestep}!!")
+            return self.values + other.values
+        else:
+            raise ValueError("Summing variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
+    
+    def __sub__(self, other):
+        #If floats or ints are involved the logic is simple
+        if isinstance(other, (int, float)):
+            return self.values - other
+        if isinstance(self.values, (int, float)) or isinstance(other.values, (int, float)):
+            return self.values - other
+        #Check array lengths and start/end time comparison
+        if len(self.values) == len(other.values):
+            if self.timestep != other.timestep:
+                print(f"WARNING: subtracting variables {self.name} and {other.name} with different timesteps, {self.timestep} and {other.timestep}!!")
+            return self.values - other.values
+        else:
+            raise ValueError("Subtracting variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
+         
+    def __mult__(self, other):
+        #If floats or ints are involved the logic is simple
+        if isinstance(other, (int, float)):
+            return self.values * other
+        if isinstance(self.values, (int, float)) or isinstance(other.values, (int, float)):
+            return self.values * other
+        #Check array lengths and start/end time comparison
+        if len(self.values) == len(other.values):
+            if self.timestep != other.timestep:
+                print(f"WARNING: multiplying variables {self.name} and {other.name} with different timesteps, {self.timestep} and {other.timestep}!!")
+            return self.values * other.values
+        else:
+            raise ValueError("Multiplying variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
+        
+    def __truediv__(self, other):
+        #If floats or ints are involved the logic is simple
+        if isinstance(other, (int, float)):
+            return self.values / other
+        if isinstance(self.values, (int, float)) or isinstance(other.values, (int, float)):
+            return self.values / other
+        #Check array lengths and start/end time comparison
+        if len(self.values) == len(other.values):
+            if self.timestep != other.timestep:
+                print(f"WARNING: dividing variables {self.name} and {other.name} with different timesteps, {self.timestep} and {other.timestep}!!")
+            return self.values / other.values
+        else:
+            raise ValueError("Dividing variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
+     
+        
+        
+        
     def DefineValues(self, values):
         self.values = values
     
