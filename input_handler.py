@@ -34,12 +34,7 @@ class InputHandler:
                 self.variables.update({new_variable.name: new_variable})
                 del handler
             i += 1  # Move to next after handler finishes
-    
-    def checkInputConsistency(self):
-        #Check whether derived variables are all well-defined
-        #Check whether TBD basic variables can be calculated
-        return
-            
+                
 
 class CSVHandler:
     def __init__(self):
