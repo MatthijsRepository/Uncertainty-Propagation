@@ -20,7 +20,7 @@ if __name__=="__main__":
     print("Verifying root-consistency of equation tree")
     equation_engine = EquationEngine(variables)
     #equation_engine.checkEquationTreeConsistency(variables="T")
-    #equation_engine.checkEquationTreeConsistency(variables_to_check='PR')
+    equation_engine.checkEquationTreeConsistency(variables_to_check='PR')
     equation_engine.checkEquationTreeConsistency()
     print("Equation tree is root-consistent \n")
     

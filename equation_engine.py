@@ -38,9 +38,48 @@ class EquationEngine:
         if not set(equation_variables).issubset(variable.equation_variables):
             raise ValueError(f"Listed equation variables of variable {variable.name} do not match equation. Please check inputs. \nEquation: {variable.equation} \nDetected variables: {equation_variables} \nListed variables: {variable.equation_variables}")
 
+    
+    def _checkEquationTreeRecursive(self, variables, variables_to_check, silent):
+        """ Internal function that recursively checks equation tree consistency """
+        #Recursively navigates down the tree and checks if the equation tree is defined in a consistent way
+        for name in variables_to_check:
+            var = variables.get(name)
+            #Check if variable in variables list
+            if var is None:
+                raise ValueError(f"Equation tree consistency check failed: variable {name} not included in the variable set. \nVariable set: {variables.keys()}.")
+            
+            #If variable already checked, pass this variable
+            if var.is_basic:
+                continue
+            if var.is_root_consistent: 
+                continue
+            #Else: loop through all variables in dependencies
+            for dep_name in var.equation_variables:
+                dep = variables.get(dep_name)
+                #If listed variable not included in variables list then the equation tree is not consistent
+                if dep is None:
+                    raise ValueError(f"Equation tree of variable {name} not consistent: variable {dep_name} not recognized.")
+                #If variable is basic we can continue
+                if dep.is_basic:
+                    continue
+                #If tree section is verified we can continue
+                elif dep.is_root_consistent:
+                    continue
+                #If variable is not basic and not yet verified: check tree consistency
+                elif self._checkEquationTreeRecursive(variables, dep.equation_variables, silent):
+                    continue
+                else:
+                    raise ValueError(f"Equation of {name} is not root-consistent: check for {dep_name} failed")
+            #If we succesfully looped through all dependencies of this variable, we can flag it as safe, and potentially log this to output
+            if not silent:
+                print(f"{name} is root-consistent")
+            var.is_root_consistent = True
+        #If no errors were encountered we can safely return True
+        return True
+
 
     def checkEquationTreeConsistency(self, variables=None, variables_to_check=None, silent=True):
-        """ This function verifies the equation tree is consistent """
+        """ This function that handles input and executes the equation tree consistency checker """
         #If no variables provided: act on own registry
         if variables is None:
             variables = self.variables
@@ -54,41 +93,10 @@ class EquationEngine:
         #If variables_to_check is a single variable, we convert it to a list
         if isinstance(variables_to_check, str):
             variables_to_check = [variables_to_check]
-
         
-        #Recursively navigates down the tree and checks if the equation tree is defined in a consistent way
-        for name in variables_to_check:
-            #Check if variable in variables list
-            if name not in variables:
-                raise ValueError(f"Equation tree consistency check failed: variable {name} not included in the variable set. \nVariable set: {variables.keys()}.")
-            #If variable already checked, pass this variable
-            if variables[name].is_basic:
-                continue
-            if variables[name].is_root_consistent: 
-                continue
-            #Else: loop through all variables in dependencies
-            for var in variables[name].equation_variables:
-                #If listed variable not included in variables list then the equation tree is not consistent
-                if var not in variables:
-                    raise ValueError(f"Equation tree of variable {name} not consistent: variable {var} not recognized.")
-                #If variable is basic we can continue
-                if variables[var].is_basic:
-                    continue
-                #If tree section is verified we can continue
-                elif variables[var].is_root_consistent:
-                    continue
-                #If variable is not basic and not yet verified: check tree consistency
-                #If tree is consistent we can continue
-                elif self.checkEquationTreeConsistency(variables, variables[var].equation_variables, silent=silent):
-                    continue
-                else:
-                    raise ValueError(f"Equation of {name} is not root-consistent: check for {var} failed")
-            #If we succesfully looped through all dependencies of this variable, we can flag it as safe, and potentially log this to output
-            if not silent:
-                print(f"{name} is root-consistent")
-            variables[name].is_root_consistent = True
-        #If no errors were encountered we can safely return True
-        return True
+        return self._checkEquationTreeRecursive(variables, variables_to_check, silent)
+        
+
                 
 
     
