@@ -18,7 +18,7 @@ if __name__=="__main__":
     
     #Verifying equation tree consistency, building equation tree in SimPy
     print("Verifying root-consistency of equation tree")
-    equation_engine = EquationEngine(variables)
+    equation_engine = EquationEngine(variables, update_dependencies=True)
     #equation_engine.checkEquationTreeConsistency(variables="T")
     equation_engine.checkEquationTreeConsistency(variables_to_check='PR')
     equation_engine.checkEquationTreeConsistency()

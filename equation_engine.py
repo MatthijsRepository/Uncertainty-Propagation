@@ -5,11 +5,11 @@ import re
 """ This engine handles the initialization of the equation tree, 
     verifies its internal consistency and populates missing basic values """
 class EquationEngine:
-    def __init__(self, variables):
+    def __init__(self, variables, update_dependencies=False):
         self.variables = variables          #dict: dictionary of variable names and Variable objects
         self.basic_variables, self.derived_variables = self.splitBasicDerived()
         for name in self.derived_variables:
-            self.checkVariableEquationConsistency(self.variables[name])
+            self.checkVariableEquationConsistency(self.variables[name], update_dependencies)
         
     def splitBasicDerived(self, variables=None):
         """ Splits a tree into basic and derived variables """
@@ -32,12 +32,14 @@ class EquationEngine:
         equation_variables = re.findall(r"'(.*?)'", variable.equation)                   
         return equation_variables
     
-    def checkVariableEquationConsistency(self, variable):
-        """ This function verifies whether specified variable dependency matches a given equation """
+    def checkVariableEquationConsistency(self, variable, update_dependencies=False):
+        """ This function verifies whether specified variable dependency matches a given equation, optionally updates dependencies of variable to detected variables """
         equation_variables = self.equationReader(variable)
         if not set(equation_variables).issubset(variable.equation_variables):
             raise ValueError(f"Listed equation variables of variable {variable.name} do not match equation. Please check inputs. \nEquation: {variable.equation} \nDetected variables: {equation_variables} \nListed variables: {variable.equation_variables}")
-
+        #update equation variables to detected variables
+        if update_dependencies:
+            variable.equation_variables = equation_variables
     
     def _checkEquationTreeRecursive(self, variables, variables_to_check, silent):
         """ Internal function that recursively checks equation tree consistency """
