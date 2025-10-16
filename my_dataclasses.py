@@ -112,7 +112,7 @@ class Variable:
         else:
             raise ValueError("Subtracting variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
          
-    def __mult__(self, other):
+    def __mul__(self, other):
         #If floats or ints are involved the logic is simple
         if isinstance(other, (int, float)):
             return self.values * other
@@ -126,22 +126,38 @@ class Variable:
         else:
             raise ValueError("Multiplying variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
         
-    def __truediv__(self, other):
+    def __truediv__(self, denominator):
         #If floats or ints are involved the logic is simple
-        if isinstance(other, (int, float)):
-            return self.values / other
-        if isinstance(self.values, (int, float)) or isinstance(other.values, (int, float)):
-            return self.values / other
+        if isinstance(denominator, (int, float)):
+            return self.values / denominator
+        if isinstance(self.values, (int, float)) or isinstance(denominator.values, (int, float)):
+            return self.values / denominator
         #Check array lengths and start/end time comparison
-        if len(self.values) == len(other.values):
-            if self.timestep != other.timestep:
-                print(f"WARNING: dividing variables {self.name} and {other.name} with different timesteps, {self.timestep} and {other.timestep}!!")
-            return self.values / other.values
+        if len(self.values) == len(denominator.values):
+            if self.timestep != denominator.timestep:
+                print(f"WARNING: dividing variables {self.name} and {denominator.name} with different timesteps, {self.timestep} and {denominator.timestep}!!")
+            return self.values / denominator.values
         else:
-            raise ValueError("Dividing variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
-     
-        
-        
+            raise ValueError("Dividing variables {self.name} and {denominator.name} failed. {self.name} has length {len(self.values}, {denominator.name} has length {len(denominator.values)}")
+    
+    def __rtruediv__(self, numerator):
+        #If floats or ints are involved the logic is simple
+        if isinstance(numerator, (int, float)):
+            return numerator / self.values
+        if isinstance(self.values, (int, float)) or isinstance(numerator.values, (int, float)):
+            return numerator / self.values
+        #Check array lengths and start/end time comparison
+        if len(self.values) == len(numerator.values):
+            if self.timestep != numerator.timestep:
+                print(f"WARNING: dividing variables {self.name} and {numerator.name} with different timesteps, {self.timestep} and {numerator.timestep}!!")
+            return numerator / self.values
+            raise ValueError("Dividing variables {self.name} and {numerator.name} failed. {self.name} has length {len(self.values}, {numerator.name} has length {len(numerator.values)}")
+    
+    
+    def __pow__(self, power):
+        if not isinstance(power, (int)):
+            raise ValueError(f"Error, taking power {power} of variable {self.name} is not supported, integer powers only.")
+        return self.values**power
         
     def DefineValues(self, values):
         self.values = values
@@ -201,30 +217,10 @@ class Variable:
         #Calculate total timesum
         #self.timesum = np.sum(self.values) * self.timestep
         #return self.timesum
-        return Variable(name=f"Daily timesum of {self.name}", description=f"Daily timesum - {self.description}", values=np.sum(self.values) * self.timestep, is_basic=False, is_timesum=True, equation=f"Timesum('{self.name}')", variables=self)
+        return np.sum(self.values) * self.timestep
+        #return Variable(name=f"Daily timesum of {self.name}", description=f"Daily timesum - {self.description}", values=np.sum(self.values) * self.timestep, is_basic=False, is_timesum=True, equation=f"Timesum('{self.name}')", variables=self)
         
 
-"""
-if __name__=="__main__":
-    T = Variable("T", "Temperature", is_basic=False, equation="S*A", variables="S, A")
-    G = Variable("G", "Global Horizontal Irradiance", values=np.array([1,2,3]), is_basic=True, start_time="00:01:20", end_time="00:02:20")
-    
-    #Timestep test
-    G.AddTimestep("auto")
-    print(G.timestep)
-    #Uncertainty object test
-    
-    print(T)
-    print(G.TimeSum())
-    G.AddUncertaintySource(["a", "cookie"])
-    G.AddUncertaintySource(["b", "c"])
-    print(G.uncertainties)  
-    E = G.TimeSum()
-    print(E)
-    print(E.values)
-
-
-#"""
 
 
 
