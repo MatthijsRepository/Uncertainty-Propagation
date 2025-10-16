@@ -1,6 +1,7 @@
 import csv
 from datetime import datetime
 from my_dataclasses import CSVData, Uncertainty, Variable
+import numpy as np
 
 
 
@@ -222,7 +223,7 @@ class VariableHandler:
                 raise ValueError(f"CSV data referenced for variable {self.var_name}, but no CSV dataset was passed. Please input CSV data.")
             data_name = self.value_string.split('.')[1]
             try:
-                self.var_values = self.csv_data.data[data_name]
+                self.var_values = np.asarray(self.csv_data.data[data_name])
             except:
                 raise ValueError(f"CSV data does not contain data named {data_name}.")
         elif self.value_string.startswith("DETERMINE"):
