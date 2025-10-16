@@ -1,5 +1,6 @@
-from my_dataclasses import Uncertainty, Variable
+from my_dataclasses import Variable
 import re
+import sympy as sp
 
 
 """ This engine handles the initialization of the equation tree, 
@@ -110,7 +111,42 @@ class EquationEngine:
             variables_to_check = [variables_to_check]
         
         return self._checkEquationTreeRecursive(variables, variables_to_check, silent)
+    
+    
+    def buildEquation(self, var, symbol_map):
+        #Get symbol list for this variable
+        symbols = [symbol_map[name] for name in var.equation_variables]
+        #Remove quotes from equation
+        expr_str = var.equation
+        for dep in var.equation_variables:
+            expr_str = expr_str.replace(f"'{dep}'", dep)
         
+        #Create sympy equation - this is later also used for differentiation
+        var.sympy_equation = sp.sympify(expr_str, locals=symbol_map)
+        
+        #Create callable function
+        executable_equation = sp.lambdify(var.equation_variables, var.sympy_equation)
+        def wrapper(variable_map):
+            return
+            
+        
+    
+    def buildSymPyEquationTree(self, variables=None):
+        if variables is None:
+            variables = self.variables
+        
+        symbol_map = {name: sp.Symbol(name) for name in variables.keys()}
+        for name, var in variables.items():
+            if not var.is_basic:
+                expr_str = var.equation
+                for dep in var.equation_variables:
+                    expr_str = expr_str.replace(f"'{dep}'", dep)
+                
+                var.sympy_equation = sp.sympify(expr_str, locals=symbol_map)
+                #var.sympy_equation = sp.lambdify(symbol_map)
+
+                print(var.sympy_equation)
+                var.executable_equation = sp.lambdify(var.equation_variables, var.sympy_equation)
 
                 
 

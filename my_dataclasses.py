@@ -82,6 +82,9 @@ class Variable:
             return (f"Basic variable: {self.name} \nDescription: {self.description}")
         else:
             return (f"Derived variable: {self.name} = {self.equation} \nDescription: {self.description}")
+        
+    def __add__(self, other):
+        return self.values + other.values
 
     def DefineValues(self, values):
         self.values = values
