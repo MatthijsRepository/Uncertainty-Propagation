@@ -40,7 +40,20 @@ class EquationEngine:
         #update equation variables to detected variables
         if update_dependencies:
             variable.equation_variables = equation_variables
-    
+            
+    def updateEquationVariables(self, variables=None):
+        """ Updates listed equation variables for a variable set to only include those detected in the listed equation """
+        if variables is None:
+            variables = self.variables
+            derived_variables = self.derived_variables
+        else:
+            derived_variables = self.splitBasicDerived(variables)[1]
+            
+        for name in derived_variables:
+            var = variables[name]
+            equation_variables = self.equationReader(var)
+            var.equation_variables = equation_variables
+            
     def _checkEquationTreeRecursive(self, variables, variables_to_check, silent):
         """ Internal function that recursively checks equation tree consistency """
         #Recursively navigates down the tree and checks if the equation tree is defined in a consistent way
