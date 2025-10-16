@@ -154,7 +154,7 @@ class VariableHandler:
         self.description = None         #str: variable description
         self.is_basic_variable = None   #bool: flags if variable is basic or derived
         self.equation = None            #str: equation of the variable
-        self.equation_variables = None  #list: lists all variables used in the equation
+        self.dependency_names = None  #list: lists all variables used in the equation
         self.uncertainties = []         #list: contains all uncertainty sources
         return  
         
@@ -188,7 +188,7 @@ class VariableHandler:
                 self.equation = line.split(":", maxsplit=1)[1].strip()
                 i += 1 ; continue
             elif line.startswith("variables"):
-                self.equation_variables = line.split(":", maxsplit=1)[1].strip()
+                self.dependency_names = line.split(":", maxsplit=1)[1].strip()
                 i += 1 ; continue
             elif line.lower().startswith("uncertainties"):
                 i = self._uncertaintyParser(lines, i+1)
@@ -208,10 +208,10 @@ class VariableHandler:
         """ Dispatches the internal functions that handle the parsed input strings, creates a new variable and populates it """
         self._handleValueData()
         self._handleTimestep()
-        self._handleEquationVariables()
+        self._handleDependencyNames()
         
         new_variable = Variable(name=self.var_name, description=self.description, values=self.var_values, \
-                                is_basic=self.is_basic_variable, equation=self.equation, equation_variables=self.equation_variables)
+                                is_basic=self.is_basic_variable, equation=self.equation, dependency_names=self.dependency_names)
         if not self.timestep is None:
             new_variable.AddTimestep(self.timestep, self.time_range)
         if len(self.uncertainties)>0:
@@ -258,14 +258,14 @@ class VariableHandler:
             else:
                 raise ValueError(f"Timestep string {self.timestep} not recognized, please check input.")
     
-    def _handleEquationVariables(self):
+    def _handleDependencyNames(self):
         """ Converts equation variable string to a list of variable names """
-        if self.equation_variables is None:
+        if self.dependency_names is None:
             return
-        input_variables = self.equation_variables.split(",")
-        self.equation_variables = []
+        input_variables = self.dependency_names.split(",")
+        self.dependency_names = []
         for var in input_variables:
-            self.equation_variables.append(var.strip()[1:-1])
+            self.dependency_names.append(var.strip()[1:-1])
     
     def _uncertaintyParser(self, lines, i):
         """ Parses uncertainties block and dispatches uncertainty handler """

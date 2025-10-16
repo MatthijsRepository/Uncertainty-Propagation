@@ -30,17 +30,17 @@ class EquationEngine:
 
     def equationReader(self, variable):
         """ This function interprets written equations to python """
-        equation_variables = re.findall(r"'(.*?)'", variable.equation)                   
-        return equation_variables
+        dependency_names = re.findall(r"'(.*?)'", variable.equation)                   
+        return dependency_names
     
     def checkVariableEquationConsistency(self, variable, update_dependencies=False):
         """ This function verifies whether specified variable dependency matches a given equation, optionally updates dependencies of variable to detected variables """
-        equation_variables = self.equationReader(variable)
-        if not set(equation_variables).issubset(variable.equation_variables):
-            raise ValueError(f"Listed equation variables of variable {variable.name} do not match equation. Please check inputs. \nEquation: {variable.equation} \nDetected variables: {equation_variables} \nListed variables: {variable.equation_variables}")
+        dependency_names = self.equationReader(variable)
+        if not set(dependency_names).issubset(variable.dependency_names):
+            raise ValueError(f"Listed equation variables of variable {variable.name} do not match equation. Please check inputs. \nEquation: {variable.equation} \nDetected variables: {dependency_names} \nListed variables: {variable.dependency_names}")
         #update equation variables to detected variables
         if update_dependencies:
-            variable.equation_variables = equation_variables
+            variable.dependency_names = dependency_names
             
     def updateEquationVariables(self, variables=None):
         """ Updates listed equation variables for a variable set to only include those detected in the listed equation """
@@ -52,8 +52,8 @@ class EquationEngine:
             
         for name in derived_variables:
             var = variables[name]
-            equation_variables = self.equationReader(var)
-            var.equation_variables = equation_variables
+            dependency_names = self.equationReader(var)
+            var.dependency_names = dependency_names
             
     def _checkEquationTreeRecursive(self, variables, variables_to_check, silent):
         """ Internal function that recursively checks equation tree consistency """
@@ -70,7 +70,7 @@ class EquationEngine:
             if var.is_root_consistent: 
                 continue
             #Else: loop through all variables in dependencies
-            for dep_name in var.equation_variables:
+            for dep_name in var.dependency_names:
                 dep = variables.get(dep_name)
                 #If listed variable not included in variables list then the equation tree is not consistent
                 if dep is None:
@@ -82,7 +82,7 @@ class EquationEngine:
                 elif dep.is_root_consistent:
                     continue
                 #If variable is not basic and not yet verified: check tree consistency
-                elif self._checkEquationTreeRecursive(variables, dep.equation_variables, silent):
+                elif self._checkEquationTreeRecursive(variables, dep.dependency_names, silent):
                     continue
                 else:
                     raise ValueError(f"Equation of {name} is not root-consistent: check for {dep_name} failed")
@@ -115,17 +115,17 @@ class EquationEngine:
     
     def buildEquation(self, var, symbol_map):
         #Get symbol list for this variable
-        symbols = [symbol_map[name] for name in var.equation_variables]
+        symbols = [symbol_map[name] for name in var.dependency_names]
         #Remove quotes from equation
         expr_str = var.equation
-        for dep in var.equation_variables:
+        for dep in var.dependency_names:
             expr_str = expr_str.replace(f"'{dep}'", dep)
         
         #Create sympy equation - this is later also used for differentiation
         var.sympy_equation = sp.sympify(expr_str, locals=symbol_map)
         
         #Create callable function
-        executable_equation = sp.lambdify(var.equation_variables, var.sympy_equation)
+        executable_equation = sp.lambdify(var.dependency_names, var.sympy_equation)
         def wrapper(variable_map):
             return
             
@@ -139,14 +139,14 @@ class EquationEngine:
         for name, var in variables.items():
             if not var.is_basic:
                 expr_str = var.equation
-                for dep in var.equation_variables:
+                for dep in var.dependency_names:
                     expr_str = expr_str.replace(f"'{dep}'", dep)
                 
                 var.sympy_equation = sp.sympify(expr_str, locals=symbol_map)
                 #var.sympy_equation = sp.lambdify(symbol_map)
 
                 print(var.sympy_equation)
-                var.executable_equation = sp.lambdify(var.equation_variables, var.sympy_equation)
+                var.executable_equation = sp.lambdify(var.dependency_names, var.sympy_equation)
 
                 
 

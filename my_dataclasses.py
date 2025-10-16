@@ -54,17 +54,17 @@ class Uncertainty:
         
 class Variable:
     def __init__(self, name, description, values=None, is_basic=True, is_timesum=False,\
-                 equation=None, equation_variables=None, start_time=None, end_time=None):
+                 equation=None, dependency_names=None, start_time=None, end_time=None):
         self.name = name                    #str: variable name
         self.description = description      #str: variable description
         self.is_basic = is_basic            #bool: defines whether variable is basic or derived
         self.is_timesum = is_timesum        #bool: defines whether variable is a timesum
         #If it is a derived variable then an equation and constituent variables should be passed
         if not self.is_basic:
-            if not (equation or equation_variables):
+            if not (equation or dependency_names):
                 raise ValueError(f"{self.name} is defined as a derived variable, please include equation and variables")
             self.equation = equation        #str: defines variable equation
-            self.equation_variables = equation_variables      #list: lists variables in equation
+            self.dependency_names = dependency_names      #list: lists variables in equation
             self.is_root_consistent = None     #bool: whether the variable is traces consistently to basic variables
             
         self.values = values                #[int, float, array]: variable values
