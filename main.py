@@ -39,6 +39,17 @@ if __name__=="__main__":
     print(variables['T'].values[0])
     print(variables['C_25'].values[0])
     
+    print(variables['PR'].sympy_equation)
+    #print(variables['testD'].sympy_equation)
+    
+    
+    #variables['testD'].executeEquation()
+    #print(variables['testD'].values)
+    #print(variables['T'].values)
+    
+    variables['PR'].executeEquation()
+    print(variables['PR'].values)
+    
     
     
     

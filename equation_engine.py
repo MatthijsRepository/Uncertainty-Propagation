@@ -1,10 +1,13 @@
 from my_dataclasses import Variable
+from sympy_timesum import timesum
 import re
 import sympy as sp
 
+from calculation_engine import TIMESUM_TEMP
+
 
 """ This engine handles the initialization of the equation tree, 
-    verifies its internal consistency and populates missing basic values """
+    verifies its internal consistency and handles everything related to sympy """
 class EquationEngine:
     def __init__(self, variables, update_dependencies=False):
         self.variables = variables          #dict: dictionary of variable names and Variable objects
@@ -120,7 +123,7 @@ class EquationEngine:
             var.dependencies.append(variables[dep_name])
             
     def populateEquationTreeDependencies(self, variables=None, derived_variables=None):
-        """ Populates dependencies for all dependent variables """
+        """ Populates dependencies for all dependent variables in the tree """
         if variables is None:
             variables = self.variables
             derived_variables = self.derived_variables
@@ -148,9 +151,12 @@ class EquationEngine:
         var.sympy_equation = sp.sympify(clean_eq, locals=symbol_map)
         
         #Create callable function
-        executable_equation = sp.lambdify(symbols, var.sympy_equation)
+        executable_equation = sp.lambdify(symbols, var.sympy_equation, modules=[{"timesum": TIMESUM_TEMP}])
         def wrapper():
-            args = [dep.values for dep in var.dependencies]
+            
+            #args = [dep.values for dep in var.dependencies]
+            args = [dep for dep in var.dependencies]
+
             var.values = executable_equation(*args)
             return None
         var.executeEquation = wrapper
