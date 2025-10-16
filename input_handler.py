@@ -11,7 +11,6 @@ class InputHandler:
         
     def parse(self, filepath):
         """ Main parser that dispatches to sub-parsers """
-        print("Started parsing input")
         with open(filepath, "r") as f:
             lines = f.readlines()
 
@@ -35,7 +34,6 @@ class InputHandler:
                 self.variables.update({new_variable.name: new_variable})
                 del handler
             i += 1  # Move to next after handler finishes
-        print("Finished parsing input")
     
     def checkInputConsistency(self):
         #Check whether derived variables are all well-defined
