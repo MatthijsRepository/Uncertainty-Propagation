@@ -8,13 +8,13 @@ import sympy as sp
 class EquationEngine:
     def __init__(self, variables, update_dependencies=False):
         self.variables = variables          #dict: dictionary of variable names and Variable objects
-        self.basic_variables, self.derived_variables = self.splitBasicDerived()
+        self.basic_variables, self.derived_variables = self.splitBasicDerived() #lists of variable names for basic and derived variables
         for name in self.derived_variables:
             self.checkVariableEquationConsistency(self.variables[name], update_dependencies)
         
     def splitBasicDerived(self, variables=None):
         """ Splits a tree into basic and derived variables """
-        #If no set provided, act on own registry
+        #If no variables provided, act on own registry
         if variables is None:
             variables = self.variables
         
@@ -29,9 +29,9 @@ class EquationEngine:
         return basic_variables, derived_variables
 
     def equationReader(self, variable):
-        """ This function interprets written equations to python """
+        """ This function extracts constituent variables from an equation """
         dependency_names = re.findall(r"'(.*?)'", variable.equation)                   
-        return dependency_names
+        return list(set(dependency_names))
     
     def checkVariableEquationConsistency(self, variable, update_dependencies=False):
         """ This function verifies whether specified variable dependency matches a given equation, optionally updates dependencies of variable to detected variables """
@@ -42,8 +42,8 @@ class EquationEngine:
         if update_dependencies:
             variable.dependency_names = dependency_names
             
-    def updateEquationVariables(self, variables=None):
-        """ Updates listed equation variables for a variable set to only include those detected in the listed equation """
+    def updateDependencyNames(self, variables=None):
+        """ Updates listed dependency names for a variable set to only include those detected in the listed equation """
         if variables is None:
             variables = self.variables
             derived_variables = self.derived_variables
@@ -93,7 +93,6 @@ class EquationEngine:
         #If no errors were encountered we can safely return True
         return True
 
-
     def checkEquationTreeConsistency(self, variables=None, variables_to_check=None, silent=True):
         """ This function that handles input and executes the equation tree consistency checker """
         #If no variables provided: act on own registry
@@ -112,41 +111,61 @@ class EquationEngine:
         
         return self._checkEquationTreeRecursive(variables, variables_to_check, silent)
     
+    def populateVariableDependencies(self, var, variables=None):
+        """ Populates the dependencies for a single variable """
+        if variables is None:
+            variables = self.variables
+            
+        for dep_name in var.dependency_names:
+            var.dependencies.append(variables[dep_name])
+            
+    def populateEquationTreeDependencies(self, variables=None, derived_variables=None):
+        """ Populates dependencies for all dependent variables """
+        if variables is None:
+            variables = self.variables
+            derived_variables = self.derived_variables
+        if derived_variables is None:
+            derived_variables = self.splitBasicDerived(variables)[1]
+        
+        for name in derived_variables:
+            var = variables[name]
+            self.populateVariableDependencies(var, variables)
     
-    def buildEquation(self, var, symbol_map):
+    def buildEquation(self, var, symbol_map=None):
+        """ Builds equation executable of a given variable, potentially using a provided sympy symbol map """
+        #If Symbol map is not provided, build one from the dependency names of the variable
+        if symbol_map is None:
+            symbol_map = {name: sp.Symbol(name) for name in var.dependency_names}
+        
         #Get symbol list for this variable
         symbols = [symbol_map[name] for name in var.dependency_names]
         #Remove quotes from equation
-        expr_str = var.equation
+        clean_eq = var.equation
         for dep in var.dependency_names:
-            expr_str = expr_str.replace(f"'{dep}'", dep)
+            clean_eq = clean_eq.replace(f"'{dep}'", dep)
         
         #Create sympy equation - this is later also used for differentiation
-        var.sympy_equation = sp.sympify(expr_str, locals=symbol_map)
+        var.sympy_equation = sp.sympify(clean_eq, locals=symbol_map)
         
         #Create callable function
-        executable_equation = sp.lambdify(var.dependency_names, var.sympy_equation)
-        def wrapper(variable_map):
-            return
+        executable_equation = sp.lambdify(symbols, var.sympy_equation)
+        def wrapper():
+            args = [dep.values for dep in var.dependencies]
+            return executable_equation(*args)
+        var.callable = wrapper
             
-        
-    
     def buildSymPyEquationTree(self, variables=None):
+        """ Goes through all derived variables in a variable set and builds their equations using SymPy """
         if variables is None:
             variables = self.variables
+            derived_variables = self.derived_variables
+        else:
+            derived_variables = self.splitBasicDerived(variables)
         
         symbol_map = {name: sp.Symbol(name) for name in variables.keys()}
-        for name, var in variables.items():
-            if not var.is_basic:
-                expr_str = var.equation
-                for dep in var.dependency_names:
-                    expr_str = expr_str.replace(f"'{dep}'", dep)
-                
-                var.sympy_equation = sp.sympify(expr_str, locals=symbol_map)
-                #var.sympy_equation = sp.lambdify(symbol_map)
-
-                print(var.sympy_equation)
-                var.executable_equation = sp.lambdify(var.dependency_names, var.sympy_equation)
+        for name in derived_variables:
+            var = variables[name]
+            self.buildEquation(var, symbol_map)
 
                 
 

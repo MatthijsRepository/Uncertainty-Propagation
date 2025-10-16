@@ -24,9 +24,13 @@ if __name__=="__main__":
     equation_engine.checkEquationTreeConsistency()
     print("Equation tree is root-consistent \n")
     
+    equation_engine.populateEquationTreeDependencies()
+    
     print("Building sympy equation tree")
     equation_engine.buildSymPyEquationTree()
     
+    print(variables["testC"].dependency_names)
+    #equation_engine.buildEquation(variables["testC"])
     #print(variables['testC'].executable_equation())
     
     
