@@ -31,7 +31,13 @@ if __name__=="__main__":
     
     print(variables["testC"].dependency_names)
     #equation_engine.buildEquation(variables["testC"])
-    #print(variables['testC'].executable_equation())
+    
+    variables['testC'].executeEquation()
+    print(variables['testC'].values)
+    
+    variables['C_25'].executeEquation()
+    print(variables['T'].values[0])
+    print(variables['C_25'].values[0])
     
     
     

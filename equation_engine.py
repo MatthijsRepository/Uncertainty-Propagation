@@ -151,8 +151,9 @@ class EquationEngine:
         executable_equation = sp.lambdify(symbols, var.sympy_equation)
         def wrapper():
             args = [dep.values for dep in var.dependencies]
-            return executable_equation(*args)
-        var.callable = wrapper
+            var.values = executable_equation(*args)
+            return None
+        var.executeEquation = wrapper
             
     def buildSymPyEquationTree(self, variables=None):
         """ Goes through all derived variables in a variable set and builds their equations using SymPy """
