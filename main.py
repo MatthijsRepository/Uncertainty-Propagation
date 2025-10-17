@@ -21,10 +21,12 @@ if __name__=="__main__":
     equation_engine = EquationEngine(variables, update_dependencies=True)
     #equation_engine.checkEquationTreeConsistency(variables="T")
     #equation_engine.checkEquationTreeConsistency(variables_to_check='PR')
-    equation_engine.checkEquationTreeConsistency()
+    equation_engine.checkEquationTreeConsistency(silent=False)
     print("Equation tree is root-consistent \n")
     
     equation_engine.populateEquationTreeDependencies()
+    
+    print(variables.keys())
     
     print("Building sympy equation tree")
     equation_engine.buildSymPyEquationTree()
@@ -49,6 +51,8 @@ if __name__=="__main__":
     
     variables['PR'].executeEquation()
     print(variables['PR'].values)
+    #variables['PR_temp_corr'].executeEquation()
+    #print(variables['PR_temp_corr'].values)
     
     
     

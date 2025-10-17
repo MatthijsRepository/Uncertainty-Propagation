@@ -53,15 +53,15 @@ class Uncertainty:
         
         
 class Variable:
-    def __init__(self, name, description, values=None, is_basic=True, is_timesum=False,\
-                 equation=None, dependency_names=None, start_time=None, end_time=None):
+    def __init__(self, name, description, values=None, is_basic=True, \
+                 equation=None, dependency_names=None, start_time=None, end_time=None, \
+                     is_timesum=False, timesum_settings=None):
         self.name = name                    #str: variable name
         self.description = description      #str: variable description
         self.is_basic = is_basic            #bool: defines whether variable is basic or derived
-        self.is_timesum = is_timesum        #bool: defines whether variable is a timesum
         #If it is a derived variable then an equation and constituent variables should be passed
         if not self.is_basic:
-            if not (equation or dependency_names):
+            if not equation:
                 raise ValueError(f"{self.name} is defined as a derived variable, please include equation and variables")
             self.equation = equation            #str: defines variable equation
             self.dependency_names = dependency_names      #list: lists variables in equation
@@ -69,6 +69,9 @@ class Variable:
             self.is_root_consistent = None      #bool: whether the variable is traces consistently to basic variables
             
         self.values = values                #[int, float, array]: variable values
+        
+        self.is_timesum = is_timesum        #bool: defines whether variable is a timesum
+        self.timesum_settings = timesum_settings #list of options
         
         self.start_time = start_time        #datetime object: start time of variable
         self.end_time = end_time            #datetime object: end time of variable
@@ -208,7 +211,7 @@ class Variable:
             try:
                 self.AddTimeStep("auto")
             except:
-                raise ValueError(f"Automatic timestep calculation for timesum of variable {self.name} failed, please provide a timestep or time bounds.")
+                raise ValueError(f"Automatic timestep calculation for timesum calculation of variable {self.name} failed, please provide a timestep or time bounds.")
         #Handle partial timesum calculations
         #
         #if not (interval is None):
