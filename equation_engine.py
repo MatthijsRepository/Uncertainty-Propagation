@@ -32,7 +32,7 @@ class EquationEngine:
         return basic_variables, derived_variables
     
     
-    def _timeSumExtracter(self, equation):
+    def _equationTimeSumExtracter(self, equation):
         """ Detects, extracts and subsequently removes top-level timesum expressions from equations
         returns list of top-level timesum expressions and a cleaned equation """
         timesums = []
@@ -67,7 +67,7 @@ class EquationEngine:
         variable.equation = re.sub("timesum", "TS_", variable.equation)
         
         #Now we extract only top-level timesum statements, nested timesums are ignored
-        timesums, clean_eq = self._timeSumExtracter(variable.equation)
+        timesums, clean_eq = self._equationTimeSumExtracter(variable.equation)
         dependency_names.extend(timesums)
 
         #Extend dependencies with regular variables left in the equation after top-level timesum statements are removed
@@ -94,7 +94,7 @@ class EquationEngine:
     def createTimeSumVariable(self, name):
         """ Creates a new variable that is a timesum of other variables """
         #extract equation: name is TS(equation; options)
-        data = name[4:-1].strip().split(";")
+        data = name[4:-1].strip().split(",")
         if len(data)==2:
             equation = data[0]
             settings = data[1]
@@ -168,7 +168,7 @@ class EquationEngine:
             return self.splitBasicDerived(variables)[1]
     
     def populateVariableDependencies(self, var, variables=None):
-        """ Populates the dependencies for a single variable """
+        """ Populates the dependencies for a single variable using the variables in the variables registry """
         if variables is None:
             variables = self.variables
         
@@ -187,21 +187,85 @@ class EquationEngine:
             var = variables[name]
             self.populateVariableDependencies(var, variables)
     
+    
+    def _buildSymbolMap_old(self, variables):
+        """ Helper function that builds a symbol map for a variable dictionary or a single variable dependency list
+            we add an alias for non-timesum variables as they are in quotes in the equation
+            so but G and 'G' will both refer to a symbol G """
+        if isinstance(variables, dict):
+            names = variables.keys()
+        else:
+            names = variables.dependency_names
+        symbol_map = {}
+        #We need to register quotes around variables, so we add them retroactively to our symbol map for non-timesum variables
+        #So: TS_('G') is unchanged, but G will become 'G', which is needed for equation readout
+        for name in names:
+            symbol_map[name] = sp.Symbol(name)
+            # Add quoted alias for non-timesum names
+            if not name.startswith("TS_("):
+                symbol_map[f"'{name}'"] = symbol_map[name]
+                
+        #symbol_map = {name: sp.Symbol(name) for name in names}
+        return symbol_map
+    
+    def _cleanEquationForSymPy_old(self, equation):
+        """ Cleans quotes around variables that are outside of timesum operators, for use in sympy """
+        i=0
+        cleaned_equation = ""
+        while i < len(equation):
+            #If we register a timesum: pass this section
+            if equation[i:i+3] == "TS_":
+                #Skip this part, add it to our equation
+                cleaned_equation += "TS_"
+                i += 3
+                #Start loop, depth is 1
+                depth = 1
+
+                while depth>0:
+                    cleaned_equation += equation[i]
+                    i+=1
+                    if equation[i]=="(":
+                        depth +=1
+                    if equation[i]==")":
+                        depth -= 1
+            #If we did not encounter a timesum: check if there is a quote and remove it if necessary
+            if not equation[i] == "'":
+                cleaned_equation += equation[i]
+            i+=1
+        return cleaned_equation
+    
+    def _buildSymbolMap(self, variables):
+        if isinstance(variables, dict):
+            names = variables.keys()
+        else:
+            names = variables.dependency_names
+            
+        return {name : sp.Symbol(re.sub("'", "", name)) for name in names}
+            
+    
+    def _cleanEquationForSymPy(self, equation):
+        return re.sub("'","", equation)
+        
+    
+    
     def buildVariableEquation(self, var, symbol_map=None):
         """ Builds equation executable of a given variable, potentially using a provided sympy symbol map """
         #If Symbol map is not provided, build one from the dependency names of the variable
         if symbol_map is None:
-            symbol_map = {name: sp.Symbol(name) for name in var.dependency_names}
+            self._buildSymbolMap(var)        
         
-        #Get symbol list for this variable
+        
+        print("WARNING: this is not correct anymore, some names are in quotes")
         symbols = [symbol_map[name] for name in var.dependency_names]
-        #Remove quotes from equation
-        clean_eq = var.equation
-        for dep in var.dependency_names:
-            clean_eq = clean_eq.replace(f"'{dep}'", dep)
+        print(symbols)
         
+        #print(clean_eq)
+        print(var.equation)
+        cleaned_equation = self._cleanEquationForSymPy(var.equation)
+        print(cleaned_equation)
         #Create sympy equation - this is later also used for differentiation
-        var.sympy_equation = sp.sympify(clean_eq, locals=symbol_map)
+        var.sympy_equation = sp.sympify(cleaned_equation, locals=symbol_map)
+        print(var.sympy_equation)
         
         #Create callable function
         executable_equation = sp.lambdify(symbols, var.sympy_equation, modules=[{"timesum": TIMESUM_TEMP}])
@@ -222,7 +286,7 @@ class EquationEngine:
         else:
             derived_variables = self.splitBasicDerived(variables)
         
-        symbol_map = {name: sp.Symbol(name) for name in variables.keys()}
+        symbol_map = self._buildSymbolMap(variables)
         for name in derived_variables:
             var = variables[name]
             self.buildVariableEquation(var, symbol_map)
