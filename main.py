@@ -24,7 +24,10 @@ if __name__=="__main__":
     equation_engine.checkEquationTreeConsistency(silent=False)
     print("Equation tree is root-consistent \n")
     
+    
+    print(variables["PR"].equation)
     equation_engine.populateEquationTreeDependencies()
+    
     
     print(variables.keys())
     
@@ -53,6 +56,8 @@ if __name__=="__main__":
     print(variables['PR'].values)
     #variables['PR_temp_corr'].executeEquation()
     #print(variables['PR_temp_corr'].values)
+    
+
     
     
     

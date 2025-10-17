@@ -14,8 +14,6 @@ class EquationEngine:
         self.basic_variables, self.derived_variables = self.splitBasicDerived() #lists of variable names for basic and derived variables
         
         self.updateVariableDependencyNames()
-        #for name in self.derived_variables:
-        #    self.checkVariableEquationConsistency(self.variables[name], update_dependencies)
         
     def splitBasicDerived(self, variables=None):
         """ Splits a tree into basic and derived variables """
@@ -33,33 +31,49 @@ class EquationEngine:
                 derived_variables.append(name)
         return basic_variables, derived_variables
     
-    def equationReader_OLD(self, variable):
-        dependency_names = re.findall(r"'(.*?)'", variable.equation)
-        return list(set(dependency_names))
     
-    
+    def _timeSumExtracter(self, equation):
+        """ Detects, extracts and subsequently removes top-level timesum expressions from equations
+        returns list of top-level timesum expressions and a cleaned equation """
+        timesums = []
+        i=0
+        while i < len(equation):
+            if equation[i:i+3] == "TS_":
+                #Start loop, depth is 1
+                depth = 1
+                #We jump to the position of the opening parenthesis of the timesum, in the next loop we will skip this position
+                i += 3
+                start = i
+                while depth>0:
+                    i+=1
+                    if equation[i]=="(":
+                        depth +=1
+                    if equation[i]==")":
+                        depth -= 1
+                timesums.append(f"TS_{equation[start:i+1]}")
+            i+=1
+        #Removing detected timesum statements from equation
+        clean_eq = equation
+        for ts in timesums:
+            #We use re.escape in order to avoid regex errors due to presence of parentheses
+            clean_eq = re.sub(re.escape(ts), " ", clean_eq)
+        return timesums, clean_eq
+
     def equationReader(self, variable):
-        """ This function extracts constituent variables from an equation """
+        """ This function extracts top-level constituent variables from an equation """
         dependency_names = []
         
-        #Extract all timesum statements
-        timesums = re.findall(r"timesum\((.*?)\)", variable.equation)
-        for ts in timesums:
-            dependency_names.append(f"TS_({ts.strip()})")
-            
-        #Remove timesum statements
-        clean_eq = re.sub(r"timesum\(.*?\)", "", variable.equation)
+        #first clean the equation such that 'timesum' is replaced by 'TS_'
+        variable.equation = re.sub("timesum", "TS_", variable.equation)
+        
+        #Now we extract only top-level timesum statements, nested timesums are ignored
+        timesums, clean_eq = self._timeSumExtracter(variable.equation)
+        dependency_names.extend(timesums)
+
+        #Extend dependencies with regular variables left in the equation after top-level timesum statements are removed
         dependency_names.extend(re.findall(r"'(.*?)'", clean_eq))
         return list(set(dependency_names))
     
-    def checkVariableEquationConsistency(self, variable, update_dependencies=False):
-        """ This function verifies whether specified variable dependency matches a given equation, optionally updates dependencies of variable to detected variables """
-        dependency_names = self.equationReader(variable)
-        if not set(dependency_names).issubset(variable.dependency_names):
-            raise ValueError(f"Listed equation variables of variable {variable.name} do not match equation. Please check inputs. \nEquation: {variable.equation} \nDetected variables: {dependency_names} \nListed variables: {variable.dependency_names}")
-        #update equation variables to detected variables
-        if update_dependencies:
-            variable.dependency_names = dependency_names
     
     
     def updateVariableDependencyNames(self, variables=None):
@@ -107,44 +121,37 @@ class EquationEngine:
          
         
             
-    def _checkEquationTreeRecursive(self, variables, variables_to_check, silent):
+    def _checkEquationTreeRecursive(self, variables, variables_to_check, silent, indent=""):
         """ Internal function that recursively checks equation tree consistency """
         #Recursively navigates down the tree and checks if the equation tree is defined in a consistent way
         for name in variables_to_check:
+            if not silent: 
+                print(f"{indent}Tree checking: {name}")
             var = variables.get(name)
             #Check if variable in variables list
             if var is None:
-                raise ValueError(f"Equation tree consistency check failed: variable {name} not included in the variable set. \nVariable set: {variables.keys()}.")
+                #If var is a timesum variable we create it here, otherwise we raise an error
+                if name.startswith("TS_("):
+                    var = self.createTimeSumVariable(name)
+                    variables[name] = var
+                else:
+                    raise ValueError(f"Equation tree consistency check failed: variable {name} not included in the variable set. \nVariable set: {variables.keys()}.")
             
             #If variable already checked, pass this variable
             if var.is_basic:
+                if not silent:
+                    print(f"{indent}Variable {name} is basic")
                 continue
             if var.is_root_consistent: 
+                if not silent:
+                    print(f"{indent}Variable {name} is consistent")
                 continue
-            #Else: loop through all variables in dependencies
-            for dep_name in var.dependency_names:
-                dep = variables.get(dep_name)
-                #If listed variable not included in variables list then the variable is either a timesum, or the tree is not consistent
-                if dep is None:
-                    if dep_name.startswith("TS_("):
-                        dep = self.createTimeSumVariable(dep_name)
-                        variables[dep_name] = dep
-                    else:
-                        raise ValueError(f"Equation tree of variable {name} not consistent: variable {dep_name} not recognized.")
-                #If variable is basic we can continue
-                if dep.is_basic:
-                    continue
-                #If tree section is verified we can continue
-                elif dep.is_root_consistent:
-                    continue
-                #If variable is not basic and not yet verified: check tree consistency
-                elif self._checkEquationTreeRecursive(variables, dep.dependency_names, silent):
-                    continue
-                else:
-                    raise ValueError(f"Equation of {name} is not root-consistent: check for {dep_name} failed")
+            #Else: check consistency of dependencies
+            self._checkEquationTreeRecursive(variables, var.dependency_names, silent=silent, indent=f"   {indent}")
+
             #If we succesfully looped through all dependencies of this variable, we can flag it as safe, and potentially log this to output
             if not silent:
-                print(f"{name} is root-consistent")
+                print(f"{indent}{name} is root-consistent")
             var.is_root_consistent = True
         #If no errors were encountered we can safely return True
         return True
