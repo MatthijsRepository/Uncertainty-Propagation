@@ -75,7 +75,6 @@ class EquationEngine:
         return list(set(dependency_names))
     
     
-    
     def updateVariableDependencyNames(self, variables=None):
         """ Updates listed dependency names for a variable set to only include those detected in the listed equation """
         if variables is None:
@@ -90,19 +89,7 @@ class EquationEngine:
         #Loop through the variable dictionary and update all dependencies
         for name in derived_variables:
             var = variables[name]
-            var.dependency_names = self.equationReader(var)
-    
-    """ 
-    def buildVariableTree(self, variables=None, derived_variables=None):
-        if variables is None:
-            variables is self.variables
-            derived_variables = self.derived_variables
-        elif derived_variables is None:
-            derived_variables = self.splitBasicDerived(variables)
-        
-        for name in derived_variables:
-    """ 
-            
+            var.dependency_names = self.equationReader(var)            
         
     def createTimeSumVariable(self, name):
         """ Creates a new variable that is a timesum of other variables """
@@ -118,7 +105,6 @@ class EquationEngine:
                        is_basic=False, equation=equation, is_timesum=True, timesum_settings=settings)
         self.updateVariableDependencyNames(var)
         return var
-         
         
             
     def _checkEquationTreeRecursive(self, variables, variables_to_check, silent, indent=""):
@@ -156,23 +142,30 @@ class EquationEngine:
         #If no errors were encountered we can safely return True
         return True
 
-    def checkEquationTreeConsistency(self, variables=None, variables_to_check=None, silent=True):
+    def checkEquationTreeConsistency(self, variables=None, derived_variables=None, silent=True):
         """ This function that handles input and executes the equation tree consistency checker """
         #If no variables provided: act on own registry
         if variables is None:
             variables = self.variables
         #If no variables to check are provided: split provided variables
-        if variables_to_check is None:
+        if derived_variables is None:
             if variables is self.variables:
-                variables_to_check = self.derived_variables
+                derived_variables = self.derived_variables
             else:
-                variables_to_check = self.splitBasicDerived(variables)
+                derived_variables = self.splitBasicDerived(variables)[1]
   
         #If variables_to_check is a single variable, we convert it to a list
-        if isinstance(variables_to_check, str):
-            variables_to_check = [variables_to_check]
+        if isinstance(derived_variables, str):
+            derived_variables = [derived_variables]
         
-        return self._checkEquationTreeRecursive(variables, variables_to_check, silent)
+        #Check equation tree
+        self._checkEquationTreeRecursive(variables, derived_variables, silent)
+        
+        #Update derived variables set to include newly created timesum variables
+        if variables is self.variables:
+            self.derived_variables = self.splitBasicDerived(variables)[1]
+        else:
+            return self.splitBasicDerived(variables)[1]
     
     def populateVariableDependencies(self, var, variables=None):
         """ Populates the dependencies for a single variable """
@@ -194,7 +187,7 @@ class EquationEngine:
             var = variables[name]
             self.populateVariableDependencies(var, variables)
     
-    def buildEquation(self, var, symbol_map=None):
+    def buildVariableEquation(self, var, symbol_map=None):
         """ Builds equation executable of a given variable, potentially using a provided sympy symbol map """
         #If Symbol map is not provided, build one from the dependency names of the variable
         if symbol_map is None:
@@ -232,7 +225,7 @@ class EquationEngine:
         symbol_map = {name: sp.Symbol(name) for name in variables.keys()}
         for name in derived_variables:
             var = variables[name]
-            self.buildEquation(var, symbol_map)
+            self.buildVariableEquation(var, symbol_map)
 
                 
 

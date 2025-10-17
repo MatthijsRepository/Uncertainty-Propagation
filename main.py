@@ -13,23 +13,19 @@ if __name__=="__main__":
     del input_handler
     print("Ended parsing input \n")
     
-    #for var in variables.values():
-    #    print(var)
-    
     #Verifying equation tree consistency, building equation tree in SimPy
     print("Verifying root-consistency of equation tree")
     equation_engine = EquationEngine(variables, update_dependencies=True)
-    #equation_engine.checkEquationTreeConsistency(variables="T")
-    #equation_engine.checkEquationTreeConsistency(variables_to_check='PR')
-    equation_engine.checkEquationTreeConsistency(silent=False)
+    equation_engine.checkEquationTreeConsistency(silent=True)
     print("Equation tree is root-consistent \n")
-    
-    
-    print(variables["PR"].equation)
+    print("Populating equation tree dependencies")
     equation_engine.populateEquationTreeDependencies()
     
     
-    print(variables.keys())
+    for name in equation_engine.derived_variables:
+        print(name)
+        
+    
     
     print("Building sympy equation tree")
     equation_engine.buildSymPyEquationTree()
