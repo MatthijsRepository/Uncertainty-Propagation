@@ -18,17 +18,20 @@ if __name__=="__main__":
     equation_engine = EquationEngine(variables)
     equation_engine.checkEquationTreeConsistency(silent=True)
     print("Equation tree is root-consistent \n")
-    print("Populating equation tree dependencies")
+    print("Populating equation tree dependencies \n")
     equation_engine.populateEquationTreeDependencies()
     
     
+    print("Creating variable equation executables \n")
+    equation_engine.buildEquationTreeExecutables()
+    
+    
+    #####
+    
+    print("Derived variables:")
     for name in equation_engine.derived_variables:
         print(name)
-        
-    
-    
-    print("Building sympy equation tree")
-    equation_engine.buildSymPyEquationTree()
+    print()
     
     print(variables["testC"].dependency_names)
     #equation_engine.buildEquation(variables["testC"])
@@ -39,6 +42,10 @@ if __name__=="__main__":
     variables['C_25'].executeEquation()
     print(variables['T'].values[0])
     print(variables['C_25'].values[0])
+    
+    print(variables["testD"])
+    print(variables["testD"].is_timesum)
+    variables["testD"].executeEquation()
     
     print(variables['PR'].sympy_equation)
     #print(variables['testD'].sympy_equation)

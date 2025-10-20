@@ -277,31 +277,21 @@ class EquationEngine:
         
     
     
-    def buildVariableEquation(self, var, symbol_map=None):
+    def buildVariableExecutable(self, var, symbol_map=None):
         """ Builds equation executable of a given variable, potentially using a provided sympy symbol map """
         #If Symbol map is not provided, build one from the dependency names of the variable
         if symbol_map is None:
             self._buildSymPySymbolMap(var)        
         
-        print()
-        print(f"Variable {var.name}")
+        #Access sympy symbols from map
         symbols = [symbol_map[name] for name in var.dependency_names]
-        print("Symbols")
-        print(symbols)
-        
-        #print(clean_eq)
-        print("Normal equation")
-        print(var.equation)
+        #Clean equation for sympy
         cleaned_equation = self._cleanEquationForSymPy(var.equation)
-        print("Cleaned equation")
-        print(cleaned_equation)
         #Create sympy equation - this is later also used for differentiation
         var.sympy_equation = sp.sympify(cleaned_equation, locals=symbol_map)
-        print("Sympy equation")
-        print(var.sympy_equation)
-        
         #Create callable function
-        executable_equation = sp.lambdify(symbols, var.sympy_equation, modules=[{"timesum": TIMESUM_TEMP}]) ###!!!
+        var.executable = sp.lambdify(symbols, var.sympy_equation, modules=[{"timesum": TIMESUM_TEMP}]) ###!!!
+        """ 
         def wrapper():
             #args = [dep.values for dep in var.dependencies]
             args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
@@ -309,8 +299,9 @@ class EquationEngine:
             var.values = executable_equation(*args)
             return None
         var.executeEquation = wrapper
+        """ 
             
-    def buildSymPyEquationTree(self, variables=None):
+    def buildEquationTreeExecutables(self, variables=None):
         """ Goes through all derived variables in a variable set and builds their equations using SymPy """
         if variables is None:
             variables = self.variables
@@ -321,7 +312,7 @@ class EquationEngine:
         symbol_map = self._buildSymPySymbolMap(variables)
         for name in derived_variables:
             var = variables[name]
-            self.buildVariableEquation(var, symbol_map)
+            self.buildVariableExecutable(var, symbol_map)
             
 
                 

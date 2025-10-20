@@ -59,21 +59,25 @@ class Variable:
         self.name = name                    #str: variable name
         self.description = description      #str: variable description
         self.is_basic = is_basic            #bool: defines whether variable is basic or derived
+        
+        self.values = values                #[int, float, array, None]: variable values
+
         #If it is a derived variable then an equation and constituent variables should be passed
         if not self.is_basic:
-            if not equation:
-                raise ValueError(f"{self.name} is defined as a derived variable, please include equation and variables")
-            self.equation = equation            #str: defines variable equation
-            self.dependency_names = dependency_names      #list: lists variables in equation
-            self.dependencies = []              #list: list of variables that are the direct dependencies
-            self.is_root_consistent = False     #bool: whether the variable is traces consistently to basic variables
-            
-        self.values = values                #[int, float, array, None]: variable values
-        self.calculation_engine = None      ###!!!
+            if equation is None:
+                raise ValueError(f"{self.name} is defined as a derived variable, please include equation")
+        self.equation = equation            #str: defines variable equation
+        self.dependency_names = dependency_names      #list: lists variables in equation
+        self.dependencies = {}              #dict: dict of variables that are the direct dependencies
+        self.is_root_consistent = False     #bool: whether the variable traces consistently to basic variables
         
         self.is_timesum = is_timesum        #bool: defines whether variable is a timesum
         self.timesum_settings = timesum_settings #list of options
         
+        self.sympy_equation = None          #sympy interpretable of the variable equation
+        self.executable = None              #executable: sympy-built executable of the variable equation - excluding timesums
+        self.calculation_engine = None      #calculation engine: necessary for more complex calculations
+                
         self.start_time = start_time        #datetime object: start time of variable
         self.end_time = end_time            #datetime object: end time of variable
         self.timestep = None                #float: number of seconds per timestep
@@ -210,6 +214,37 @@ class Variable:
             self.uncertainties.extend(uncertainty)
         else:
             self.uncertainties.append(uncertainty)
+            
+    
+    
+    def executeEquation(self, store_results=True, force_calculation=False):
+        """ Executes equation built by sympy and checks whether everything is initialized correctly """
+        if self.equation is None:
+            raise ValueError(f"Tried to execute the equation of variable {self.name}, for which no equation is defined.")
+        elif self.executable is None:
+            raise ValueError(f"Tried to execute the equation of variable {self.name} = {self.equation}, but no equation executable has been built for this variable.")
+        
+        #If values already defined: do nothing unless forced recalculation is desired
+        if self.values is not None:
+            if force_calculation is True:
+                print(f"WARNING: executing equation of variable {self.name} while values are already defined!")
+            else:
+                return self.values
+        
+        calculated_values = None
+        #Check if this variable is a timesum, in which case the executable is the equation INSIDE the timesum
+        if self.is_timesum:
+            print(f"WARNING: timesum calculation not implemented yet")
+            print(f"Timesum variable f{self.name} = {self.equation} with sympy equation {self.sympy_equation}")
+            if self.calculation_engine is None:
+                print(f"WARNING: asked to perform timesum of variable {self.name} while no equation engine is given to this variable")
+        else:
+            args = [self.dependencies[dep_name] for dep_name in self.dependency_names]
+            calculated_values = self.executable(*args)
+        
+        if store_results:
+            self.values = calculated_values
+        return calculated_values
     
     def TimeSum(self, interval=None, start_time=None, end_time=None):
         #check if time-dependent
