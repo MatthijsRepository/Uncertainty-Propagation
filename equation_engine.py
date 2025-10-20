@@ -9,7 +9,7 @@ from calculation_engine import TIMESUM_TEMP
 """ This engine handles the initialization of the equation tree, 
     verifies its internal consistency and handles everything related to sympy """
 class EquationEngine:
-    def __init__(self, variables, update_dependencies=False):
+    def __init__(self, variables):
         self.variables = variables          #dict: dictionary of variable names and Variable objects
         self.basic_variables, self.derived_variables = self.splitBasicDerived() #lists of variable names for basic and derived variables
         
