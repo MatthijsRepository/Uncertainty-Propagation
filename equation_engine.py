@@ -3,7 +3,7 @@ from sympy_timesum import timesum
 import re
 import sympy as sp
 
-from calculation_engine import TIMESUM_TEMP
+from calculation_engine import TIMESUM_TEMP ###!!!
 
 
 """ This engine handles the initialization of the equation tree, 
@@ -171,6 +171,9 @@ class EquationEngine:
         if variables is None:
             variables = self.variables
         
+        if var.dependency_names is None:
+            self.populateVariableDependencyNames(var)
+        
         for dep_name in var.dependency_names:
             var.dependencies[dep_name] = variables[dep_name]
             
@@ -281,7 +284,8 @@ class EquationEngine:
         """ Builds equation executable of a given variable, potentially using a provided sympy symbol map """
         #If Symbol map is not provided, build one from the dependency names of the variable
         if symbol_map is None:
-            self._buildSymPySymbolMap(var)        
+            symbol_map = self._buildSymPySymbolMap(var)        
+        
         
         #Access sympy symbols from map
         symbols = [symbol_map[name] for name in var.dependency_names]
