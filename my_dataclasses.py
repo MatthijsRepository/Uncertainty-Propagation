@@ -66,9 +66,10 @@ class Variable:
             self.equation = equation            #str: defines variable equation
             self.dependency_names = dependency_names      #list: lists variables in equation
             self.dependencies = []              #list: list of variables that are the direct dependencies
-            self.is_root_consistent = None      #bool: whether the variable is traces consistently to basic variables
+            self.is_root_consistent = False     #bool: whether the variable is traces consistently to basic variables
             
-        self.values = values                #[int, float, array]: variable values
+        self.values = values                #[int, float, array, None]: variable values
+        self.calculation_engine = None      ###!!!
         
         self.is_timesum = is_timesum        #bool: defines whether variable is a timesum
         self.timesum_settings = timesum_settings #list of options
@@ -128,7 +129,10 @@ class Variable:
             return self.values * other.values
         else:
             raise ValueError("Multiplying variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
-        
+    
+    def __rmul__(self, other):
+        return self.__mul__(other)
+    
     def __truediv__(self, denominator):
         #If floats or ints are involved the logic is simple
         if isinstance(denominator, (int, float)):
@@ -156,7 +160,6 @@ class Variable:
             return numerator / self.values
             raise ValueError("Dividing variables {self.name} and {numerator.name} failed. {self.name} has length {len(self.values}, {numerator.name} has length {len(numerator.values)}")
     
-    
     def __pow__(self, power):
         if not isinstance(power, (int)):
             raise ValueError(f"Error, taking power {power} of variable {self.name} is not supported, integer powers only.")
@@ -164,6 +167,12 @@ class Variable:
         
     def DefineValues(self, values):
         self.values = values
+    
+    def hasValues(self):
+        if self.values is None:
+            return False
+        else:
+            return True
     
     def AddTimestep(self, step, time_range=None):
         #Check if start and end times are provided

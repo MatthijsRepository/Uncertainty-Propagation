@@ -106,7 +106,6 @@ class EquationEngine:
         self.updateVariableDependencyNames(var)
         return var
         
-            
     def _checkEquationTreeRecursive(self, variables, variables_to_check, silent, indent=""):
         """ Internal function that recursively checks equation tree consistency """
         #Recursively navigates down the tree and checks if the equation tree is defined in a consistent way
@@ -188,7 +187,7 @@ class EquationEngine:
             self.populateVariableDependencies(var, variables)
     
     
-    def _buildSymbolMap_old(self, variables):
+    def _buildSymbolMap_OLD(self, variables):
         """ Helper function that builds a symbol map for a variable dictionary or a single variable dependency list
             we add an alias for non-timesum variables as they are in quotes in the equation
             so but G and 'G' will both refer to a symbol G """
@@ -208,7 +207,7 @@ class EquationEngine:
         #symbol_map = {name: sp.Symbol(name) for name in names}
         return symbol_map
     
-    def _cleanEquationForSymPy_old(self, equation):
+    def _cleanEquationForSymPy_OLD(self, equation):
         """ Cleans quotes around variables that are outside of timesum operators, for use in sympy """
         i=0
         cleaned_equation = ""
@@ -234,17 +233,47 @@ class EquationEngine:
             i+=1
         return cleaned_equation
     
-    def _buildSymbolMap(self, variables):
+    def _buildSymPySymbolMap(self, variables):
         if isinstance(variables, dict):
             names = variables.keys()
         else:
             names = variables.dependency_names
-            
-        return {name : sp.Symbol(re.sub("'", "", name)) for name in names}
+        
+        #cleaned_names = [re.sub("'", "", name) for name in names]               #Remove quotes
+        #cleaned_names = [re.sub(",", "", name) for name in cleaned_names]       #Remove commas
+        #return {name : sp.Symbol(cleaned_names[i]) for i, name in enumerate(names)}
+        return {name: sp.Symbol(self._cleanEquationForSymPy(name)) for name in names}
             
     
     def _cleanEquationForSymPy(self, equation):
-        return re.sub("'","", equation)
+        cleaned_equation = ""
+        #Parse through equation and replace all parentheses related to timesums by double underscores, but not mathematical ones
+        i = 0
+        while i < len(equation):
+            if equation[i:i+3] =="TS_":
+                cleaned_equation += "TS__"
+                depth=1
+                i+=4
+                while depth>0:
+                    if equation[i]=="(":
+                        depth +=1
+                        cleaned_equation += "__"
+                    elif equation[i]==")":
+                        depth -= 1
+                        cleaned_equation += "__"
+                    else:
+                        cleaned_equation += equation[i]
+                    i += 1
+            else:
+                cleaned_equation += equation[i]
+                i+=1
+        #Remove all quotes
+        cleaned_equation = re.sub("'","", cleaned_equation)
+        #Remove all commas
+        cleaned_equation = re.sub(",", "", cleaned_equation)
+        #Remove all spaces
+        cleaned_equation = re.sub(" ", "", cleaned_equation)
+        return cleaned_equation
         
     
     
@@ -252,25 +281,28 @@ class EquationEngine:
         """ Builds equation executable of a given variable, potentially using a provided sympy symbol map """
         #If Symbol map is not provided, build one from the dependency names of the variable
         if symbol_map is None:
-            self._buildSymbolMap(var)        
+            self._buildSymPySymbolMap(var)        
         
-        
-        print("WARNING: this is not correct anymore, some names are in quotes")
+        print()
+        print(f"Variable {var.name}")
         symbols = [symbol_map[name] for name in var.dependency_names]
+        print("Symbols")
         print(symbols)
         
         #print(clean_eq)
+        print("Normal equation")
         print(var.equation)
         cleaned_equation = self._cleanEquationForSymPy(var.equation)
+        print("Cleaned equation")
         print(cleaned_equation)
         #Create sympy equation - this is later also used for differentiation
         var.sympy_equation = sp.sympify(cleaned_equation, locals=symbol_map)
+        print("Sympy equation")
         print(var.sympy_equation)
         
         #Create callable function
-        executable_equation = sp.lambdify(symbols, var.sympy_equation, modules=[{"timesum": TIMESUM_TEMP}])
+        executable_equation = sp.lambdify(symbols, var.sympy_equation, modules=[{"timesum": TIMESUM_TEMP}]) ###!!!
         def wrapper():
-            
             #args = [dep.values for dep in var.dependencies]
             args = [dep for dep in var.dependencies]
 
@@ -286,10 +318,11 @@ class EquationEngine:
         else:
             derived_variables = self.splitBasicDerived(variables)
         
-        symbol_map = self._buildSymbolMap(variables)
+        symbol_map = self._buildSymPySymbolMap(variables)
         for name in derived_variables:
             var = variables[name]
             self.buildVariableEquation(var, symbol_map)
+            
 
                 
 
