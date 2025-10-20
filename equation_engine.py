@@ -13,7 +13,7 @@ class EquationEngine:
         self.variables = variables          #dict: dictionary of variable names and Variable objects
         self.basic_variables, self.derived_variables = self.splitBasicDerived() #lists of variable names for basic and derived variables
         
-        self.updateVariableDependencyNames()
+        self.populateVariableDependencyNames()
         
     def splitBasicDerived(self, variables=None):
         """ Splits a tree into basic and derived variables """
@@ -75,7 +75,7 @@ class EquationEngine:
         return list(set(dependency_names))
     
     
-    def updateVariableDependencyNames(self, variables=None):
+    def populateVariableDependencyNames(self, variables=None):
         """ Updates listed dependency names for a variable set to only include those detected in the listed equation """
         if variables is None:
             variables = self.variables
@@ -103,7 +103,7 @@ class EquationEngine:
             settings = None
         var = Variable(name=name, description=f"Timesum of: {equation}, with settings {settings}", \
                        is_basic=False, equation=equation, is_timesum=True, timesum_settings=settings)
-        self.updateVariableDependencyNames(var)
+        self.populateVariableDependencyNames(var)
         return var
         
     def _checkEquationTreeRecursive(self, variables, variables_to_check, silent, indent=""):
