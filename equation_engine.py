@@ -172,7 +172,7 @@ class EquationEngine:
             variables = self.variables
         
         for dep_name in var.dependency_names:
-            var.dependencies.append(variables[dep_name])
+            var.dependencies[dep_name] = variables[dep_name]
             
     def populateEquationTreeDependencies(self, variables=None, derived_variables=None):
         """ Populates dependencies for all dependent variables in the tree """
@@ -304,7 +304,7 @@ class EquationEngine:
         executable_equation = sp.lambdify(symbols, var.sympy_equation, modules=[{"timesum": TIMESUM_TEMP}]) ###!!!
         def wrapper():
             #args = [dep.values for dep in var.dependencies]
-            args = [dep for dep in var.dependencies]
+            args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
 
             var.values = executable_equation(*args)
             return None
