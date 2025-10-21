@@ -53,13 +53,13 @@ class Uncertainty:
         
         
 class Variable:
-    def __init__(self, name, description=None, values=None, is_basic=True, is_rate=False, \
+    def __init__(self, name, description=None, values=None, is_basic=True, aggregation=None, \
                  equation=None, dependency_names=None, first_time=None, last_time=None, \
                      is_timesum=False, timesum_settings=None):
         self.name = name                    #str: variable name
         self.description = description      #str: variable description
         self.is_basic = is_basic            #bool: defines whether variable is basic or derived
-        self.is_rate = is_rate              #bool: defines whether the variable is a rate or a quantity
+        self.aggregation = aggregation      #str: defines the quantity aggregation rule
         
         self.values = values                #[int, float, array, None]: variable values
 
@@ -75,6 +75,7 @@ class Variable:
         self.is_timesum = is_timesum        #bool: defines whether variable is a timesum
         self.timesum_settings = timesum_settings #list of options
         
+        self.sympy_symbols = None           #Dictionary of sympy symbols
         self.sympy_equation = None          #sympy interpretable of the variable equation
         self.executable = None              #executable: sympy-built executable of the variable equation - excluding timesums
         self.calculation_engine = None      #calculation engine: necessary for more complex calculations
@@ -271,9 +272,6 @@ class Variable:
         if store_results:
             self.values = calculated_values
         return calculated_values
-    
-    
-    
     
     
     def TimeSum(self, interval=None, start_time=None, end_time=None): ###!!! deprecated

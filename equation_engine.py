@@ -190,17 +190,15 @@ class EquationEngine:
     
     
     def _buildSymPySymbolMap(self, variables):
+        """ builds a dictionary relating variable names to sympy symbols """
         if isinstance(variables, dict):
             names = variables.keys()
         else:
             names = variables.dependency_names
-        
-        #cleaned_names = [re.sub("'", "", name) for name in names]               #Remove quotes
-        #cleaned_names = [re.sub(",", "", name) for name in cleaned_names]       #Remove commas
-        #return {name : sp.Symbol(cleaned_names[i]) for i, name in enumerate(names)}
         return {name: sp.Symbol(self._cleanEquationForSymPy(name)) for name in names}
             
     def _cleanEquationForSymPy(self, equation):
+        """ prepares an equation for sympoy interpretation: quotes and spaces are removed, brackets and math symbols inside timesum statements are replaced by underscores """
         cleaned_equation = ""
         #Parse through equation and replace all parentheses related to timesums by double underscores, but not mathematical ones
         i = 0
@@ -247,14 +245,9 @@ class EquationEngine:
         cleaned_equation = self._cleanEquationForSymPy(var.equation)
         #Create sympy equation - this is later also used for differentiation
         var.sympy_equation = sp.sympify(cleaned_equation, locals=symbol_map)
-        #Populate powers dictionary
-        print()
-        print(var.equation)
-        print(cleaned_equation)
-        print(var.sympy_equation)
-        print(var.sympy_equation.as_powers_dict())
         #Create callable function
         var.executable = sp.lambdify(symbols, var.sympy_equation)
+        
         
             
     def buildEquationTreeExecutables(self, variables=None):
