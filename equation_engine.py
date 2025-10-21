@@ -13,7 +13,7 @@ class EquationEngine:
         self.variables = variables          #dict: dictionary of variable names and Variable objects
         self.basic_variables, self.derived_variables = self.splitBasicDerived() #lists of variable names for basic and derived variables
         
-        self.populateVariableDependencyNames()
+        self.populateVariableDependencyNames() ###!!!
         
     def splitBasicDerived(self, variables=None):
         """ Splits a tree into basic and derived variables """
