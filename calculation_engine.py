@@ -53,9 +53,8 @@ class CalculationEngine:
             else:
                 print(f"Dependency detected with no values: {dep.name}. Calculating...")
                 self.calculateValues(dep, update_var=update_var)
-        
         values = var.executeEquation(store_results=update_var, calculation_engine=self)
-        print(f"Calculation of {var.name} complete, values: {np.sum(var.values)}")
+        print(f"Calculation of {var.name} complete, values: {var.values}")
         return values
         
     
@@ -92,10 +91,11 @@ class CalculationEngine:
         
         return
         
-        
-        
-        
+    
     def timeSum(self, var):
+        """ Handles the timesum calculation for a variable
+            timesums are dependent on the variable aggregation rules, which can be passed directly at definition or are inferred from dependencies
+            aggregation rules work with simple seniority: presence of integrate > add > average """
         if not var.is_timesum:
             print(f"WARNING: tried to calculate timesum of variable {var.name}, which is not a timesum!")
         
@@ -105,10 +105,23 @@ class CalculationEngine:
         args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
         calculated_values = var.executable(*args)
         
-        #Check if one of the dependencies is a rate, if this is the case we should multiply/divide by the timestep
+        #In case of trivial equations like TS('B'), sympy will not return numeric values but the variable itself, here we manually extract the values if this is the case
+        if isinstance(calculated_values, Variable):
+            calculated_values = calculated_values.values
         
-        print("WARNING: timesum calculation placeholder!")
-        return 10
+        #Time aggregation happens according to the variable aggregation rule
+        if var.aggregation_rule == "integrate":
+            #try to extract a timestep from the dependencies
+            for dep in var.dependencies.values():           ###!!! not robust!!!
+                if dep.timestep is not None:
+                    timestep = dep.timestep
+                    break
+            calculated_values = np.sum(calculated_values) * timestep
+        elif var.aggregation_rule == "sum":
+            calculated_values = np.sum(calculated_values)
+        else:
+            calculated_values = np.average(calculated_values)
+        return calculated_values
         
         
         

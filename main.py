@@ -27,9 +27,9 @@ if __name__=="__main__":
     start_time_b = datetime.strptime("12:30:00", timeformat)
     end_time_b = datetime.strptime("15:30:00", timeformat)
     
-    variables["time_a"] = Variable("time_a", values=np.ones(26), is_basic=True, aggregation="sum", first_time=start_time_a, last_time=end_time_a)
-    variables["time_b"] = Variable("time_b", values=np.array([1,2,3,4]), is_basic=True, aggregation="sum", first_time=start_time_b, last_time=end_time_b)
-    variables["time_c"] = Variable("time_c", values=None, is_basic=False, aggregation="sum", equation="'time_a' + 'time_b'")
+    variables["time_a"] = Variable("time_a", values=np.ones(26), is_basic=True, aggregation_rule="sum", first_time=start_time_a, last_time=end_time_a)
+    variables["time_b"] = Variable("time_b", values=np.array([1,2,3,4]), is_basic=True, aggregation_rule="sum", first_time=start_time_b, last_time=end_time_b)
+    variables["time_c"] = Variable("time_c", values=None, is_basic=False, aggregation_rule="sum", equation="'time_a' + 'time_b'")
     print("End hardcoding testing variables")
     print()
     """ 
@@ -59,7 +59,13 @@ if __name__=="__main__":
     #calculation_engine.harmonizeTimeSeries(variables['time_c'].dependencies)
     
     
-    #calculation_engine.calculateValues(variables["PR"], update_var=True)
+    
+    
+    calculation_engine.calculateValues(variables["TS_('G')"], update_var=True)
+    calculation_engine.calculateValues(variables["TS_('Pout', h)"], update_var=True)
+    
+    
+    calculation_engine.calculateValues(variables["PR"], update_var=True)
     
     #print("Derived variables:")
     #for name in equation_engine.derived_variables:

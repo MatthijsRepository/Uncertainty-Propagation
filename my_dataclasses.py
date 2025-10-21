@@ -53,13 +53,13 @@ class Uncertainty:
         
         
 class Variable:
-    def __init__(self, name, description=None, values=None, is_basic=True, aggregation=None, \
+    def __init__(self, name, description=None, values=None, is_basic=True, aggregation_rule=None, \
                  equation=None, dependency_names=None, first_time=None, last_time=None, \
                      is_timesum=False, timesum_settings=None):
         self.name = name                    #str: variable name
         self.description = description      #str: variable description
         self.is_basic = is_basic            #bool: defines whether variable is basic or derived
-        self.aggregation = aggregation      #str: defines the quantity aggregation rule
+        self.aggregation_rule = aggregation_rule      #str: defines the quantity aggregation rule
         
         self.values = values                #[int, float, array, None]: variable values
 
@@ -264,6 +264,8 @@ class Variable:
             if calculation_engine is None:
                 raise ValueError(f"Asked to perform timesum of variable {self.name} while no equation engine is given to this variable")
             calculated_values = calculation_engine.timeSum(self)
+            print("CALCULATED VALUES")
+            print(calculated_values)
         else:
             args = [self.dependencies[dep_name] for dep_name in self.dependency_names]
             calculated_values = self.executable(*args)
@@ -274,6 +276,7 @@ class Variable:
         return calculated_values
     
     
+    """ 
     def TimeSum(self, interval=None, start_time=None, end_time=None): ###!!! deprecated
         #check if time-dependent
         if (self.values is None or len(self.values)<2):
@@ -294,7 +297,7 @@ class Variable:
         #return self.timesum
         return np.sum(self.values) * self.timestep
         #return Variable(name=f"Daily timesum of {self.name}", description=f"Daily timesum - {self.description}", values=np.sum(self.values) * self.timestep, is_basic=False, is_timesum=True, equation=f"Timesum('{self.name}')", variables=self)
-        
+    """ 
 
 
 

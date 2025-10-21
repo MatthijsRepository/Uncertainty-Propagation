@@ -189,6 +189,26 @@ class EquationEngine:
             self.populateVariableDependencies(var, variables)
     
     
+    def _deriveTimeSumIntegrationRule(self, var, symbols, symbol_map):
+        """ Extract the aggregation rule for a timesum from the dependencies 
+            we work through simple seniority: integration > summing > averaging > None """
+        rules = []
+        for dep in var.dependencies.values():
+            rules.append(dep.aggregation_rule)
+        #integration > summing > averaging > None
+        if "integrate" in rules:
+            rule = "integrate"
+        elif "sum" in rules:
+            rule = "sum"
+        elif "average" in rules:
+            rule = "average"
+        else:
+            raise ValueError(f"Could not extract aggregation rule for timesum variable {var.name} = {var.equation} with dependencies {var.dependency_names}")
+        var.aggregation_rule = rule
+        return 
+        
+    
+    
     def _buildSymPySymbolMap(self, variables):
         """ builds a dictionary relating variable names to sympy symbols """
         if isinstance(variables, dict):
@@ -248,6 +268,9 @@ class EquationEngine:
         #Create callable function
         var.executable = sp.lambdify(symbols, var.sympy_equation)
         
+        #If the variable is a timesum we need to give it an integration rule
+        if var.is_timesum:
+            self._deriveTimeSumIntegrationRule(var, symbols, symbol_map)
         
             
     def buildEquationTreeExecutables(self, variables=None):
