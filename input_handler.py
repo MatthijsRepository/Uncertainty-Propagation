@@ -149,8 +149,9 @@ class VariableHandler:
         self.timestep = None            #[float, str]: timestep of variable, or setting
         self.description = None         #str: variable description
         self.is_basic_variable = None   #bool: flags if variable is basic or derived
+        self.is_rate = None             #bool: flags if the variable is a rate (quantity per second) or not (a quantity)
         self.equation = None            #str: equation of the variable
-        self.dependency_names = None  #list: lists all variables used in the equation
+        self.dependency_names = None    #list: lists all variables used in the equation
         self.uncertainties = []         #list: contains all uncertainty sources
         return  
         
@@ -180,6 +181,11 @@ class VariableHandler:
             elif line.startswith("description"):
                 self.description = line.split(":", maxsplit=1)[1].strip()
                 i += 1 ; continue
+            elif line.startswith("is_rate"):
+                self.is_rate = line.split(":", maxsplit=1)[1].strip()
+                if self.is_rate.startswith("True"):
+                    self.is_rate = True
+                i += 1 ; continue
             elif line.startswith("equation"):
                 self.equation = line.split(":", maxsplit=1)[1].strip()
                 i += 1 ; continue
@@ -204,10 +210,9 @@ class VariableHandler:
         """ Dispatches the internal functions that handle the parsed input strings, creates a new variable and populates it """
         self._handleValueData()
         self._handleTimestep()
-        self._handleDependencyNames()
         
         new_variable = Variable(name=self.var_name, description=self.description, values=self.var_values, \
-                                is_basic=self.is_basic_variable, equation=self.equation, dependency_names=self.dependency_names)
+                                is_basic=self.is_basic_variable, is_rate=self.is_rate, equation=self.equation)
         if not self.timestep is None:
             new_variable.AddTimestep(self.timestep, self.time_range)
         if len(self.uncertainties)>0:
@@ -253,15 +258,6 @@ class VariableHandler:
                     raise ValueError(f"CSV dataset provided for variable {self.var_name} does not contain time data.")
             else:
                 raise ValueError(f"Timestep string {self.timestep} not recognized, please check input.")
-    
-    def _handleDependencyNames(self):
-        """ Converts equation variable string to a list of variable names """
-        if self.dependency_names is None:
-            return
-        input_variables = self.dependency_names.split(",")
-        self.dependency_names = []
-        for var in input_variables:
-            self.dependency_names.append(var.strip()[1:-1])
     
     def _uncertaintyParser(self, lines, i):
         """ Parses uncertainties block and dispatches uncertainty handler """
@@ -311,7 +307,7 @@ class VariableHandler:
             bound = float(data[4].split("=")[1].strip())
             sigma = None
         
-        new_uncertainty =  Uncertainty(name, is_relative, is_symmetric, "rectangular", correlation, sigma=sigma, bound=bound)
+        new_uncertainty =  Uncertainty(name, is_relative, is_symmetric, shape, correlation, sigma=sigma, bound=bound)
         self.uncertainties.append(new_uncertainty)
         
     

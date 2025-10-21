@@ -53,12 +53,13 @@ class Uncertainty:
         
         
 class Variable:
-    def __init__(self, name, description, values=None, is_basic=True, \
+    def __init__(self, name, description, values=None, is_basic=True, is_rate=False, \
                  equation=None, dependency_names=None, start_time=None, end_time=None, \
                      is_timesum=False, timesum_settings=None):
         self.name = name                    #str: variable name
         self.description = description      #str: variable description
         self.is_basic = is_basic            #bool: defines whether variable is basic or derived
+        self.is_rate = is_rate
         
         self.values = values                #[int, float, array, None]: variable values
 
