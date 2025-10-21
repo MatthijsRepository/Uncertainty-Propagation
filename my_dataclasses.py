@@ -54,7 +54,7 @@ class Uncertainty:
         
 class Variable:
     def __init__(self, name, description=None, values=None, is_basic=True, is_rate=False, \
-                 equation=None, dependency_names=None, start_time=None, end_time=None, \
+                 equation=None, dependency_names=None, first_time=None, last_time=None, \
                      is_timesum=False, timesum_settings=None):
         self.name = name                    #str: variable name
         self.description = description      #str: variable description
@@ -79,10 +79,10 @@ class Variable:
         self.executable = None              #executable: sympy-built executable of the variable equation - excluding timesums
         self.calculation_engine = None      #calculation engine: necessary for more complex calculations
                 
-        self.start_time = start_time        #datetime object: start time of variable
-        self.end_time = end_time            #datetime object: end time of variable
-        if self.start_time is not None and self.end_time is not None:
-            self.AddTimestep("auto")        #float: number of seconds per timestep
+        self.first_time = None        #datetime object: time of the first datapoint
+        self.last_time = None            #datetime object: time of the last datapoint
+        if first_time is not None and last_time is not None:
+            self.addTimeStep([first_time, last_time])        #float: number of seconds per timestep
         else:
             self.timestep = None                
         
@@ -181,12 +181,34 @@ class Variable:
             return False
         else:
             return True
+        
     
-    def AddTimestep(self, step, time_range=None):   ###!!! name
+    def addTimeStep(self, time_range):
+        self.first_time = time_range[0]
+        self.last_time = time_range[1]
+        
+        if self.values is None or len(self.values)<2:
+            raise ValueError(f"Automatic timestep calculation for variable {self.name} failed: no or too little values are specified (at least 2).")
+       
+        #Calculate timestep
+        timestep = (self.last_time - self.first_time) / (len(self.values) - 1)
+        
+        self.start_time = self.first_time - timestep/2
+        self.end_time = self.last_time + timestep/2
+        
+        self.timestep = timestep.total_seconds()
+        if not self.timestep.is_integer():
+            raise ValueError(f"Timestep {self.timestep} is not integer, please ensure timesteps are an integer amount of seconds!")
+        self.timestep = int(self.timestep)
+        
+        
+        
+    
+    def AddTimestep_old(self, step, time_range=None):   ###!!! name
         #Check if start and end times are provided
         if not time_range is None:
-            self.start_time = time_range[0]
-            self.end_time = time_range[1]
+            self.first_time = time_range[0]
+            self.last_time = time_range[1]
         #Direct timestep definition
         if (type(step)==int or type(step)==float):
             self.timestep = step
@@ -199,9 +221,6 @@ class Variable:
             if (self.values is None or len(self.values)<2):
                 raise ValueError(f"Automatic timestep calculation for variable {self.name} failed: no or too little values are specified (at least 2).")
             #Calculate timestep
-            #fmt = "%H:%M:%S"
-            #start_time = datetime.strptime(self.start_time, fmt)
-            #end_time = datetime.strptime(self.end_time, fmt)
             timestep = (self.end_time - self.start_time) / (len(self.values) - 1)
             self.timestep = timestep.total_seconds()
             if not self.timestep.is_integer():

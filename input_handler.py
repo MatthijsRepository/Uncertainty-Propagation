@@ -146,7 +146,7 @@ class VariableHandler:
         self.csv_data = csv_data        #list: csv data in inputhandler object
         self.value_string = None        #str: string containing input value definition
         self.var_values = None          #[int, float, array]: variable values
-        self.timestep = None            #[float, str]: timestep of variable, or setting
+        self.timestep = None            #[float, str]: timestep of variable, or setting ###!!!
         self.description = None         #str: variable description
         self.is_basic_variable = None   #bool: flags if variable is basic or derived
         self.is_rate = None             #bool: flags if the variable is a rate (quantity per second) or not (a quantity)
@@ -214,7 +214,7 @@ class VariableHandler:
         new_variable = Variable(name=self.var_name, description=self.description, values=self.var_values, \
                                 is_basic=self.is_basic_variable, is_rate=self.is_rate, equation=self.equation)
         if not self.timestep is None:
-            new_variable.AddTimestep(self.timestep, self.time_range)
+            new_variable.addTimeStep(self.time_range)
         if len(self.uncertainties)>0:
             new_variable.AddUncertaintySource(self.uncertainties)
         return new_variable
@@ -253,11 +253,12 @@ class VariableHandler:
                     raise ValueError(f"CSV data referenced for variable {self.var_name}, but no CSV dataset was passed. Please input CSV data.")
                 try:
                     self.time_range = self.csv_data.time_range #[self.csv_data.data["Time"][0], self.csv_data.data["Time"][-1]]      ###!!! Not robust: Time, time
-                    self.timestep = self.csv_data.timestep #"auto"
+                    #self.timestep = self.csv_data.timestep #"auto"
                 except:
                     raise ValueError(f"CSV dataset provided for variable {self.var_name} does not contain time data.")
             else:
                 raise ValueError(f"Timestep string {self.timestep} not recognized, please check input.")
+    
     
     def _uncertaintyParser(self, lines, i):
         """ Parses uncertainties block and dispatches uncertainty handler """

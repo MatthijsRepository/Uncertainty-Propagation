@@ -75,10 +75,7 @@ class CalculationEngine:
         print(start_times)
         print(end_times)
         print(timesteps)
-        print(type(timesteps))
         #Determine LCM timestep
-
-        
         new_timestep = np.lcm.reduce(timesteps)
 
         print()
