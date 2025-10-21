@@ -217,7 +217,7 @@ class Variable:
             
     
     
-    def executeEquation(self, store_results=True, force_calculation=False):
+    def executeEquation(self, store_results=True, force_recalculation=False, calculation_engine=None):
         """ Executes equation built by sympy and checks whether everything is initialized correctly """
         if self.equation is None:
             raise ValueError(f"Tried to execute the equation of variable {self.name}, for which no equation is defined.")
@@ -226,25 +226,29 @@ class Variable:
         
         #If values already defined: do nothing unless forced recalculation is desired
         if self.values is not None:
-            if force_calculation is True:
+            if force_recalculation is True:
                 print(f"WARNING: executing equation of variable {self.name} while values are already defined!")
+                ###!!!
             else:
                 return self.values
         
-        calculated_values = None
         #Check if this variable is a timesum, in which case the executable is the equation INSIDE the timesum
         if self.is_timesum:
-            print(f"WARNING: timesum calculation not implemented yet")
-            print(f"Timesum variable f{self.name} = {self.equation} with sympy equation {self.sympy_equation}")
-            if self.calculation_engine is None:
-                print(f"WARNING: asked to perform timesum of variable {self.name} while no equation engine is given to this variable")
+            if calculation_engine is None:
+                raise ValueError(f"Asked to perform timesum of variable {self.name} while no equation engine is given to this variable")
+            calculated_values = calculation_engine.timeSum(self)
         else:
             args = [self.dependencies[dep_name] for dep_name in self.dependency_names]
             calculated_values = self.executable(*args)
         
+        #Optionally store the result as the new variable values
         if store_results:
             self.values = calculated_values
         return calculated_values
+    
+    
+    
+    
     
     def TimeSum(self, interval=None, start_time=None, end_time=None):
         #check if time-dependent

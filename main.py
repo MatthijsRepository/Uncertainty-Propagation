@@ -1,5 +1,6 @@
 from input_handler import InputHandler
 from equation_engine import EquationEngine
+from calculation_engine import CalculationEngine
 
 
 if __name__=="__main__":
@@ -26,28 +27,37 @@ if __name__=="__main__":
     equation_engine.buildEquationTreeExecutables()
     
     
+    calculation_engine = CalculationEngine(variables)
+    calculation_engine.validateBasicVariables(equation_engine)
+    
     #####
     
-    print("Derived variables:")
-    for name in equation_engine.derived_variables:
-        print(name)
-    print()
+    calculation_engine.calculateValues(variables["PR"], update_var=True)
     
-    print(variables["testC"].dependency_names)
+    
+    #print("Derived variables:")
+    #for name in equation_engine.derived_variables:
+    #    print(name)
+    #print()
+    
+    #print(variables["testC"].dependency_names)
     #equation_engine.buildEquation(variables["testC"])
     
-    variables['testC'].executeEquation()
-    print(variables['testC'].values)
+    #variables['testC'].executeEquation()
+    #print(variables['testC'].values)
     
-    variables['C_25'].executeEquation()
-    print(variables['T'].values[0])
-    print(variables['C_25'].values[0])
+    #variables['C_25'].executeEquation()
+    #print(variables['T'].values[0])
+    #print(variables['C_25'].values[0])
     
-    print(variables["testD"])
-    print(variables["testD"].is_timesum)
-    variables["testD"].executeEquation()
+    #print()
+    #print(f"{variables['testD'].name} = {variables['testD'].equation} with dependencies: ")
+    #print(f"{variables['testD'].dependency_names}")
+    #print(f"Is it a timesum: {variables['testD'].is_timesum}")
+    #variables["testD"].executeEquation()
+    #print()
     
-    print(variables['PR'].sympy_equation)
+    #print(variables['PR'].sympy_equation)
     #print(variables['testD'].sympy_equation)
     
     
@@ -55,8 +65,8 @@ if __name__=="__main__":
     #print(variables['testD'].values)
     #print(variables['T'].values)
     
-    variables['PR'].executeEquation()
-    print(variables['PR'].values)
+    #variables['PR'].executeEquation()
+    #print(variables['PR'].values)
     #variables['PR_temp_corr'].executeEquation()
     #print(variables['PR_temp_corr'].values)
     
