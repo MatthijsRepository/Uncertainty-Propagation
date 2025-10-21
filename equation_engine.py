@@ -216,12 +216,16 @@ class EquationEngine:
                     elif equation[i]==")":
                         depth -= 1
                         cleaned_equation += "__"
+                    elif equation[i] in ["+", "-", "*","/"]: #Math symbols are not allowed inside TS expressions
+                        cleaned_equation += "_"
+                        i += 1 ; continue
                     else:
                         cleaned_equation += equation[i]
                     i += 1
             else:
                 cleaned_equation += equation[i]
                 i+=1
+        
         #Remove all quotes
         cleaned_equation = re.sub("'","", cleaned_equation)
         #Remove all commas
@@ -237,24 +241,21 @@ class EquationEngine:
         if symbol_map is None:
             symbol_map = self._buildSymPySymbolMap(var)        
         
-        
         #Access sympy symbols from map
         symbols = [symbol_map[name] for name in var.dependency_names]
         #Clean equation for sympy
         cleaned_equation = self._cleanEquationForSymPy(var.equation)
         #Create sympy equation - this is later also used for differentiation
         var.sympy_equation = sp.sympify(cleaned_equation, locals=symbol_map)
+        #Populate powers dictionary
+        print()
+        print(var.equation)
+        print(cleaned_equation)
+        print(var.sympy_equation)
+        print(var.sympy_equation.as_powers_dict())
         #Create callable function
-        var.executable = sp.lambdify(symbols, var.sympy_equation) ###!!!
-        """ 
-        def wrapper():
-            #args = [dep.values for dep in var.dependencies]
-            args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
-
-            var.values = executable_equation(*args)
-            return None
-        var.executeEquation = wrapper
-        """ 
+        var.executable = sp.lambdify(symbols, var.sympy_equation)
+        
             
     def buildEquationTreeExecutables(self, variables=None):
         """ Goes through all derived variables in a variable set and builds their equations using SymPy """
