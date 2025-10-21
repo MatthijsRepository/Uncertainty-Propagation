@@ -190,26 +190,17 @@ class EquationEngine:
             self.populateVariableDependencies(var, variables)
     
     
-    def _buildSymbolMap_OLD(self, variables):
-        """ Helper function that builds a symbol map for a variable dictionary or a single variable dependency list
-            we add an alias for non-timesum variables as they are in quotes in the equation
-            so but G and 'G' will both refer to a symbol G """
+    def _buildSymPySymbolMap(self, variables):
         if isinstance(variables, dict):
             names = variables.keys()
         else:
             names = variables.dependency_names
-        symbol_map = {}
-        #We need to register quotes around variables, so we add them retroactively to our symbol map for non-timesum variables
-        #So: TS_('G') is unchanged, but G will become 'G', which is needed for equation readout
-        for name in names:
-            symbol_map[name] = sp.Symbol(name)
-            # Add quoted alias for non-timesum names
-            if not name.startswith("TS_("):
-                symbol_map[f"'{name}'"] = symbol_map[name]
-                
-        #symbol_map = {name: sp.Symbol(name) for name in names}
-        return symbol_map            
-    
+        
+        #cleaned_names = [re.sub("'", "", name) for name in names]               #Remove quotes
+        #cleaned_names = [re.sub(",", "", name) for name in cleaned_names]       #Remove commas
+        #return {name : sp.Symbol(cleaned_names[i]) for i, name in enumerate(names)}
+        return {name: sp.Symbol(self._cleanEquationForSymPy(name)) for name in names}
+            
     def _cleanEquationForSymPy(self, equation):
         cleaned_equation = ""
         #Parse through equation and replace all parentheses related to timesums by double underscores, but not mathematical ones
