@@ -61,11 +61,10 @@ if __name__=="__main__":
     
     
     
-    calculation_engine.calculateValues(variables["TS_('G')"], update_var=True)
-    calculation_engine.calculateValues(variables["TS_('Pout', h)"], update_var=True)
-    
     
     calculation_engine.calculateValues(variables["PR"], update_var=True)
+    
+    calculation_engine.calculateValues(variables["PR_temp_corr"], update_var=True)
     
     #print("Derived variables:")
     #for name in equation_engine.derived_variables:

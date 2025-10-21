@@ -255,6 +255,7 @@ class Variable:
         if self.values is not None:
             if force_recalculation is True:
                 print(f"WARNING: executing equation of variable {self.name} while values are already defined!")
+                print("WARNING: force recalculation not implemented yet")
                 ###!!!
             else:
                 return self.values
@@ -264,8 +265,6 @@ class Variable:
             if calculation_engine is None:
                 raise ValueError(f"Asked to perform timesum of variable {self.name} while no equation engine is given to this variable")
             calculated_values = calculation_engine.timeSum(self)
-            print("CALCULATED VALUES")
-            print(calculated_values)
         else:
             args = [self.dependencies[dep_name] for dep_name in self.dependency_names]
             calculated_values = self.executable(*args)
