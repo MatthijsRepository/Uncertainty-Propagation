@@ -208,45 +208,7 @@ class EquationEngine:
                 symbol_map[f"'{name}'"] = symbol_map[name]
                 
         #symbol_map = {name: sp.Symbol(name) for name in names}
-        return symbol_map
-    
-    def _cleanEquationForSymPy_OLD(self, equation):
-        """ Cleans quotes around variables that are outside of timesum operators, for use in sympy """
-        i=0
-        cleaned_equation = ""
-        while i < len(equation):
-            #If we register a timesum: pass this section
-            if equation[i:i+3] == "TS_":
-                #Skip this part, add it to our equation
-                cleaned_equation += "TS_"
-                i += 3
-                #Start loop, depth is 1
-                depth = 1
-
-                while depth>0:
-                    cleaned_equation += equation[i]
-                    i+=1
-                    if equation[i]=="(":
-                        depth +=1
-                    if equation[i]==")":
-                        depth -= 1
-            #If we did not encounter a timesum: check if there is a quote and remove it if necessary
-            if not equation[i] == "'":
-                cleaned_equation += equation[i]
-            i+=1
-        return cleaned_equation
-    
-    def _buildSymPySymbolMap(self, variables):
-        if isinstance(variables, dict):
-            names = variables.keys()
-        else:
-            names = variables.dependency_names
-        
-        #cleaned_names = [re.sub("'", "", name) for name in names]               #Remove quotes
-        #cleaned_names = [re.sub(",", "", name) for name in cleaned_names]       #Remove commas
-        #return {name : sp.Symbol(cleaned_names[i]) for i, name in enumerate(names)}
-        return {name: sp.Symbol(self._cleanEquationForSymPy(name)) for name in names}
-            
+        return symbol_map            
     
     def _cleanEquationForSymPy(self, equation):
         cleaned_equation = ""
@@ -278,7 +240,6 @@ class EquationEngine:
         cleaned_equation = re.sub(" ", "", cleaned_equation)
         return cleaned_equation
         
-    
     
     def buildVariableExecutable(self, var, symbol_map=None):
         """ Builds equation executable of a given variable, potentially using a provided sympy symbol map """
