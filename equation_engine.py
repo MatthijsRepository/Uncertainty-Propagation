@@ -1,5 +1,4 @@
 from my_dataclasses import Variable
-from sympy_timesum import timesum
 import re
 import sympy as sp
 
@@ -246,7 +245,7 @@ class EquationEngine:
         #Create sympy equation - this is later also used for differentiation
         var.sympy_equation = sp.sympify(cleaned_equation, locals=symbol_map)
         #Create callable function
-        var.executable = sp.lambdify(symbols, var.sympy_equation, modules=[{"timesum": TIMESUM_TEMP}]) ###!!!
+        var.executable = sp.lambdify(symbols, var.sympy_equation) ###!!!
         """ 
         def wrapper():
             #args = [dep.values for dep in var.dependencies]
