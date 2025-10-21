@@ -59,7 +59,7 @@ class Variable:
         self.name = name                    #str: variable name
         self.description = description      #str: variable description
         self.is_basic = is_basic            #bool: defines whether variable is basic or derived
-        self.is_rate = is_rate
+        self.is_rate = is_rate              #bool: defines whether the variable is a rate or a quantity
         
         self.values = values                #[int, float, array, None]: variable values
 
