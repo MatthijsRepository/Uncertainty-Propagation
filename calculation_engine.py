@@ -65,7 +65,7 @@ class CalculationEngine:
         return values
         
     
-    def harmonizeTimeResolution(self, dependencies):
+    def harmonizeTimeSeries(self, dependencies):
         start_times, end_times, timesteps = []
         for dep in dependencies.values():
             if dep.start_time is not None:
