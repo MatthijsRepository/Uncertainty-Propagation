@@ -66,12 +66,23 @@ class CalculationEngine:
         
     
     def harmonizeTimeSeries(self, dependencies):
-        start_times, end_times, timesteps = []
+        start_times, end_times, timesteps = [], [], []
         for dep in dependencies.values():
             if dep.start_time is not None:
                 start_times.append(dep.start_time)
                 end_times.append(dep.end_time)
                 timesteps.append(dep.timestep)
+        print(start_times)
+        print(end_times)
+        print(timesteps)
+        print(type(timesteps))
+        #Determine LCM timestep
+
+        
+        new_timestep = np.lcm.reduce(timesteps)
+
+        print()
+        print(new_timestep)
         
                 
     

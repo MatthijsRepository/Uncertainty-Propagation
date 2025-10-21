@@ -53,7 +53,7 @@ class Uncertainty:
         
         
 class Variable:
-    def __init__(self, name, description, values=None, is_basic=True, is_rate=False, \
+    def __init__(self, name, description=None, values=None, is_basic=True, is_rate=False, \
                  equation=None, dependency_names=None, start_time=None, end_time=None, \
                      is_timesum=False, timesum_settings=None):
         self.name = name                    #str: variable name
@@ -81,7 +81,10 @@ class Variable:
                 
         self.start_time = start_time        #datetime object: start time of variable
         self.end_time = end_time            #datetime object: end time of variable
-        self.timestep = None                #float: number of seconds per timestep
+        if self.start_time is not None and self.end_time is not None:
+            self.AddTimestep("auto")        #float: number of seconds per timestep
+        else:
+            self.timestep = None                
         
         self.uncertainties = []             #list: lists uncertainties of variable
         self.total_uncertainty = None       #[float, array]: total uncertainty of variable (per timestep)
@@ -179,7 +182,7 @@ class Variable:
         else:
             return True
     
-    def AddTimestep(self, step, time_range=None):
+    def AddTimestep(self, step, time_range=None):   ###!!! name
         #Check if start and end times are provided
         if not time_range is None:
             self.start_time = time_range[0]
@@ -201,15 +204,18 @@ class Variable:
             #end_time = datetime.strptime(self.end_time, fmt)
             timestep = (self.end_time - self.start_time) / (len(self.values) - 1)
             self.timestep = timestep.total_seconds()
+            if not self.timestep.is_integer():
+                raise ValueError(f"Timestep {self.timestep} is not integer, please ensure timesteps are an integer amount of seconds!")
+            self.timestep = int(self.timestep)
         else:
             raise ValueError(f"Timestep {str(step)} of type {str(type(step))} is not supported.")
     
-    def HasUncertainty(self):
+    def HasUncertainty(self):               ###!!! Name
         if len(self.uncertainties) == 0:
             return False
         return True
     
-    def AddUncertaintySource(self, uncertainty):
+    def AddUncertaintySource(self, uncertainty):        ###!!! name
         #Can be a single uncertainty source or a whole list of them
         if type(uncertainty) is list:
             self.uncertainties.extend(uncertainty)
@@ -251,7 +257,7 @@ class Variable:
     
     
     
-    def TimeSum(self, interval=None, start_time=None, end_time=None):
+    def TimeSum(self, interval=None, start_time=None, end_time=None): ###!!! deprecated
         #check if time-dependent
         if (self.values is None or len(self.values)<2):
             raise ValueError(f"Time series sum for variable {self.name} can not be done: no or too little values.")

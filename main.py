@@ -14,6 +14,25 @@ if __name__=="__main__":
     del input_handler
     print("Ended parsing input \n")
     
+    
+    print("Hardcoding testing variables for time series")
+    from my_dataclasses import Variable
+    import numpy as np
+    from datetime import datetime
+    
+    timeformat = "%H:%M:%S"
+    start_time_a = datetime.strptime("12:00:00", timeformat)
+    end_time_a = datetime.strptime("16:10:00", timeformat)
+    start_time_b = datetime.strptime("12:30:00", timeformat)
+    end_time_b = datetime.strptime("15:30:00", timeformat)
+    
+    variables["time_a"] = Variable("time_a", values=np.ones(26), is_basic=True, is_rate=False, start_time=start_time_a, end_time=end_time_a)
+    variables["time_b"] = Variable("time_b", values=np.array([1,2,3,4]), is_basic=True, is_rate=False, start_time=start_time_b, end_time=end_time_b)
+    variables["time_c"] = Variable("time_c", values=None, is_basic=False, is_rate=False, equation="'time_a' + 'time_b'")
+    print("End hardcoding testing variables")
+    print()
+    
+    
     #Verifying equation tree consistency, building equation tree in SimPy
     print("Verifying root-consistency of equation tree")
     equation_engine = EquationEngine(variables)
@@ -31,44 +50,20 @@ if __name__=="__main__":
     calculation_engine.validateBasicVariables(equation_engine)
     
     #####
+    print(variables['time_c'].equation)
+    print(variables['time_c'].dependency_names)
+    print(variables['time_c'].dependencies.keys())
     
-    calculation_engine.calculateValues(variables["PR"], update_var=True)
+    calculation_engine.harmonizeTimeSeries(variables['time_c'].dependencies)
     
+    
+    #calculation_engine.calculateValues(variables["PR"], update_var=True)
     
     #print("Derived variables:")
     #for name in equation_engine.derived_variables:
     #    print(name)
     #print()
     
-    #print(variables["testC"].dependency_names)
-    #equation_engine.buildEquation(variables["testC"])
-    
-    #variables['testC'].executeEquation()
-    #print(variables['testC'].values)
-    
-    #variables['C_25'].executeEquation()
-    #print(variables['T'].values[0])
-    #print(variables['C_25'].values[0])
-    
-    #print()
-    #print(f"{variables['testD'].name} = {variables['testD'].equation} with dependencies: ")
-    #print(f"{variables['testD'].dependency_names}")
-    #print(f"Is it a timesum: {variables['testD'].is_timesum}")
-    #variables["testD"].executeEquation()
-    #print()
-    
-    #print(variables['PR'].sympy_equation)
-    #print(variables['testD'].sympy_equation)
-    
-    
-    #variables['testD'].executeEquation()
-    #print(variables['testD'].values)
-    #print(variables['T'].values)
-    
-    #variables['PR'].executeEquation()
-    #print(variables['PR'].values)
-    #variables['PR_temp_corr'].executeEquation()
-    #print(variables['PR_temp_corr'].values)
     
 
     
