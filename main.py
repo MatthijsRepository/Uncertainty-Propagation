@@ -15,6 +15,7 @@ if __name__=="__main__":
     print("Ended parsing input \n")
     
     
+    """ 
     print("Hardcoding testing variables for time series")
     from my_dataclasses import Variable
     import numpy as np
@@ -31,6 +32,7 @@ if __name__=="__main__":
     variables["time_c"] = Variable("time_c", values=None, is_basic=False, is_rate=False, equation="'time_a' + 'time_b'")
     print("End hardcoding testing variables")
     print()
+    """ 
     
     
     #Verifying equation tree consistency, building equation tree in SimPy
@@ -50,11 +52,11 @@ if __name__=="__main__":
     calculation_engine.validateBasicVariables(equation_engine)
     
     #####
-    print(variables['time_c'].equation)
-    print(variables['time_c'].dependency_names)
-    print(variables['time_c'].dependencies.keys())
+    #print(variables['time_c'].equation)
+    #print(variables['time_c'].dependency_names)
+    #print(variables['time_c'].dependencies.keys())
     
-    calculation_engine.harmonizeTimeSeries(variables['time_c'].dependencies)
+    #calculation_engine.harmonizeTimeSeries(variables['time_c'].dependencies)
     
     
     #calculation_engine.calculateValues(variables["PR"], update_var=True)

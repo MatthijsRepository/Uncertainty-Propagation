@@ -1,4 +1,5 @@
 from my_dataclasses import Variable
+import datetime
 import numpy as np
 
 
@@ -53,13 +54,6 @@ class CalculationEngine:
                 print(f"Dependency detected with no values: {dep.name}. Calculating...")
                 self.calculateValues(dep, update_var=update_var)
         
-        #Check if the variable is a timesum: in this case we have to perform different actions
-        #if var.is_timesum:
-        #    values = var.executeEquation(store_results=False)
-        #    values = np.sum(values) * var.timestep
-        #    if update_var:
-        #        var.values = values
-        #else:
         values = var.executeEquation(store_results=update_var, calculation_engine=self)
         print(f"Calculation of {var.name} complete, values: {np.sum(var.values)}")
         return values
@@ -77,21 +71,42 @@ class CalculationEngine:
         print(timesteps)
         #Determine LCM timestep
         new_timestep = np.lcm.reduce(timesteps)
+        
+        print(max(start_times))
+        print(min(end_times))
 
         print()
         print(new_timestep)
         
                 
-    
-    
+    def increaseTemporalResolution(self, var, new_timestep, benchmark_time):
+        """ Returns array of values for the new time resolution for a given variable, benchmark time is a specified border between 2 bins """
+        #Convert new timestep to datetime object
+        new_timestep_datetime = datetime.timedelta(seconds=new_timestep)
+        #identify index of the benchmark time ###!!!
+        print("WARNING: benchamrk times can be inside a timestep ; i.e. a timestep can span 11:55-12:05 and benchmark time is 12:00 - what then?")
+        
+        #calculate increase factor
+        factor = benchmark_time / var.timestep
+        #calculate from where we should start binning:
+        
+        return
+        
+        
+        
+        
     def timeSum(self, var):
         if not var.is_timesum:
             print(f"WARNING: tried to calculate timesum of variable {var.name}, which is not a timesum!")
         
-        
         #Harmonizing dependencies should be done here ###!!!
+        print("WARNING: time series harmonization not performed")
+        
         args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
         calculated_values = var.executable(*args)
+        
+        #Check if one of the dependencies is a rate, if this is the case we should multiply/divide by the timestep
+        
         print("WARNING: timesum calculation placeholder!")
         return 10
         
