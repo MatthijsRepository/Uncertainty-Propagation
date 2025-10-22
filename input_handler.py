@@ -1,6 +1,6 @@
 import csv
 from datetime import datetime
-from my_dataclasses import CSVData, Uncertainty, Variable
+from my_dataclasses import CSVData, UncertaintySource, Variable
 import numpy as np
 
 
@@ -306,7 +306,7 @@ class VariableHandler:
             bound = float(data[4].split("=")[1].strip())
             sigma = None
         
-        new_uncertainty =  Uncertainty(name, is_relative, is_symmetric, shape, correlation, sigma=sigma, bound=bound)
+        new_uncertainty =  UncertaintySource(name, is_relative, is_symmetric, shape, correlation, sigma=sigma, bound=bound)
         self.uncertainties.append(new_uncertainty)
         
     

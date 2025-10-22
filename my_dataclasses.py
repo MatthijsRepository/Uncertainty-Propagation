@@ -13,7 +13,7 @@ class CSVData:
 
 
 @dataclass
-class Uncertainty:
+class UncertaintySource:
     name: str
     is_relative: bool
     is_onesided: bool
@@ -50,7 +50,28 @@ class Uncertainty:
         #Correct for one-sidedness
         if self.is_onesided:
             self.sigma = self.sigma / 2
+            
+
+@dataclass
+class VariableUncertainty:
+    var_name:                               str
+    variable:                               "Variable" #Placeholder!
+    direct_uncertainty_sources:             Optional[list] = None ###!!! Handle in post-init
+    direct_uncertainty_contributions:       Optional[Union[np.ndarray, float]] = None
+    dependency_uncertainties:               Optional[dict] = None
+    dependency_uncertainty_contributions:   Optional[Union[np.ndarray, float]] = None
+    total_uncertainty:                      Optional[Union[np.ndarray, float]] = None
+    contribution_split:                     Optional[np.ndarray] = None
+    correlation:                            Optional[Union[np.ndarray, float]] = None
+    
+    def __post_init__(self):
+        self.direct_uncertainty_sources = []
+        self.dependency_uncertainties = {}
         
+        """ Handle initialization of non-inputs here! """
+            
+        
+
         
 class Variable:
     def __init__(self, name, description=None, values=None, is_basic=True, aggregation_rule=None, \
@@ -89,8 +110,13 @@ class Variable:
         else:
             self.timestep = None                
         
-        self.uncertainties = []             #list: lists uncertainties of variable
-        self.total_uncertainty = None       #[float, array]: total uncertainty of variable (per timestep)
+        self.uncertainty = VariableUncertainty(var_name=self.name, variable=self)
+        
+        #self.direct_uncertainty_sources = []        #list: lists uncertainties of variable
+        #self.direct_uncertainties = None            #array: array of direct uncertainty magnitudes, 
+        #if not self.is_basic:
+        #    self.dependency_uncertainties = {}      #dict: per dependency contains total uncertainty information
+        #self.total_uncertainty = None       #[float, array]: total uncertainty of variable (per timestep)
     
     
     def __str__(self):
@@ -186,17 +212,19 @@ class Variable:
             return True
         
         
-    def hasUncertainty(self):               ###!!! Name
-        if len(self.uncertainties) == 0:
+    def hasDirectUncertainties(self):               ###!!! Name
+        if len(self.direct_uncertainties) == 0:
             return False
         return True
     
     def addUncertaintySource(self, uncertainty):        ###!!! name
         #Can be a single uncertainty source or a whole list of them
         if type(uncertainty) is list:
-            self.uncertainties.extend(uncertainty)
+            #self.direct_uncertainties.extend(uncertainty)
+            self.uncertainty.direct_uncertainty_sources.extend(uncertainty)
         else:
-            self.uncertainties.append(uncertainty)
+            #self.direct_uncertainties.append(uncertainty)
+            self.uncertainty.direct_uncertainty_sources.append(uncertainty)
             
     
     def addTimeStep(self, time_range):

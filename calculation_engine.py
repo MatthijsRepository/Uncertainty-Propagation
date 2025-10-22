@@ -29,20 +29,20 @@ class CalculationEngine:
                     var.executeEquation()
         
     
-    def calculateValues(self, var, update_var=True, calculate_dependencies=True):
+    def calculateValues(self, var, update_var=True, calculate_dependencies=True, silent=True, indent=""):
         """ Checks if the values of all dependencies are calculated, optionally calculates dependencies, and then calculates values of specified variable """
-        
-        print(f"\nCalculating values of variable {var.name} with dependencies {var.dependency_names}")
+        if not silent:
+            print(f"{indent}Calculating values of variable {var.name} with dependencies {var.dependency_names}")
         for dep in var.dependencies.values():
             if dep.values is not None:
                 continue
             elif calculate_dependencies is False:
                 raise ValueError(f"Calculation of variable {var.name} failed: dependency {dep.name} has no values defined and automatic dependency calculation is turned off.")
             else:
-                print(f"Dependency detected with no values: {dep.name}. Calculating...")
-                self.calculateValues(dep, update_var=update_var)
+                self.calculateValues(dep, update_var=update_var, silent=silent, indent=f"   {indent}")
         values = var.executeEquation(store_results=update_var, calculation_engine=self)
-        print(f"Calculation of {var.name} complete, values: {var.values}")
+        if not silent:
+            print(f"{indent}Calculation of {var.name} complete, values: {var.values}")
         return values
         
     
