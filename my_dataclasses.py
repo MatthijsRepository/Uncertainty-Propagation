@@ -62,6 +62,7 @@ class Variable:
         self.aggregation_rule = aggregation_rule      #str: defines the quantity aggregation rule
         
         self.values = values                #[int, float, array, None]: variable values
+        self.partial_values = {}            #dict: dictionary of values of the evaluated partial derivatives of this variable with respect to each dependency
 
         #If it is a derived variable then an equation and constituent variables should be passed
         if not self.is_basic:
@@ -75,9 +76,10 @@ class Variable:
         self.is_timesum = is_timesum        #bool: defines whether variable is a timesum
         self.timesum_settings = timesum_settings #list of options
         
-        self.sympy_symbols = None           #Dictionary of sympy symbols
+        self.sympy_symbol_map = None        #dict: dictionary of sympy symbols
         self.sympy_equation = None          #sympy interpretable of the variable equation
         self.executable = None              #executable: sympy-built executable of the variable equation - excluding timesums
+        self.partial_executables = None     #dict: dictionary of executables for the partial derivates of the variable for each dependency
         self.calculation_engine = None      #calculation engine: necessary for more complex calculations
                 
         self.first_time = None        #datetime object: time of the first datapoint
@@ -273,6 +275,33 @@ class Variable:
         if store_results:
             self.values = calculated_values
         return calculated_values
+
+
+    def executePartialDerivative(self, dep_name, store_results=True, force_recalculation=False):
+        """ Executes the partial derivative executable of the variable for a given dependency, optionally stores values in partial_values dictionary """
+        #If no forced recalculation and if the values are already calculated we simply return the already calculated values
+        if force_recalculation is False and dep_name in self.partial_values:
+            return self.partial_values[dep_name]
+        #If there is no executable for this dependency we raise an error
+        if self.partial_executables is None:
+            raise ValueError(f"Tried to evaluate partial derivative of variable {self.name} while partial derivative executables have not been built yet.")
+        
+        #Get partial executable, pass arguments
+        partial_executable = self.partial_executables[dep_name]
+        args = [self.dependencies[dep_name] for dep_name in self.dependency_names]
+        calculated_values = partial_executable(*args)
+        
+        #Optionally store results
+        if store_results:
+            self.partial_values[dep_name] = calculated_values
+        return calculated_values
+    
+    def executeAllPartials(self, force_recalculation=False):
+        """ Evaluates all partial derivatives of a variable """
+        for dep_name in self.dependency_names:
+            self.executePartialDerivative(dep_name, store_results=True, force_recalculation=force_recalculation)
+        
+        
     
     
     """ 

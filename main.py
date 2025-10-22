@@ -59,7 +59,18 @@ if __name__=="__main__":
     #calculation_engine.harmonizeTimeSeries(variables['time_c'].dependencies)
     
     
+    calculation_engine.calculateValues(variables['timesumtest'])
     
+    print('HA')
+    #var = variables["timesumtest"]
+    var = variables["TS_('G' * TS_('C_25'))"]
+    
+    equation_engine.buildPartialDerivativeExecutables(var)
+    var.executeAllPartials()
+    
+    print(var.dependency_names)
+    print(variables["TS_('C_25')"].values)
+    print(var.partial_values['G'])
     
     
     calculation_engine.calculateValues(variables["PR"], update_var=True)

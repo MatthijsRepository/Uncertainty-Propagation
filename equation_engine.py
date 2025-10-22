@@ -260,7 +260,8 @@ class EquationEngine:
             symbol_map = self._buildSymPySymbolMap(var)        
         
         #Access sympy symbols from map
-        symbols = [symbol_map[name] for name in var.dependency_names]
+        var.sympy_symbol_map = {name : symbol_map[name] for name in var.dependency_names}
+        symbols = var.sympy_symbol_map.values()
         #Clean equation for sympy
         cleaned_equation = self._cleanEquationForSymPy(var.equation)
         #Create sympy equation - this is later also used for differentiation
@@ -274,7 +275,7 @@ class EquationEngine:
         
             
     def buildEquationTreeExecutables(self, variables=None):
-        """ Goes through all derived variables in a variable set and builds their equations using SymPy """
+        """ Goes through all derived variables in a variable set and builds their equation executables using SymPy """
         if variables is None:
             variables = self.variables
             derived_variables = self.derived_variables
@@ -285,6 +286,16 @@ class EquationEngine:
         for name in derived_variables:
             var = variables[name]
             self.buildVariableExecutable(var, symbol_map)
+        
+            
+    def buildPartialDerivativeExecutables(self, var):
+        """ builds a dictionary of partial derivative executables for each dependency of a given variable """
+        var.partial_executables = {}
+        for dep_name in var.dependency_names:
+            partial_eq = sp.diff(var.sympy_equation, var.sympy_symbol_map[dep_name])
+            executable = sp.lambdify(var.sympy_symbol_map.values(), partial_eq)
+            var.partial_executables[dep_name] = executable
+            
             
 
                 
