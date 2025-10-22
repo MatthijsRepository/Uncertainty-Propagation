@@ -257,8 +257,6 @@ class Variable:
         if self.values is not None:
             if force_recalculation is True:
                 print(f"WARNING: executing equation of variable {self.name} while values are already defined!")
-                print("WARNING: force recalculation not implemented yet")
-                ###!!!
             else:
                 return self.values
         
@@ -290,6 +288,16 @@ class Variable:
         partial_executable = self.partial_executables[dep_name]
         args = [self.dependencies[dep_name] for dep_name in self.dependency_names]
         calculated_values = partial_executable(*args)
+        
+        #In case of a trivial equation, calculated values will be a Variable object. Here we fix that
+        if isinstance(calculated_values, Variable):     ###!!! change this to be handled through an equation engine wrapper
+            calculated_values = calculated_values.values
+        
+        print()
+        print(f"{self.name} partial {dep_name}")
+        print(f"Values: {calculated_values}")
+        print(args)
+        print(partial_executable)
         
         #Optionally store results
         if store_results:

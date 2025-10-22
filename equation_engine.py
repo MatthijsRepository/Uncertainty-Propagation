@@ -300,12 +300,67 @@ class EquationEngine:
             self.buildVariableExecutable(var, symbol_map)
         
             
+        
+    def buildPartialDerivativeExecutables_OLD(self, var):
+            """ builds a dictionary of partial derivative executables for each dependency of a given variable """
+            var.partial_executables = {}
+            for dep_name in var.dependency_names:
+                partial_eq = sp.diff(var.sympy_equation, var.sympy_symbol_map[dep_name])
+                
+                if isinstance(partial_eq, sp.Symbol):
+                    def wrapper(*args):
+                        return
+                        
+    
     def buildPartialDerivativeExecutables(self, var):
         """ builds a dictionary of partial derivative executables for each dependency of a given variable """
         var.partial_executables = {}
+        
         for dep_name in var.dependency_names:
             partial_eq = sp.diff(var.sympy_equation, var.sympy_symbol_map[dep_name])
+            #Create callable function
             executable = sp.lambdify(var.sympy_symbol_map.values(), partial_eq)
+            
+            """
+            #Note: in case the function is trivial (equation = 'X'), we don't want the equation to return the input variable 
+            #Instead we want to return the input variable's values, the wrapper handles this
+            #If the function is not trivial, we leave the executable as-is
+            
+            
+            ####!!! NOTE however, that defining a wrapper inside the loop will continuously update the wrapper through the loop
+            ###         this means that the all wrappers will correspond to the final loop state wrapper....
+            
+            if isinstance(partial_eq, sp.Symbol):
+                def wrapper(*args):
+                    results = temp_executable(*args)
+                    if isinstance(results, Variable):
+                        return results.values
+                    else:
+                        return results
+                executable = wrapper
+            else:
+                executable = temp_executable
+            """ 
+            
+            """
+            if isinstance(partial_eq, sp.Symbol):
+                def wrapper(*args):
+                    returned_variable = temp_executable(*args)
+                    print(f"Partial eq: {partial_eq}; returned variable: {returned_variable.name}")
+                    return returned_variable.values
+                executable = wrapper
+            else:
+                executable = temp_executable
+            
+            print()
+            print(f"{var.name} partial {dep_name}")
+            print(type(partial_eq))
+            print(partial_eq)
+            if isinstance(partial_eq, Variable):
+                print(partial_eq.values)
+            """
+            
+            #Append executable to partial executables dictionary
             var.partial_executables[dep_name] = executable
             
             

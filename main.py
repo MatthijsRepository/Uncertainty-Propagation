@@ -58,24 +58,35 @@ if __name__=="__main__":
     
     #calculation_engine.harmonizeTimeSeries(variables['time_c'].dependencies)
     
+    print("TEST TRIVIAL")
+    calculation_engine.calculateValues(variables['test_trivial'])
+    print(variables['test_trivial'].values)
     
+    #"""
     calculation_engine.calculateValues(variables['timesumtest'])
     
     print('HA')
     #var = variables["timesumtest"]
+    
     var = variables["TS_('G' * TS_('C_25'))"]
     
     equation_engine.buildPartialDerivativeExecutables(var)
     var.executeAllPartials()
     
+    print()
+    print("Outside again, dependencies")
     print(var.dependency_names)
+    print("1")
     print(variables["TS_('C_25')"].values)
     print(var.partial_values['G'])
+    print("2")
+    print(variables["G"].values)
+    print(var.partial_values["TS_('C_25')"])
+    #"""
     
+    #calculation_engine.calculateValues(variables["PR"], update_var=True)
     
-    calculation_engine.calculateValues(variables["PR"], update_var=True)
-    
-    calculation_engine.calculateValues(variables["PR_temp_corr"], update_var=True)
+    #calculation_engine.calculateValues(variables["PR_temp_corr"], update_var=True)
     
     #print("Derived variables:")
     #for name in equation_engine.derived_variables:
