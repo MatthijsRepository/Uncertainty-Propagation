@@ -2,8 +2,6 @@ from my_dataclasses import Variable
 import re
 import sympy as sp
 
-from calculation_engine import TIMESUM_TEMP ###!!!
-
 
 """ This engine handles the initialization of the equation tree, 
     verifies its internal consistency and handles everything related to sympy """
@@ -299,18 +297,6 @@ class EquationEngine:
             var = variables[name]
             self.buildVariableExecutable(var, symbol_map)
         
-            
-        
-    def buildPartialDerivativeExecutables_OLD(self, var):
-            """ builds a dictionary of partial derivative executables for each dependency of a given variable """
-            var.partial_executables = {}
-            for dep_name in var.dependency_names:
-                partial_eq = sp.diff(var.sympy_equation, var.sympy_symbol_map[dep_name])
-                
-                if isinstance(partial_eq, sp.Symbol):
-                    def wrapper(*args):
-                        return
-                        
     
     def buildPartialDerivativeExecutables(self, var):
         """ builds a dictionary of partial derivative executables for each dependency of a given variable """

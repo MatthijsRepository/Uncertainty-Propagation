@@ -176,7 +176,7 @@ class Variable:
             raise ValueError(f"Error, taking power {power} of variable {self.name} is not supported, integer powers only.")
         return self.values**power
         
-    def DefineValues(self, values):
+    def defineValues(self, values):
         self.values = values
     
     def hasValues(self):
@@ -185,8 +185,22 @@ class Variable:
         else:
             return True
         
+        
+    def hasUncertainty(self):               ###!!! Name
+        if len(self.uncertainties) == 0:
+            return False
+        return True
+    
+    def addUncertaintySource(self, uncertainty):        ###!!! name
+        #Can be a single uncertainty source or a whole list of them
+        if type(uncertainty) is list:
+            self.uncertainties.extend(uncertainty)
+        else:
+            self.uncertainties.append(uncertainty)
+            
     
     def addTimeStep(self, time_range):
+        """ Given the time range (which are the times of first and last datapoint registrations) - calculates timestep length """
         self.first_time = time_range[0]
         self.last_time = time_range[1]
         
@@ -203,47 +217,6 @@ class Variable:
         if not self.timestep.is_integer():
             raise ValueError(f"Timestep {self.timestep} is not integer, please ensure timesteps are an integer amount of seconds!")
         self.timestep = int(self.timestep)
-        
-        
-        
-    
-    def AddTimestep_old(self, step, time_range=None):   ###!!! name
-        #Check if start and end times are provided
-        if not time_range is None:
-            self.first_time = time_range[0]
-            self.last_time = time_range[1]
-        #Direct timestep definition
-        if (type(step)==int or type(step)==float):
-            self.timestep = step
-        #Automatic timestep definition
-        elif step=="auto":
-            #Check if start and end times are defined
-            if (self.start_time==None or self.end_time==None):
-               raise ValueError(f"Automatic timestep calculation for variable {self.name} failed: requires specified start and end timestamps.") 
-            #Check if the variable has enough values
-            if (self.values is None or len(self.values)<2):
-                raise ValueError(f"Automatic timestep calculation for variable {self.name} failed: no or too little values are specified (at least 2).")
-            #Calculate timestep
-            timestep = (self.end_time - self.start_time) / (len(self.values) - 1)
-            self.timestep = timestep.total_seconds()
-            if not self.timestep.is_integer():
-                raise ValueError(f"Timestep {self.timestep} is not integer, please ensure timesteps are an integer amount of seconds!")
-            self.timestep = int(self.timestep)
-        else:
-            raise ValueError(f"Timestep {str(step)} of type {str(type(step))} is not supported.")
-    
-    def HasUncertainty(self):               ###!!! Name
-        if len(self.uncertainties) == 0:
-            return False
-        return True
-    
-    def AddUncertaintySource(self, uncertainty):        ###!!! name
-        #Can be a single uncertainty source or a whole list of them
-        if type(uncertainty) is list:
-            self.uncertainties.extend(uncertainty)
-        else:
-            self.uncertainties.append(uncertainty)
-            
     
     
     def executeEquation(self, store_results=True, force_recalculation=False, calculation_engine=None):
@@ -293,12 +266,6 @@ class Variable:
         if isinstance(calculated_values, Variable):     ###!!! change this to be handled through an equation engine wrapper
             calculated_values = calculated_values.values
         
-        print()
-        print(f"{self.name} partial {dep_name}")
-        print(f"Values: {calculated_values}")
-        print(args)
-        print(partial_executable)
-        
         #Optionally store results
         if store_results:
             self.partial_values[dep_name] = calculated_values
@@ -311,30 +278,6 @@ class Variable:
         
         
     
-    
-    """ 
-    def TimeSum(self, interval=None, start_time=None, end_time=None): ###!!! deprecated
-        #check if time-dependent
-        if (self.values is None or len(self.values)<2):
-            raise ValueError(f"Time series sum for variable {self.name} can not be done: no or too little values.")
-        #check if there is a timestep, and try to automatically calculate one
-        if self.timestep is None:
-            try:
-                self.AddTimeStep("auto")
-            except:
-                raise ValueError(f"Automatic timestep calculation for timesum calculation of variable {self.name} failed, please provide a timestep or time bounds.")
-        #Handle partial timesum calculations
-        #
-        #if not (interval is None):
-            #Check if start and end time are provided
-        
-        #Calculate total timesum
-        #self.timesum = np.sum(self.values) * self.timestep
-        #return self.timesum
-        return np.sum(self.values) * self.timestep
-        #return Variable(name=f"Daily timesum of {self.name}", description=f"Daily timesum - {self.description}", values=np.sum(self.values) * self.timestep, is_basic=False, is_timesum=True, equation=f"Timesum('{self.name}')", variables=self)
-    """ 
-
 
 
 

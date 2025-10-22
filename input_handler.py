@@ -214,7 +214,7 @@ class VariableHandler:
         if not self.timestep is None:
             new_variable.addTimeStep(self.time_range)
         if len(self.uncertainties)>0:
-            new_variable.AddUncertaintySource(self.uncertainties)
+            new_variable.addUncertaintySource(self.uncertainties)
         return new_variable
 
     def _handleValueData(self):
