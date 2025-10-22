@@ -189,7 +189,7 @@ class EquationEngine:
             self.populateVariableDependencies(var, variables)
     
     
-    def _deriveTimeSumIntegrationRule(self, var, symbols, symbol_map):
+    def _deriveTimeSumIntegrationRule(self, var):
         """ Extract the aggregation rule for a timesum from the dependencies 
             we work through simple seniority: integration > summing > averaging > None """
         rules = []
@@ -266,12 +266,24 @@ class EquationEngine:
         cleaned_equation = self._cleanEquationForSymPy(var.equation)
         #Create sympy equation - this is later also used for differentiation
         var.sympy_equation = sp.sympify(cleaned_equation, locals=symbol_map)
+        
         #Create callable function
-        var.executable = sp.lambdify(symbols, var.sympy_equation)
+        #Note: in case the function is trivial (equation = 'X'), we don't want the equation to return the input variable 
+        #Instead we want to return the input variable's values, the wrapper handles this
+        #If the function is not trivial, we perform regular executable creation
+        if isinstance(var.sympy_equation, sp.Symbol):
+            def wrapper(var):
+                if isinstance(var, Variable):
+                    return var.values
+                else:
+                    return var
+            var.executable = wrapper
+        else:
+            var.executable = sp.lambdify(symbols, var.sympy_equation)
         
         #If the variable is a timesum we need to give it an integration rule
         if var.is_timesum:
-            self._deriveTimeSumIntegrationRule(var, symbols, symbol_map)
+            self._deriveTimeSumIntegrationRule(var)
         
             
     def buildEquationTreeExecutables(self, variables=None):

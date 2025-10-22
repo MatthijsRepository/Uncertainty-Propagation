@@ -105,9 +105,6 @@ class CalculationEngine:
         args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
         calculated_values = var.executable(*args)
         
-        #In case of trivial equations like TS('B'), sympy will not return numeric values but the variable itself, here we manually extract the values if this is the case
-        if isinstance(calculated_values, Variable):
-            calculated_values = calculated_values.values
         
         #Time aggregation happens according to the variable aggregation rule
         if var.aggregation_rule == "integrate":
