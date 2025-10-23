@@ -63,7 +63,7 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     variable:                               "Variable" #Placeholder!
     direct_uncertainty_sources:             Optional[list] = None                   
     direct_uncertainties:                   Optional[Union[np.ndarray, float]] = None ###!!! EXPLANATIONS
-    direct_uncertainty_contributions:       Optional[Union[np.ndarray, float]] = None
+    direct_uncertainties_contributions:     Optional[Union[np.ndarray, float]] = None
     total_direct_uncertainty_contribution:  Optional[Union[np.ndarray, float]] = None
     #total_direct_uncertainty:               Optional[Union[np.ndarray, float]] = None
     
@@ -72,10 +72,11 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     
     dependency_uncertainty_names:           Optional[list] = None                       ###!!!
     weighted_dependency_uncertainties:      Optional[np.ndarray] = None
-    dependency_uncertainty_contributions:   Optional[Union[np.ndarray, float]] = None
+    dependency_uncertainties_contributions: Optional[Union[np.ndarray, float]] = None
     #total_dependency_uncertainty:           Optional[Union[np.ndarray, float]] = None
     
-    
+    root_sources:                           Optional[Union[np.ndarray]] = None
+    root_uncertainty_contribution_split:    Optional[Union[np.ndarray]] = None
     
     total_uncertainty:                      Optional[Union[np.ndarray, float]] = None
     contribution_split:                     Optional[np.ndarray] = None
@@ -87,6 +88,9 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
         #self.dependency_uncertainties = {}                                         ###!!!
         
         """ Handle initialization of non-inputs here! """
+    
+    def getSourceNames(self):
+        return [u.name for u in self.direct_uncertainty_sources]
             
         
 
