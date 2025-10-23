@@ -298,8 +298,12 @@ class EquationEngine:
             self.buildVariableExecutable(var, symbol_map)
         
     
-    def buildPartialDerivativeExecutables(self, var):
+    def buildPartialDerivativeExecutables(self, var, force_rebuild=False):
         """ builds a dictionary of partial derivative executables for each dependency of a given variable """
+        #If partials are already built and forced rebuilding is not selected, simpyl return immediately
+        if var.partial_executables is not None and force_rebuild is False:
+            return
+        #Else: rebuild partial executables
         var.partial_executables = {}
         
         for dep_name in var.dependency_names:
