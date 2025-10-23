@@ -1,6 +1,7 @@
 from input_handler import InputHandler
 from equation_engine import EquationEngine
 from calculation_engine import CalculationEngine
+from uncertainty_engine import UncertaintyEngine
 
 
 if __name__=="__main__":
@@ -51,6 +52,20 @@ if __name__=="__main__":
     calculation_engine = CalculationEngine(variables)
     calculation_engine.validateBasicVariables(equation_engine)
     
+    
+    
+    derived_variables = equation_engine.splitBasicDerived(variables)[1]
+    for var_name in derived_variables:
+        print(var_name)
+        calculation_engine.calculateValues(variables[var_name], update_var=True, silent=True)
+    
+    
+    uncertainty_engine = UncertaintyEngine(variables, equation_engine = equation_engine)
+    uncertainty_engine.calculateUncertainty(variables["G"], recurse=True)
+    print()
+    uncertainty_engine.calculateUncertainty(variables["S"])
+    
+    """
     #####
     #print(variables['time_c'].equation)
     #print(variables['time_c'].dependency_names)
@@ -62,7 +77,7 @@ if __name__=="__main__":
     calculation_engine.calculateValues(variables['test_trivial'])
     print(variables['test_trivial'].values)
     
-    #"""
+    
     calculation_engine.calculateValues(variables['timesumtest'])
     
     print('HA')
@@ -73,15 +88,7 @@ if __name__=="__main__":
     equation_engine.buildPartialDerivativeExecutables(var)
     var.executeAllPartials()
     
-    print()
-    print("Outside again, dependencies")
-    print(var.dependency_names)
-    print("1")
-    print(variables["TS_('C_25')"].values)
-    print(var.partial_values['G'])
-    print("2")
-    print(variables["G"].values)
-    print(var.partial_values["TS_('C_25')"])
+
     #"""
     
     #calculation_engine.calculateValues(variables["PR"], update_var=True)
