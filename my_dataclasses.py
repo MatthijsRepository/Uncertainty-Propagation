@@ -16,7 +16,7 @@ class CSVData:
 class UncertaintySource:
     name: str
     is_relative: bool
-    is_onesided: bool
+    is_symmetric: bool
     shape: str
     correlation: Union[float, int, np.ndarray]
     #Mutually exclusive fields
@@ -48,7 +48,7 @@ class UncertaintySource:
         else:
             self.bound = self.sigma * factor
         #Correct for one-sidedness
-        if self.is_onesided:
+        if not self.is_symmetric:
             self.sigma = self.sigma / 2
             
 
@@ -63,6 +63,7 @@ class VariableUncertainty:
     total_uncertainty:                      Optional[Union[np.ndarray, float]] = None
     contribution_split:                     Optional[np.ndarray] = None
     correlation:                            Optional[Union[np.ndarray, float]] = None
+    is_calculated:                          Optional[bool] = False
     
     def __post_init__(self):
         self.direct_uncertainty_sources = []
@@ -124,7 +125,10 @@ class Variable:
             return (f"Basic variable: {self.name} \nDescription: {self.description}")
         else:
             return (f"Derived variable: {self.name} = {self.equation} \nDescription: {self.description}")
-        
+    
+    def __neg__(self):
+        return -self.values
+    
     def __add__(self, other):
         #If floats or ints are involved the logic is simple
         if isinstance(other, (int, float)):
@@ -198,7 +202,7 @@ class Variable:
             raise ValueError("Dividing variables {self.name} and {numerator.name} failed. {self.name} has length {len(self.values}, {numerator.name} has length {len(numerator.values)}")
     
     def __pow__(self, power):
-        if not isinstance(power, (int)):
+        if not power.is_integer():
             raise ValueError(f"Error, taking power {power} of variable {self.name} is not supported, integer powers only.")
         return self.values**power
         
@@ -299,11 +303,12 @@ class Variable:
             self.partial_values[dep_name] = calculated_values
         return calculated_values
     
-    def executeAllPartials(self, force_recalculation=False):
+    def executeAllPartials(self, store_results=True, force_recalculation=False):
         """ Evaluates all partial derivatives of a variable """
+        partial_values = {}
         for dep_name in self.dependency_names:
-            self.executePartialDerivative(dep_name, store_results=True, force_recalculation=force_recalculation)
-        
+            partial_values[dep_name] = self.executePartialDerivative(dep_name, store_results=store_results, force_recalculation=force_recalculation)
+        return partial_values
         
     
 
