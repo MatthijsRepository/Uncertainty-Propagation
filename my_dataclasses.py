@@ -42,6 +42,11 @@ class UncertaintySource:
             factor = np.sqrt(6)
         elif self.shape.lower()=="u-shaped":
             factor = np.sqrt(2)
+        
+        #If the uncertainty is relative: apply factor 100 correction to change percentage value to fraction
+        if self.is_relative:
+            factor *= 100
+        
         #Populate the missing sigma or the missing bound
         if self.sigma is None:
             self.sigma = self.bound / factor
@@ -53,13 +58,25 @@ class UncertaintySource:
             
 
 @dataclass
-class VariableUncertainty:
+class VariableUncertainty: ###!!! Handle some stuff in post-init?
     var_name:                               str
     variable:                               "Variable" #Placeholder!
-    direct_uncertainty_sources:             Optional[list] = None ###!!! Handle in post-init
+    direct_uncertainty_sources:             Optional[list] = None                   
+    direct_uncertainties:                   Optional[Union[np.ndarray, float]] = None ###!!! EXPLANATIONS
     direct_uncertainty_contributions:       Optional[Union[np.ndarray, float]] = None
-    dependency_uncertainties:               Optional[dict] = None
+    total_direct_uncertainty_contribution:  Optional[Union[np.ndarray, float]] = None
+    #total_direct_uncertainty:               Optional[Union[np.ndarray, float]] = None
+    
+    #dependency_uncertainties:               Optional[dict] = None                      ###!!!
+    #dependency_uncertainty_contributions:   Optional[Union[np.ndarray, float]] = None
+    
+    dependency_uncertainty_names:           Optional[list] = None                       ###!!!
+    weighted_dependency_uncertainties:      Optional[np.ndarray] = None
     dependency_uncertainty_contributions:   Optional[Union[np.ndarray, float]] = None
+    #total_dependency_uncertainty:           Optional[Union[np.ndarray, float]] = None
+    
+    
+    
     total_uncertainty:                      Optional[Union[np.ndarray, float]] = None
     contribution_split:                     Optional[np.ndarray] = None
     correlation:                            Optional[Union[np.ndarray, float]] = None
@@ -67,7 +84,7 @@ class VariableUncertainty:
     
     def __post_init__(self):
         self.direct_uncertainty_sources = []
-        self.dependency_uncertainties = {}
+        #self.dependency_uncertainties = {}                                         ###!!!
         
         """ Handle initialization of non-inputs here! """
             
@@ -280,7 +297,7 @@ class Variable:
         return calculated_values
 
 
-    def executePartialDerivative(self, dep_name, store_results=True, force_recalculation=False):
+    def executePartialDerivative(self, dep_name, absolute_values=False, store_results=True, force_recalculation=False):
         """ Executes the partial derivative executable of the variable for a given dependency, optionally stores values in partial_values dictionary """
         #If no forced recalculation and if the values are already calculated we simply return the already calculated values
         if force_recalculation is False and dep_name in self.partial_values:
@@ -298,16 +315,19 @@ class Variable:
         if isinstance(calculated_values, Variable):     ###!!! change this to be handled through an equation engine wrapper
             calculated_values = calculated_values.values
         
+        if absolute_values:
+            calculated_values = np.abs(calculated_values)
+        
         #Optionally store results
         if store_results:
             self.partial_values[dep_name] = calculated_values
         return calculated_values
     
-    def executeAllPartials(self, store_results=True, force_recalculation=False):
+    def executeAllPartials(self, absolute_values=False, store_results=True, force_recalculation=False):
         """ Evaluates all partial derivatives of a variable """
         partial_values = {}
         for dep_name in self.dependency_names:
-            partial_values[dep_name] = self.executePartialDerivative(dep_name, store_results=store_results, force_recalculation=force_recalculation)
+            partial_values[dep_name] = self.executePartialDerivative(dep_name, absolute_values=absolute_values, store_results=store_results, force_recalculation=force_recalculation)
         return partial_values
         
     

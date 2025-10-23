@@ -65,6 +65,16 @@ if __name__=="__main__":
     print()
     uncertainty_engine.calculateUncertainty(variables["S"])
     
+    
+    print(variables["G"].uncertainty.total_uncertainty[573])
+    
+    uncertainty_engine.splitDirectUncertaintyContributions(variables['G'])
+    uncertainty_engine.splitTotalUncertaintyContributions(variables['G'])
+    
+    print(variables['G'].uncertainty.total_direct_uncertainty_contribution[600])
+    print(variables['G'].uncertainty.dependency_uncertainty_contributions[:,600])
+    
+    
     """
     #####
     #print(variables['time_c'].equation)
