@@ -96,9 +96,8 @@ class UncertaintyEngine:
     def _convertListToArray(self, lst):
         """ Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array """
         max_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
-        
         lst = [np.full(max_length, v) if np.isscalar(v) else v for v in lst]
-        return np.stack(lst, axis=0).astype(float)
+        return np.vstack(lst).astype(float)
       
 
         
@@ -146,25 +145,86 @@ class UncertaintyEngine:
         """ Splits the fractional contribution to the direct uncertainty between the direct uncertainty sources """
         if not var.uncertainty.is_calculated:
             raise ValueError(f"Cannot split uncertainty contributions for variable {var.name}, please calculate uncertainties first")
-        var.uncertainty.direct_uncertainty_contributions = var.uncertainty.direct_uncertainties / np.sum(var.uncertainty.direct_uncertainties, axis=0)
+        
+        #If the variable has no direct uncertainty sources we return immediately to avoid populating by NaN's
+        if len(var.uncertainty.direct_uncertainty_sources)==0: ###!!! is this useful?
+            return 
+        
+        #We divide each direct uncertainty by the total direct uncertainty (for each timestep) or set 0 if total direct uncertainty is 0 at that timestep
+        total_direct_sum = np.sum(var.uncertainty.direct_uncertainties, axis=0)
+        var.uncertainty.direct_uncertainties_contributions = np.divide(var.uncertainty.direct_uncertainties, 
+                                                                       total_direct_sum, 
+                                                                       out=np.zeros_like(var.uncertainty.direct_uncertainties), 
+                                                                       where=(total_direct_sum != 0))
         return
     
     def splitTotalUncertaintyContributions(self, var):
         """ Splits the fractional contributions to the total uncertainty between direct sources and all dependencies """
         if not var.uncertainty.is_calculated:
             raise ValueError(f"Cannot split uncertainty contributions for variable {var.name}, please calculate uncertainties first")
-        #First we split to fractional contributions between direct sources and from dependencies
+        #First we calculate the sum of direct uncertainty and uncertainty from dependencies
         total_sum = np.sum(var.uncertainty.weighted_dependency_uncertainties, axis=0) + var.uncertainty.total_direct_uncertainty
         
-        var.uncertainty.total_direct_uncertainty_contribution = var.uncertainty.total_direct_uncertainty / total_sum
-        var.uncertainty.dependency_uncertainty_contributions = var.uncertainty.weighted_dependency_uncertainties / total_sum
+        #If no direct uncertainties are present we do not have to calculate this part
+        if len(var.uncertainty.direct_uncertainty_sources)>0:
+            #We calculate the contribution of the direct uncertainty sources, while protecting for divide by 0
+            var.uncertainty.total_direct_uncertainty_contribution = np.divide(var.uncertainty.total_direct_uncertainty,
+                                                                              total_sum,
+                                                                              out=np.zeros_like(var.uncertainty.total_direct_uncertainty),
+                                                                              where=(total_sum!=0))
+        #We similarly calculate the contribution per dependency
+        var.uncertainty.dependency_uncertainties_contributions = np.divide(var.uncertainty.weighted_dependency_uncertainties,
+                                                                           total_sum,
+                                                                           out=np.zeros_like(var.uncertainty.weighted_dependency_uncertainties),
+                                                                           where=(total_sum!=0))
         return
     
-    def splitToSourceContributions(self, var):
+    def splitToSourceContributions(self, var, recalculate=False):
         """ Splits uncertainty contributions down to all root uncertainty sources """
         if not var.uncertainty.is_calculated:
             raise ValueError(f"Cannot split uncertainty contributions for variable {var.name}, please calculate uncertainties first")
         
+        if var.uncertainty.root_uncertainty_contribution_split is not None and not recalculate:
+            return var.uncertainty.root_uncertainty_contribution_split
+        
+        #If var is basic the root uncertainties are simply the direct uncertainties, 
+        if var.is_basic:
+            if var.uncertainty.direct_uncertainties_contributions is None:
+                self.splitDirectUncertaintyContributions(var)
+            return var.uncertainty.getSourceNames(), var.uncertainty.direct_uncertainties_contributions
+        
+        #If we are dealing with a derived variable the propagation is more complicated
+        
+        #Check if variable uncertainty split has already been performed, and if not: perform uncertainty splits
+        if var.uncertainty.direct_uncertainties_contributions is None:
+            self.splitDirectUncertaintyContributions(var)
+        if var.uncertainty.total_direct_uncertainty_contribution is None or var.uncertainty.dependency_uncertainties_contributions is None:
+            self.splitTotalUncertaintyContributions(var)
+        
+            
+        sources = []
+        root_contributions_scaled = []
+        #Start with the direct contributions - we only do this if direct contributions are present
+        if len(var.uncertainty.direct_uncertainty_sources)>0:
+            sources.extend(var.uncertainty.getSourceNames())
+            root_contributions_scaled.append(var.uncertainty.direct_uncertainties_contributions * var.uncertainty.total_direct_uncertainty_contribution)
+        
+        #dependency_sources = []
+        #dependency_root_contributions_scaled = []
+        for index, dep_name in enumerate(var.uncertainty.dependency_uncertainty_names):
+            #Split each dependency recursively to source contributions!
+            dep_sources, dep_root_split = self.splitToSourceContributions(var.dependencies[dep_name], recalculate=recalculate)
+            #If there is no root uncertainty split: there is no uncertainty in this entire branch - continue
+            if dep_root_split is None:
+                continue
+            dep_root_split = np.multiply(dep_root_split, var.uncertainty.dependency_uncertainties_contributions[index])
+            sources.extend(dep_sources)
+            root_contributions_scaled.append(dep_root_split)
+    
+        var.uncertainty.root_uncertainty_sources = sources
+        var.uncertainty.root_uncertainty_contribution_split = self._convertListToArray(root_contributions_scaled)
+        return var.uncertainty.root_uncertainty_sources, var.uncertainty.root_uncertainty_contribution_split
+            
     
 
 

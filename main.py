@@ -63,7 +63,12 @@ if __name__=="__main__":
     uncertainty_engine = UncertaintyEngine(variables, equation_engine = equation_engine)
     uncertainty_engine.calculateUncertainty(variables["G"], recurse=True)
     print()
-    uncertainty_engine.calculateUncertainty(variables["S"])
+    #uncertainty_engine.calculateUncertainty(variables["S"])
+    
+    
+    print(variables['V'].uncertainty.direct_uncertainties)
+    uncertainty_engine.splitDirectUncertaintyContributions(variables['V'])
+    print(variables['V'].uncertainty.direct_uncertainties_contributions)
     
     
     print(variables["G"].uncertainty.total_uncertainty[573])
@@ -71,8 +76,14 @@ if __name__=="__main__":
     uncertainty_engine.splitDirectUncertaintyContributions(variables['G'])
     uncertainty_engine.splitTotalUncertaintyContributions(variables['G'])
     
-    print(variables['G'].uncertainty.total_direct_uncertainty_contribution[600])
-    print(variables['G'].uncertainty.dependency_uncertainty_contributions[:,600])
+    #print(variables['G'].uncertainty.total_direct_uncertainty_contribution[600])
+    #print(variables['G'].uncertainty.dependency_uncertainties_contributions[:,600])
+    
+    uncertainty_engine.splitToSourceContributions(variables['G'])
+    
+    #print(variables['G'].uncertainty.root_uncertainty_sources)
+    #print(variables['G'].uncertainty.root_uncertainty_contribution_split[:,0])
+    
     
     
     """
