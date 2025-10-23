@@ -1,0 +1,131 @@
+input CSV
+	CSV A
+		header: true
+		delimiter: ';'
+		file: "C:\Users\mate\Desktop\python\Uncertainty-Propagation\testdata.csv"
+		structure: Time, -, G, T, Pout
+		timeformat: %H:%M:%S
+	END CSV A
+end input CSV
+
+input BASIC VARIABLES
+	var CSV_Time
+		value: CSV.Time
+	end var CSV_Time
+	var T
+		value: CSV.T
+		timestep: CSV
+		description: Temperature
+		aggregation: average
+		UNCERTAINTIES:
+			-temperature uncertainty: absolute, normal, symmetric, correlation=1, sigma=0.5, include=True
+		end UNCERTAINTIES
+	end var T
+	var Pout
+		value: CSV.Pout
+		timestep: CSV
+		description: Power output
+		aggregation: integrate
+		UNCERTAINTIES:
+			-single module rating at STC: relative, normal, symmetric, correlation=1, sigma=1.5, include=True
+		END UNCERTAINTIES
+	end var Pout
+	var S
+		value: 15
+		description: Pyranometer sensitivity
+		aggregation: None
+		UNCERTAINTIES:
+			-calibration: relative, normal, symmetric, correlation=1, bound=1.5
+			-non-stability: relative, rectangular, symmetric, correlation=1, bound=0.8
+			-nonlinearity: relative, rectangular, symmetric, correlation=1, bound=0.5
+			-clear sky spectral error: relative, rectangular, symmetric, correlation=1, bound=0.5
+			-temperature response: relative, rectangular, symmetric, correlation=1, bound=1
+			-tilt response: relative, rectangular, symmetric, correlation=1, bound=0.5
+		END UNCERTAINTIES
+	end var S
+	var V
+		value: DETERMINE
+		timestep: NONE
+		description: Pyranometer voltage
+		equation: 'G' * 'S'
+		variables: 'G', 'S'
+		UNCERTAINTIES:
+			-datalogger accuracy: absolute, rectangular, symmetric, correlation=1, bound=0, include=False
+		END UNCERTAINTIES
+	end var V
+	var P0
+		value: 245
+		description: Module power rating at STC
+	end var P0
+	var G_STC
+		value: 1000
+		description: STC irradiance
+	end var G_STC
+	var gamma
+		value: -0.0045
+		description: relative maximum power temperature coefficient
+	end var gamma
+	var testA
+		value: 10
+		aggregation: integrate
+		description: test A
+	end var testB
+	var testB
+		value: 10
+		description: test B
+	end var testB
+end input BASIC VARIABLES
+
+input DERIVED VARIABLES
+	eq test_trivial
+		value: NO
+		equation: 'testA'
+	end eq test_trivial
+	eq testC
+		value: NO
+		equation: ('testA'+ 'testB'*'testB' + 20) / (2 + 'testB'/'testA')
+		variables: 'testA', 'testB', 'gamma'
+	end eq testC
+	#eq testD
+	#	value: NO
+	#	equation: timesum('testA')
+	#end eq testD
+	eq G
+		value: CSV.G
+		timestep: CSV
+		description: POA irradiance
+		aggregation: integrate
+		equation: 'V'/'S'
+		UNCERTAINTIES:
+			-zero off-set A: absolute, rectangular, one-sided, correlation=1, bound=7
+			-zero off-set B: absolute, rectangular, symmetric, correlation=1, bound=2
+			-zero off-set other sources: absolute, rectangular, symmetric, correlation=1, bound=1
+			-directional response: absolute, rectangular, symmetric, correlation=1, bound=10
+			-additional signal processing errors: absolute, rectangular, symmetric, correlation=1, bound=2
+		END UNCERTAINTIES
+	end eq G
+	eq C_25
+		value: NO
+		description: temperature-adjustment factor
+		equation: 1 + 'gamma' * ('T'-25)
+		#aggregation: auto		
+		aggregation: average
+	end eq C_25
+	eq PR
+		value: NO
+		description: performance ratio
+		equation: (timesum('Pout', h))/(timesum('G') * ('P0'/'G_STC'))
+	end eq PR
+	eq PR_temp_corr
+		value: NO
+		description: temperature corrected performance ratio
+		equation: (timesum('Pout') ) / (timesum('G' * 'C_25') * ('P0'/'G_STC'))
+	end eq PR_temp_corr
+	eq timesumtest
+		value: NO
+		description: test
+		equation: timesum('G' * timesum('C_25'))
+	end eq timesumtest
+end input DERIVED VARIABLES
+
+
