@@ -93,7 +93,7 @@ class UncertaintyEngine:
         return partials_dict
     
     
-    def _convertListToArray(self, lst):
+    def _convertNestedListTo2DArray(self, lst):
         """ Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array """
         max_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
         lst = [np.full(max_length, v) if np.isscalar(v) else v for v in lst]
@@ -124,7 +124,7 @@ class UncertaintyEngine:
             dep_names = dep_partial_values.keys()
             weighted_dep_uncertainties = [dep_partial_values[dep_name]*total_dep_uncertainties[dep_name] for dep_name in dep_names]
             #Convert list to array: we have to extend constants to fill the whole range of values in case we have time series
-            weighted_dep_uncertainties = self._convertListToArray(weighted_dep_uncertainties)
+            weighted_dep_uncertainties = self._convertNestedListTo2DArray(weighted_dep_uncertainties)
             
             #Populate dependency uncertainty block of the variable uncertainty
             var.uncertainty.dependency_uncertainty_names = dep_names
@@ -163,7 +163,10 @@ class UncertaintyEngine:
         if not var.uncertainty.is_calculated:
             raise ValueError(f"Cannot split uncertainty contributions for variable {var.name}, please calculate uncertainties first")
         #First we calculate the sum of direct uncertainty and uncertainty from dependencies
-        total_sum = np.sum(var.uncertainty.weighted_dependency_uncertainties, axis=0) + var.uncertainty.total_direct_uncertainty
+        if var.uncertainty.weighted_dependency_uncertainties is not None:
+            total_sum = np.sum(var.uncertainty.weighted_dependency_uncertainties, axis=0) + var.uncertainty.total_direct_uncertainty
+        else:
+            total_sum = var.uncertainty.total_direct_uncertainty
         
         #If no direct uncertainties are present we do not have to calculate this part
         if len(var.uncertainty.direct_uncertainty_sources)>0:
@@ -173,21 +176,29 @@ class UncertaintyEngine:
                                                                               out=np.zeros_like(var.uncertainty.total_direct_uncertainty),
                                                                               where=(total_sum!=0))
         #We similarly calculate the contribution per dependency
-        var.uncertainty.dependency_uncertainties_contributions = np.divide(var.uncertainty.weighted_dependency_uncertainties,
-                                                                           total_sum,
-                                                                           out=np.zeros_like(var.uncertainty.weighted_dependency_uncertainties),
-                                                                           where=(total_sum!=0))
+        if var.uncertainty.weighted_dependency_uncertainties is not None:
+            var.uncertainty.dependency_uncertainties_contributions = np.divide(var.uncertainty.weighted_dependency_uncertainties,
+                                                                               total_sum,
+                                                                               out=np.zeros_like(var.uncertainty.weighted_dependency_uncertainties),
+                                                                               where=(total_sum!=0))
         return
+    
+    def calculateCorrelation(self, var):
+        """ Calculates the correlation of the uncertainty for each timestep """
+        #check for direct contributions, dependency contributions
+        #Extract values, combine
+        
     
     def splitToSourceContributions(self, var, recalculate=False):
         """ Splits uncertainty contributions down to all root uncertainty sources """
         if not var.uncertainty.is_calculated:
             raise ValueError(f"Cannot split uncertainty contributions for variable {var.name}, please calculate uncertainties first")
         
+        #If the root split is already calculated and forced recalculation is not chosen, we simply return previously calculated values
         if var.uncertainty.root_uncertainty_contribution_split is not None and not recalculate:
             return var.uncertainty.root_uncertainty_contribution_split
         
-        #If var is basic the root uncertainties are simply the direct uncertainties, 
+        #If var is basic the root uncertainties are simply the direct uncertainties
         if var.is_basic:
             if var.uncertainty.direct_uncertainties_contributions is None:
                 self.splitDirectUncertaintyContributions(var)
@@ -209,21 +220,26 @@ class UncertaintyEngine:
             sources.extend(var.uncertainty.getSourceNames())
             root_contributions_scaled.append(var.uncertainty.direct_uncertainties_contributions * var.uncertainty.total_direct_uncertainty_contribution)
         
-        #dependency_sources = []
-        #dependency_root_contributions_scaled = []
+        #Recursively retrieve root contributions of all dependencies and scale these to the relative dependency contribution
         for index, dep_name in enumerate(var.uncertainty.dependency_uncertainty_names):
             #Split each dependency recursively to source contributions!
             dep_sources, dep_root_split = self.splitToSourceContributions(var.dependencies[dep_name], recalculate=recalculate)
             #If there is no root uncertainty split: there is no uncertainty in this entire branch - continue
             if dep_root_split is None:
                 continue
+            #rescale the root split of the dependency to the relative weight of this dependency in the total uncertainty
             dep_root_split = np.multiply(dep_root_split, var.uncertainty.dependency_uncertainties_contributions[index])
             sources.extend(dep_sources)
             root_contributions_scaled.append(dep_root_split)
-    
-        var.uncertainty.root_uncertainty_sources = sources
-        var.uncertainty.root_uncertainty_contribution_split = self._convertListToArray(root_contributions_scaled)
-        return var.uncertainty.root_uncertainty_sources, var.uncertainty.root_uncertainty_contribution_split
+        
+        #If the variable has no root uncertainty sources, we simply return None
+        if len(sources)==0:
+            return
+        else:
+            #Populate the variable uncertainty dataclass
+            var.uncertainty.root_uncertainty_sources = sources
+            var.uncertainty.root_uncertainty_contribution_split = self._convertNestedListTo2DArray(root_contributions_scaled)
+            return var.uncertainty.root_uncertainty_sources, var.uncertainty.root_uncertainty_contribution_split
             
     
 
