@@ -85,6 +85,62 @@ if __name__=="__main__":
     #print(variables['G'].uncertainty.root_uncertainty_contribution_split[:,0])
     
     
+    print("TESTING")
+    uncertainty_engine.calculateUncertainty(variables['gamma'])
+    uncertainty_engine.splitDirectUncertaintyContributions(variables['gamma'])
+    uncertainty_engine.splitTotalUncertaintyContributions(variables['gamma'])
+    uncertainty_engine.splitToSourceContributions(variables['gamma'])
+    print(variables['gamma'].uncertainty.total_uncertainty)
+    
+    
+    import numpy as np
+    absolute_uncertainty_split = np.multiply(variables['G'].uncertainty.root_uncertainty_contribution_split, variables['G'].uncertainty.total_uncertainty)
+    k=2
+    absolute_uncertainty_split *= k   
+    
+    relative_uncertainty_split = np.divide(absolute_uncertainty_split,
+                                           variables['G'].values,
+                                           out=np.zeros_like(variables['G'].uncertainty.root_uncertainty_contribution_split),
+                                           where=(variables['G'].values != 0))
+    relative_uncertainty_split *= 100
+    relative_uncertainty_split[np.where(relative_uncertainty_split>20)] = 20
+    
+    
+    import matplotlib.pyplot as plt
+    
+    fig = plt.figure(figsize=(15,6), dpi=100)
+    ax = plt.subplot(111)
+    #for i, name in enumerate(variables['G'].uncertainty.root_uncertainty_sources):
+        #ax.plot(variables['G'].uncertainty.root_uncertainty_contribution_split[i], label=name)
+        #ax.plot(absolute_uncertainty_split[i], label=name)
+        #ax.plot(relative_uncertainty_split[i], label=name)
+    
+    ax.stackplot(np.arange(np.shape(relative_uncertainty_split)[1]), *relative_uncertainty_split, labels=variables['G'].uncertainty.root_uncertainty_sources)
+    ax.set_ylim(0,10)
+    
+    #ax.stackplot(np.arange(np.shape(absolute_uncertainty_split)[1]), *absolute_uncertainty_split, labels=variables['G'].uncertainty.root_uncertainty_sources)
+    ax.grid()
+    
+    
+    # Shrink current axis by 20%
+    box = ax.get_position()
+    ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+    
+    # Put a legend to the right of the current axis
+    ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+    """ 
+    for i, name in enumerate(variables['G'].uncertainty.root_uncertainty_sources):
+        #plt.plot(variables['G'].uncertainty.root_uncertainty_contribution_split[i], label=name)
+        plt.plot(absolute_uncertainty_split[i], label=name)
+        #plt.plot(relative_uncertainty_split[i], label=name)
+
+    plt.legend()
+    plt.show()
+    """ 
+    
+    
+    
+    
     
     """
     #####
