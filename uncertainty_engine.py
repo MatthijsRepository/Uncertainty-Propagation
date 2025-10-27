@@ -49,6 +49,34 @@ class UncertaintyEngine:
                     raise ValueError(f"Uncertainty of dependency {dep.name} of variable {var.name} not yet calculated, please ensure this or enable recursive calculation")
             total_dep_uncertainties[dep.name] = dep.uncertainty.total_uncertainty
         return total_dep_uncertainties
+    
+    def _retrieveDependencyCorrelations(self, var, auto_calculate, recurse, recalculate=False):
+        """ Retrieve correlations of the dependencies; optionally auto-calculates necessary elements, recurses through tree or recalculates all values """
+        if var.is_basic:
+            return 0
+        
+        correlations = []
+        #Loop through dependencies and retrieve correlations
+        for dep in var.dependencies.values():
+            #Check if uncertainty calculation is performed, optionally auto calculate this
+            if not dep.uncertainty.is_calculated:
+                if auto_calculate or recalculate:
+                    self.calculateUncertainty(var, recurse=True)
+                else:
+                    raise ValueError(f"Cannot retrieve correlation of dependency {dep.name} of variable {var.name} - uncertainty not calculated yet. Please enable auto-calculation or call calculation manually.")
+            
+            #If no uncertainty: simply return 0 as correlation. This will not interfere with the actual uncertainty correlation: contribution of this dependency will be 0.
+            if dep.uncertainty.total_uncertainty == 0:
+                correlations.append(np.array([0]))
+                continue
+            #Now we retrieve or recursively calculate the correlation of this dependency
+            if (dep.uncertainty.correlation is None and recurse) or recalculate:
+                cor = self.calculateCorrelation(dep, auto_calculate=auto_calculate, recurse=recurse, recalculate=recalculate)
+            else:
+                cor = dep.uncertainty.correlation
+            correlations.append(cor)
+        return self._convertNestedListTo2DArray(correlations)
+                
 
         
     def _getDependencyPartialsValues(self, var, equation_engine=None):
@@ -150,10 +178,6 @@ class UncertaintyEngine:
                                                                                where=(total_sum!=0))
         return
     
-    def calculateCorrelation(self, var):
-        """ Calculates the correlation of the uncertainty for each timestep """
-        #check for direct contributions, dependency contributions
-        #Extract values, combine
         
     
     def splitToSourceContributions(self, var, recalculate=False):
@@ -208,7 +232,76 @@ class UncertaintyEngine:
             var.uncertainty.root_uncertainty_contribution_split = self._convertNestedListTo2DArray(root_contributions_scaled)
             return var.uncertainty.root_uncertainty_sources, var.uncertainty.root_uncertainty_contribution_split
             
+        
     
+    def _correlationCalculationRequirementsHelper(self, var, auto_calculate, recurse, recalculate):
+        """ check if necessary elements are already calculated, and optionally auto-calculate these """
+        #If recalculate is True we simply recalculate all required elements here and return, otherwise we pass the regular checks
+        if recalculate:
+            self.calculateUncertainty(var, recurse=True)
+            self.splitDirectUncertaintyContributions(var)
+            self.splitTotalUncertaintyContributions(var)
+            return
+        
+        #Pass regular checks, auto-calculate dependencies if wanted
+        #Check if uncertainty already calculated or not
+        if not var.uncertainty.is_calculated:
+            if auto_calculate:
+                self.calculateUncertainty(var, recurse=True)
+            else:
+                raise ValueError(f"Please calculate uncertainty for variable {var.name} before calculating correlation.")
+        
+        #Check if direct uncertainty source split is in place
+        if len(var.uncertainty.direct_uncertainty_sources)>0:
+            if var.uncertainty.direct_uncertainties_contributions is None:
+                if auto_calculate:
+                    self.splitDirectUncertaintyContributions(var)
+                else:
+                    raise ValueError(f"Please calculate depedency uncertainty contribution split for variable {var.name} before calculating correlation.")
+            if var.uncertainty.total_direct_uncertainty_contribution is None:
+                if auto_calculate:
+                    self.splitTotalUncertaintyContributions(var)
+                else:
+                    raise ValueError(f"Please calculate total contribution split for variable {var.name} before calculating correlation.")
+        
+        #Check if dependency uncertainty split is in place
+        if var.uncertainty.dependency_uncertainty_names is not None and var.uncertainty.dependency_uncertainties_contributions is None:
+            if auto_calculate:
+                self.splitTotalUncertaintyContributions(var)
+            else:
+                raise ValueError(f"Please calculate direct uncertainty contribution split for variable {var.name} before calculating correlation.")
+        
+    
+    
+    def calculateCorrelation(self, var, auto_calculate=False, recurse=True, recalculate=False):
+        """ Calculates the correlation of the uncertainty for each timestep """
+        #Check if correlation already calculated
+        if var.uncertainty.correlation is not None and recalculate is False:
+            return var.uncertainty.correlation
+        
+        #Check if all requirements for the calculation are in place, optionally auto-calculate these
+        self._correlationCalculationRequirementsHelper(var, auto_calculate, recurse, recalculate)
 
+        #Calculate correlation per timestep
+        #Direct contributions
+        if len(var.uncertainty.direct_uncertainty_sources)>0:
+            direct_correlations = np.array([u.correlation for u in var.uncertainty.direct_uncertainty_sources])
+            direct_correlation_contributions = np.multiply(direct_correlations[:,np.newaxis], var.uncertainty.direct_uncertainties_contributions)
+            direct_correlation_contributions = np.multiply(direct_correlation_contributions, var.uncertainty.total_direct_uncertainty_contribution)
+            direct_correlation_contributions = np.sum(direct_correlation_contributions, axis=0)
+        else:
+            direct_correlation_contributions = 0
+        
+        #Dependency contributions
+        if var.uncertainty.dependency_uncertainties_contributions is not None:
+            dependency_correlations = self._retrieveDependencyCorrelations(var, auto_calculate=auto_calculate, recurse=recurse, recalculate=recalculate)
+            dependency_correlation_contributions = np.multiply(dependency_correlations, var.uncertainty.dependency_uncertainties_contributions)
+            dependency_correlation_contributions = np.sum(dependency_correlation_contributions, axis=0)
+        else:
+            dependency_correlation_contributions = 0
+        
+        var.uncertainty.correlation = direct_correlation_contributions + dependency_correlation_contributions
+        return var.uncertainty.correlation
+        
 
 

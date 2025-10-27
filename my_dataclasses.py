@@ -89,7 +89,7 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
         #self.dependency_uncertainties = {}                                         ###!!!
         
         """ Handle initialization of non-inputs here! """
-    
+        
     def getSourceNames(self):
         """ Returns list of names of all direct uncertainty sources """
         return [u.name for u in self.direct_uncertainty_sources]
