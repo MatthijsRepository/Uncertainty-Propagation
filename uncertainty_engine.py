@@ -31,37 +31,6 @@ class UncertaintyEngine:
                     u_array[index] = u.sigma * var.values
             return u_array
                     
-    
-    
-    
-    def _retrieveDependencyUncertainties_OLD(self, var, recurse):
-        """ Retrieve total uncertainties for all dependencies, returns tuple(list of names, array of uncertainties) """
-        if var.is_basic:
-            return 0         
-
-        #Initialize dictionary of dependencies and associated uncertainties
-        dep_uncertainty_names = []
-        total_dep_uncertainties = []
-    
-        #Loop through dependencies and populate uncertainties dictionary
-        for dep in var.dependencies.values():
-            #Check if dependency has uncertainty sources and whether these are calculated already
-            if not dep.uncertainty.is_calculated:
-                if recurse:
-                    self.calculateUncertainty(dep, recurse)
-                else:
-                    raise ValueError(f"Uncertainty of dependency {dep.name} of variable {var.name} not yet calculated, please ensure this or enable recursive calculation")
-            
-            dep_uncertainty_names.append(dep.name)
-            total_dep_uncertainties.append(dep.uncertainty.total_uncertainty)
-        
-        #Convert list of total uncertainties to array
-        total_dep_uncertainties = np.stack(total_dep_uncertainties, axis=0)
-        print(total_dep_uncertainties)
-        return dep_uncertainty_names, total_dep_uncertainties
-            
-    
-    
     def _retrieveDependencyUncertainties(self, var, recurse):
         """ Retrieve total uncertainties for all dependencies, returns dictionary """
         if var.is_basic:
@@ -99,8 +68,6 @@ class UncertaintyEngine:
         lst = [np.full(max_length, v) if np.isscalar(v) else v for v in lst]
         return np.vstack(lst).astype(float)
       
-
-        
     
     def calculateUncertainty(self, var, recurse=False):
         """ Calculates (the time series of) the total uncertainty of a variable 
