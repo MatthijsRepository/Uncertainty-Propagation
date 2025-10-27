@@ -103,13 +103,18 @@ class EquationEngine:
         self.populateVariableDependencyNames(var)
         return var
         
-    def _checkEquationTreeRecursive(self, variables, variables_to_check, silent, indent=""):
+    def _checkEquationTreeRecursive(self, variables, variables_to_check, silent, indent="", stack=[]):
         """ Internal function that recursively checks equation tree consistency """
         #Recursively navigates down the tree and checks if the equation tree is defined in a consistent way
         for name in variables_to_check:
+            #Check for circular definitions
+            if name in stack:
+                raise ValueError(f"Equation tree consistency check failed: tree is circularly defined. Variable {name} appeared twice. Equation stack: {stack + [name]}.")
+            
             if not silent: 
                 print(f"{indent}Tree checking: {name}")
             var = variables.get(name)
+            
             #Check if variable in variables list
             if var is None:
                 #If var is a timesum variable we create it here, otherwise we raise an error
@@ -129,7 +134,7 @@ class EquationEngine:
                     print(f"{indent}Variable {name} is consistent")
                 continue
             #Else: check consistency of dependencies
-            self._checkEquationTreeRecursive(variables, var.dependency_names, silent=silent, indent=f"   {indent}")
+            self._checkEquationTreeRecursive(variables, var.dependency_names, silent=silent, indent=f"   {indent}", stack=stack+[name])
 
             #If we succesfully looped through all dependencies of this variable, we can flag it as safe, and potentially log this to output
             if not silent:
