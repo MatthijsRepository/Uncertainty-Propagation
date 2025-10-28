@@ -55,9 +55,6 @@ class CalculationEngine:
                 start_times.append(dep.start_time)
                 end_times.append(dep.end_time)
                 timesteps.append(dep.timestep)
-        print(start_times)
-        print(end_times)
-        print(timesteps)
         #Determine LCM timestep
         new_timestep = np.lcm.reduce(timesteps)
         
@@ -69,7 +66,8 @@ class CalculationEngine:
         
     
     def _rebinTimeSeries(self, var, low_index, high_index, low_fraction, high_fraction, factor):
-        """ Handles rebinning of variable time series data into a new timeseries of greater granularity """
+        """ Handles rebinning of variable time series data into a new timeseries of greater granularity 
+            Allows for fractional splitting of old bins between two new bins """
         #Note cannot handle full time aggregation
         new_values = np.zeros( int((high_index-low_index)/factor) )
         if len(new_values)==1:
@@ -78,11 +76,7 @@ class CalculationEngine:
         #Note: new bins can contain fractions of old bins - thus our loop should start on the same bin as the previous iteration ended on
         #Since new bin i can for instance include 2/3 of old bin j, then new bin i+1 should contain 1/3 of old bin j!
         for i in range(len(new_values)):
-            if i == 0:
-                start = low_index
-                end = start + factor
-            else:
-                start = low_index + i*factor
+            start = low_index + i*factor
             if start < 0:
                 #First bin handling
                 new_values[i] = np.sum(var.values[:start+factor])
@@ -114,63 +108,49 @@ class CalculationEngine:
         if isinstance(var.values, float):
             raise ValueError(f"Rebinning of variable {var.name} terminated, variable is a constant.")
         
-        #Convert new timestep to datetime object
-        new_timestep_datetime = datetime.timedelta(seconds=new_timestep)
-        #identify index of the benchmark time ###!!!
-        print("WARNING: benchmark times can be inside a timestep ; i.e. a timestep can span 11:55-12:05 and benchmark time is 12:00 - handle correct time split/aggregation here")
-        
-        #calculate increase factor
-
-        print(var.start_time)
-        print(var.first_time)
         #calculate from where we should start binning:
         present_bin_edges = np.linspace(var.start_time, var.end_time, len(var.values)+1)
-        print(present_bin_edges)
         
         #We calculate the new start and end times by seeing where bin limits - given the benchmark - fit in the previous timerange
         #Note: we allow to smuggle a specified amount; to allow manual avoiding of instances where an hour of data is discarded based on a small time mismatch.
         delta_start = (var.start_time - benchmark_time).total_seconds()
         offset_steps = np.floor(delta_start/new_timestep)
-        first_edge = benchmark_time + timedelta(seconds=offset_steps * new_timestep)
-        if first_edge<var.start_time:
-            if (var.start_time - first_edge).total_seconds() > smuggle_limit:
-                first_edge += timedelta(seconds=new_timestep)
+        new_start_time = benchmark_time + timedelta(seconds=offset_steps * new_timestep)
+        if new_start_time<var.start_time:
+            if (var.start_time - new_start_time).total_seconds() > smuggle_limit:
+                new_start_time += timedelta(seconds=new_timestep)
                 
         
         delta_end = (var.end_time - benchmark_time).total_seconds()
         offset_steps_end = np.ceil(delta_end / new_timestep)
-        last_edge = benchmark_time + timedelta(seconds=offset_steps_end * new_timestep)
-        if last_edge>var.end_time:
-            if (last_edge - var.end_time).total_seconds() > smuggle_limit:
-                last_edge -= timedelta(seconds=new_timestep)
+        new_end_time = benchmark_time + timedelta(seconds=offset_steps_end * new_timestep)
+        if new_end_time>var.end_time:
+            if (new_end_time - var.end_time).total_seconds() > smuggle_limit:
+                new_end_time -= timedelta(seconds=new_timestep)
         
         
         #Identify the factor increase
-        factor = int(new_timestep / var.timestep)
+        factor = new_timestep / var.timestep
+        if factor.is_integer():
+            factor = int(factor)
+        else:
+            raise ValueError(f"Temporal granularity increase for variable {var.name} failed: can only be performed for integer multiples of the old timestep! Attempted increase factor was {factor}.")
+        
         #Identify first index to include in first bin
-        low_index = int((first_edge - var.start_time).total_seconds() // var.timestep)
-        low_fraction = 1 - ((first_edge - var.start_time).total_seconds() / var.timestep - low_index)
+        low_index = int((new_start_time - var.start_time).total_seconds() // var.timestep)
+        low_fraction = 1 - ((new_start_time - var.start_time).total_seconds() / var.timestep - low_index)
         #Identify last index to include in last bin
-        high_index = int((last_edge - var.end_time).total_seconds() // var.timestep) + len(var.values)
+        high_index = int((new_end_time - var.end_time).total_seconds() // var.timestep) + len(var.values)
         high_fraction = 1-low_fraction  ### WARNING: we assume new timestep is always an integer multiple of the old timestep. If this is not the case, this method does not work
 
         new_values = self._rebinTimeSeries(var, low_index, high_index, low_fraction, high_fraction, factor)
         
         
-        #Rebinning process
-        #first_bin 
-        
-        
-        
-        #Identify (additional) fraction of first index for bin to include
-        #Identify (additional) fraction of last index for bin to include
-        #Aggregate bins
-        #Pass values, save new time settings somewhere (for uncertainty engine to pick up)
         
         print(var.start_time)
         print(var.end_time)
-        print(first_edge)
-        print(last_edge)
+        print(new_start_time)
+        print(new_end_time)
         #factor = benchmark_time / var.timestep
         return
         
