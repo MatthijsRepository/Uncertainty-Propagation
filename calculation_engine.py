@@ -67,8 +67,48 @@ class CalculationEngine:
         print()
         print(new_timestep)
         
-                
-    def increaseTemporalResolution(self, var, new_timestep, benchmark_time, smuggle_limit=0):
+    
+    def _rebinTimeSeries(self, var, low_index, high_index, low_fraction, high_fraction, factor):
+        """ Handles rebinning of variable time series data into a new timeseries of greater granularity """
+        #Note cannot handle full time aggregation
+        new_values = np.zeros( int((high_index-low_index)/factor) )
+        if len(new_values)==1:
+            raise ValueError("Aggregating time series data into a single bin currently not supported. - Timesum calling not implemented yet")
+
+        #Note: new bins can contain fractions of old bins - thus our loop should start on the same bin as the previous iteration ended on
+        #Since new bin i can for instance include 2/3 of old bin j, then new bin i+1 should contain 1/3 of old bin j!
+        for i in range(len(new_values)):
+            if i == 0:
+                start = low_index
+                end = start + factor
+            else:
+                start = low_index + i*factor
+            if start < 0:
+                #First bin handling
+                new_values[i] = np.sum(var.values[:start+factor])
+                new_values[i] += abs(low_index)-1 * var.values[0]
+                new_values[i] += var.values[0] * low_fraction
+                new_values[i] += var.values[start+factor] * high_fraction
+            elif start + factor-1 >= len(var.values):
+                #Last bin handling
+                new_values[i] = np.sum(var.values[start:])
+                new_values[i] += var.values[start-1] * low_fraction
+                new_values[i] += (high_index - len(var.values)-1) * var.values[-1]
+                new_values[i] += var.values[-1] * high_fraction
+            else:
+                #General bin handling
+                new_values[i] = np.sum(var.values[start:start+factor-1])
+                new_values[i] += var.values[start-1] * low_fraction
+                new_values[i] += var.values[start+factor-1] * high_fraction
+        
+        #If aggregation rule is average, we take the time average
+        if var.aggregation_rule == "average":
+            new_values /= factor
+        return new_values
+        
+        
+            
+    def decreaseTemporalResolution(self, var, new_timestep, benchmark_time, smuggle_limit=0):
         """ Returns array of values for the new time resolution for a given variable, benchmark time is a specified border between 2 bins """
         #Check if temporal operations make sense for this variable (e.g. not a float)
         if isinstance(var.values, float):
@@ -80,7 +120,7 @@ class CalculationEngine:
         print("WARNING: benchmark times can be inside a timestep ; i.e. a timestep can span 11:55-12:05 and benchmark time is 12:00 - handle correct time split/aggregation here")
         
         #calculate increase factor
-        factor = new_timestep / var.timestep
+
         print(var.start_time)
         print(var.first_time)
         #calculate from where we should start binning:
@@ -88,7 +128,7 @@ class CalculationEngine:
         print(present_bin_edges)
         
         #We calculate the new start and end times by seeing where bin limits - given the benchmark - fit in the previous timerange
-        #Note: we allow to smuggle a a specified amount; to allow manual avoiding of instances where an hour of data is discarded based on a small time mismatch.
+        #Note: we allow to smuggle a specified amount; to allow manual avoiding of instances where an hour of data is discarded based on a small time mismatch.
         delta_start = (var.start_time - benchmark_time).total_seconds()
         offset_steps = np.floor(delta_start/new_timestep)
         first_edge = benchmark_time + timedelta(seconds=offset_steps * new_timestep)
@@ -104,6 +144,28 @@ class CalculationEngine:
             if (last_edge - var.end_time).total_seconds() > smuggle_limit:
                 last_edge -= timedelta(seconds=new_timestep)
         
+        
+        #Identify the factor increase
+        factor = int(new_timestep / var.timestep)
+        #Identify first index to include in first bin
+        low_index = int((first_edge - var.start_time).total_seconds() // var.timestep)
+        low_fraction = 1 - ((first_edge - var.start_time).total_seconds() / var.timestep - low_index)
+        #Identify last index to include in last bin
+        high_index = int((last_edge - var.end_time).total_seconds() // var.timestep) + len(var.values)
+        high_fraction = 1-low_fraction  ### WARNING: we assume new timestep is always an integer multiple of the old timestep. If this is not the case, this method does not work
+
+        new_values = self._rebinTimeSeries(var, low_index, high_index, low_fraction, high_fraction, factor)
+        
+        
+        #Rebinning process
+        #first_bin 
+        
+        
+        
+        #Identify (additional) fraction of first index for bin to include
+        #Identify (additional) fraction of last index for bin to include
+        #Aggregate bins
+        #Pass values, save new time settings somewhere (for uncertainty engine to pick up)
         
         print(var.start_time)
         print(var.end_time)

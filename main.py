@@ -33,7 +33,7 @@ if __name__=="__main__":
     variables["time_c"] = Variable("time_c", values=None, is_basic=False, aggregation_rule="sum", equation="'time_a' + 'time_b'")
     print("End hardcoding testing variables")
     print()
-    """ 
+    #""" 
     
     
     #Verifying equation tree consistency, building equation tree in SimPy
@@ -67,17 +67,41 @@ if __name__=="__main__":
     uncertainty_engine.splitTotalUncertaintyContributions(variables['G'])
     uncertainty_engine.splitToSourceContributions(variables['G'])
     
+    uncertainty_engine.calculateCorrelation(variables['G'], auto_calculate=True, recurse=True, recalculate=False)
+    
+    
+    print(variables['G'].uncertainty.correlation)
+    print(variables['G'].uncertainty.correlation[400])
+    print(variables['G'])
+    
     
     print("TESTING")
         
     
-    variables['G'].uncertainty.plotRelativeRootSplit(k=2)
-    variables['G'].uncertainty.plotAbsoluteRootSplit(k=2)
+    #variables['G'].uncertainty.plotRelativeRootSplit(k=2)
+    #variables['G'].uncertainty.plotAbsoluteRootSplit(k=2)
+    
+    from datetime import datetime
+    timeformat = "%H:%M:%S"
+    start_time_a = datetime.strptime("12:04:15", timeformat)
+    #start_time_a = datetime.strptime("12:59:01", timeformat)
+    
+    #variables['G'].values = variables['G'].values[1:]
+    #variables['G'].start_time = datetime.strptime("00:00:30", timeformat)
+    variables['G'].first_time = datetime.strptime("00:01:00", timeformat)
+    import numpy as np
+    variables['G'].values = np.ones(len(variables['G'].values))
+    calculation_engine.decreaseTemporalResolution(variables['G'], 3600, start_time_a, smuggle_limit=60)
     
     
     
-    
-    
+    mytest = np.arange(10)
+    start=-1
+    factor=4
+    print(mytest[start+1:start+factor-1])
+    print(mytest[start+factor-1])
+
+
     """ 
     for i, name in enumerate(variables['G'].uncertainty.root_uncertainty_sources):
         #plt.plot(variables['G'].uncertainty.root_uncertainty_contribution_split[i], label=name)
