@@ -27,8 +27,8 @@ class CalculationEngine:
                     equation_engine.populateVariableDependencies(var, variables=variables)
                     #Generate variable callable
                     equation_engine.buildVariableExecutable(var)
-                    #Calculate variable values, var.values is populated by default
-                    var.executeEquation()
+                    #Calculate variable values, var.values is populated
+                    self.executeVariableEquation(var, store_results=True)
         
     
     def calculateValues(self, var, update_var=True, calculate_dependencies=True, silent=True, indent=""):
@@ -42,28 +42,109 @@ class CalculationEngine:
                 raise ValueError(f"Calculation of variable {var.name} failed: dependency {dep.name} has no values defined and automatic dependency calculation is turned off.")
             else:
                 self.calculateValues(dep, update_var=update_var, silent=silent, indent=f"   {indent}")
-        values = var.executeEquation(store_results=update_var, calculation_engine=self)
+        #values = var.executeEquation(store_results=update_var, calculation_engine=self)
+        values = self.executeVariableEquation(var, store_results=update_var)
         if not silent:
             print(f"{indent}Calculation of {var.name} complete, values: {var.values}")
         return values
         
     
+    def executeVariableEquation(self, var, store_results=True, force_recalculation=True):
+        if var.equation is None:
+            raise ValueError(f"Tried to execute the equation of variable {var.name}, for which no equation is defined.")
+        elif var.executable is None:
+            raise ValueError(f"Tried to execute the equation of variable {var.name} = {var.equation}, but no equation executable has been built for this variable.")
+        
+        #If values already defined: do nothing unless forced recalculation is desired
+        if var.values is not None:
+            if force_recalculation is True:
+                print(f"WARNING: executing equation of variable {var.name} while values are already defined!")
+            else:
+                return var.values
+        
+        harmonized_data = self.harmonizeTimeSeries(var.dependencies)
+        
+        #if harmonized_data is None:
+        #    calculated_values 
+        
+        #If harmonized data is None, the dependencies are already time-harmonious (same range, timestep) and calculation can be performed directly
+        
+        #Check if this variable is a timesum, in which case the executable is the equation INSIDE the timesum
+        if var.is_timesum:
+            calculated_values = self.timeSum(var)
+        else:
+            args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
+            calculated_values = var.executable(*args)
+        
+        #Optionally store the result as the new variable values
+        if store_results:
+            var.values = calculated_values
+        return calculated_values
+    
+    def _checkTimeSeriesHarmony(self, start_times, end_times, timesteps):
+        """ If all start times, end times and timesteps are the same, the time series are harmonious and no further action will be required """
+        if len(set(start_times))==1 and len(set(end_times))==1 and len(set(timesteps))==1:
+            return True
+        else:
+            return False
+        
+    def _pruneHarmonizedTimeSeriesTails(self, harmonized_data, common_start_time, common_end_time, new_timestep):
+        """ Takes a dictionary of harmonized time series data and ensures all start times and end times match perfectly - prunes data that do not fall within the specified range """
+        datetime_timestep = timedelta(seconds=new_timestep)
+        
+        for (dep_name, data) in harmonized_data.items():
+            values = data[0]
+            data = data[1]
+            #Prune start
+            offset_steps = int((common_start_time - data["start_time"]) / datetime_timestep)
+            if offset_steps>0:
+                values = values[offset_steps:]
+                data["start_time"] += offset_steps * datetime_timestep
+                data["first_time"] += offset_steps * datetime_timestep
+                data["prune_offset_steps"] = offset_steps
+            #Prune tail
+            offset_steps_end = int((data["end_time"] - common_end_time) / datetime_timestep)
+            if offset_steps_end>0:
+                values = values[:-offset_steps_end]
+                data["end_time"] -= offset_steps_end * datetime_timestep
+                data["last_time"] -= offset_steps_end * datetime_timestep
+                data["prune_offset_steps_end"] = offset_steps_end
+            #Update the harmonized_data dictionary with pruned datasets
+            harmonized_data[dep_name] = (values, data)
+        return harmonized_data
+    
     def harmonizeTimeSeries(self, dependencies):
-        start_times, end_times, timesteps = [], [], []
+        dep_names, start_times, end_times, timesteps = [], [], [], []
         for dep in dependencies.values():
-            if dep.start_time is not None:
+            if dep.timestep is not None:
+                dep_names.append(dep.name)
                 start_times.append(dep.start_time)
                 end_times.append(dep.end_time)
                 timesteps.append(dep.timestep)
-        #Determine LCM timestep
-        new_timestep = np.lcm.reduce(timesteps)
         
-        print(max(start_times))
-        print(min(end_times))
+        #If dependencies are all time-independent we can simply stop here
+        if len(timesteps)==0:
+            return None
+        #If time series are all harmonious we can simply stop here
+        if self._checkTimeSeriesHarmony(start_times, end_times, timesteps):
+            return None
+        
+        #Determine LCM timestep and time range in which all dependencies are defined
+        new_timestep = float(np.lcm.reduce(timesteps))
+        common_start_time = max(start_times)
+        common_end_time = min(end_times)
 
-        print()
-        print(new_timestep)
+        #We take as benchmark time the start time of the dataset with the biggest timestep
+        #benchmark_time = start_times[np.argmin(timesteps)]
+        benchmark_time = common_start_time
+        print("Warning: benchmark time is common start time")
+        ###!!!
         
+        harmonized_data = {}
+        for dep_name in dep_names:
+            harmonized_data[dep_name] = self.decreaseTemporalResolution(dependencies[dep_name], new_timestep, benchmark_time=benchmark_time)
+        harmonized_data = self._pruneHarmonizedTimeSeriesTails(harmonized_data, common_start_time, common_end_time, new_timestep)
+        return harmonized_data
     
     def _rebinTimeSeries(self, var, low_index, high_index, low_fraction, high_fraction, factor):
         """ Handles rebinning of variable time series data into a new timeseries of greater granularity 
@@ -108,9 +189,6 @@ class CalculationEngine:
         if isinstance(var.values, float):
             raise ValueError(f"Rebinning of variable {var.name} terminated, variable is a constant.")
         
-        #calculate from where we should start binning:
-        present_bin_edges = np.linspace(var.start_time, var.end_time, len(var.values)+1)
-        
         #We calculate the new start and end times by seeing where bin limits - given the benchmark - fit in the previous timerange
         #Note: we allow to smuggle a specified amount; to allow manual avoiding of instances where an hour of data is discarded based on a small time mismatch.
         delta_start = (var.start_time - benchmark_time).total_seconds()
@@ -145,14 +223,29 @@ class CalculationEngine:
 
         new_values = self._rebinTimeSeries(var, low_index, high_index, low_fraction, high_fraction, factor)
         
-        
-        
+        print()
+        #print(offset_steps)
+        #print(offset_steps_end)
         print(var.start_time)
         print(var.end_time)
         print(new_start_time)
         print(new_end_time)
-        #factor = benchmark_time / var.timestep
-        return
+        
+        new_time_metadata = {
+            "start_time"    : new_start_time,
+            "end_time"      : new_end_time,
+            "first_time"    : new_start_time + timedelta(seconds=new_timestep/2),
+            "last_time"     : new_end_time - timedelta(seconds=new_timestep/2),
+            "timestep"      : new_timestep,
+            "factor"        : factor,
+            "low_fraction"  : low_fraction,
+            "low_index"     : low_index,
+            "high_index"    : high_index,
+            "prune_offset_steps"     : None,
+            "prune_offset_steps_end" : None}
+        
+        
+        return new_values, new_time_metadata
         
     
     def timeSum(self, var):

@@ -190,8 +190,8 @@ class Variable:
         self.partial_executables = None     #dict: dictionary of executables for the partial derivates of the variable for each dependency
         self.calculation_engine = None      #calculation engine: necessary for more complex calculations
                 
-        self.first_time = None        #datetime object: time of the first datapoint
-        self.last_time = None            #datetime object: time of the last datapoint
+        self.first_time = None              #datetime object: time of the first datapoint
+        self.last_time = None               #datetime object: time of the last datapoint
         if first_time is not None and last_time is not None:
             self.addTimeStep([first_time, last_time])        #float: number of seconds per timestep
         else:
@@ -227,7 +227,7 @@ class Variable:
                 print(f"WARNING: summing variables {self.name} and {other.name} with different timesteps, {self.timestep} and {other.timestep}!!")
             return self.values + other.values
         else:
-            raise ValueError("Summing variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
+            raise ValueError(f"Summing variables {self.name} and {other.name} failed. {self.name} has length {len(self.values)}, {other.name} has length {len(other.values)}")
     
     def __sub__(self, other):
         #If floats or ints are involved the logic is simple
@@ -344,8 +344,21 @@ class Variable:
         self.timestep = int(self.timestep)
     
     
+    
     def executeEquation(self, store_results=True, force_recalculation=False, calculation_engine=None):
-        """ Executes equation built by sympy and checks whether everything is initialized correctly """
+        """ Tries to call given or internal equation engine to execute variable equation """
+        if calculation_engine is None:
+            if self.calculation_engine is None:
+                raise ValueError(f"Variable {self.name} cannot compute itself: no calculation engine given.")
+            else:
+                calculation_engine = self.calculation_engine
+        return calculation_engine.executeVariableEquation(self, store_results=store_results, force_recalculation=force_recalculation)
+    
+    
+    """
+    ###!!! OLD method below, should be phased out
+    def executeEquation_OLD(self, store_results=True, force_recalculation=False, calculation_engine=None):
+        "" Executes equation built by sympy and checks whether everything is initialized correctly ""
         if self.equation is None:
             raise ValueError(f"Tried to execute the equation of variable {self.name}, for which no equation is defined.")
         elif self.executable is None:
@@ -357,6 +370,9 @@ class Variable:
                 print(f"WARNING: executing equation of variable {self.name} while values are already defined!")
             else:
                 return self.values
+        
+        
+        #calculation_engine.harmonizeTimeSeries(self.dependencies)
         
         #Check if this variable is a timesum, in which case the executable is the equation INSIDE the timesum
         if self.is_timesum:
@@ -371,7 +387,7 @@ class Variable:
         if store_results:
             self.values = calculated_values
         return calculated_values
-
+    """
 
     def executePartialDerivative(self, dep_name, absolute_values=False, store_results=True, force_recalculation=False):
         """ Executes the partial derivative executable of the variable for a given dependency, optionally stores values in partial_values dictionary """
