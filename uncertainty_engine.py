@@ -8,8 +8,6 @@ class UncertaintyEngine:
         self.equation_engine = equation_engine
         self.calculation_engine = calculation_engine
         
-     
-        
     def _calculateDirectUncertainty(self, var):
         """ Calculates the magnitudes of the direct uncertainties for each source and returns these in an array; or 0 if there is no uncertainty """
         if len(var.uncertainty.direct_uncertainty_sources)==0:
@@ -77,8 +75,6 @@ class UncertaintyEngine:
             correlations.append(cor)
         return self._convertNestedListTo2DArray(correlations)
                 
-
-        
     def _getDependencyPartialsValues(self, var, equation_engine=None):
         """ Executes partial derivative executable builder form the equation engine and executes calculation of partial values, 
             returns dictionary of partial derivative values per dependency """
@@ -89,14 +85,12 @@ class UncertaintyEngine:
         partials_dict = var.executeAllPartials(absolute_values=True, store_results=False, force_recalculation=False)
         return partials_dict
     
-    
     def _convertNestedListTo2DArray(self, lst):
         """ Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array """
         max_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
         lst = [np.full(max_length, v) if np.isscalar(v) else v for v in lst]
         return np.vstack(lst).astype(float)
       
-    
     def calculateUncertainty(self, var, recurse=False):
         """ Calculates (the time series of) the total uncertainty of a variable 
             calculates total direct uncertainty from sources, calculates weighted contributions of dependencies from the equation
@@ -134,7 +128,6 @@ class UncertaintyEngine:
         #Flag variable uncertainty to be calculated
         var.uncertainty.is_calculated = True
         return var.uncertainty.total_uncertainty
-    
     
     def splitDirectUncertaintyContributions(self, var):
         """ Splits the fractional contribution to the direct uncertainty between the direct uncertainty sources """
@@ -178,8 +171,6 @@ class UncertaintyEngine:
                                                                                where=(total_sum!=0))
         return
     
-        
-    
     def splitToSourceContributions(self, var, recalculate=False):
         """ Splits uncertainty contributions down to all root uncertainty sources """
         if not var.uncertainty.is_calculated:
@@ -202,7 +193,6 @@ class UncertaintyEngine:
             self.splitDirectUncertaintyContributions(var)
         if var.uncertainty.total_direct_uncertainty_contribution is None or var.uncertainty.dependency_uncertainties_contributions is None:
             self.splitTotalUncertaintyContributions(var)
-        
             
         sources = []
         root_contributions_scaled = []
@@ -232,8 +222,6 @@ class UncertaintyEngine:
             var.uncertainty.root_uncertainty_contribution_split = self._convertNestedListTo2DArray(root_contributions_scaled)
             return var.uncertainty.root_uncertainty_sources, var.uncertainty.root_uncertainty_contribution_split
             
-        
-    
     def _correlationCalculationRequirementsHelper(self, var, auto_calculate, recurse, recalculate):
         """ check if necessary elements are already calculated, and optionally auto-calculate these """
         #If recalculate is True we simply recalculate all required elements here and return, otherwise we pass the regular checks
@@ -271,8 +259,6 @@ class UncertaintyEngine:
             else:
                 raise ValueError(f"Please calculate direct uncertainty contribution split for variable {var.name} before calculating correlation.")
         
-    
-    
     def calculateCorrelation(self, var, auto_calculate=False, recurse=True, recalculate=False):
         """ Calculates the correlation of the uncertainty for each timestep """
         #Check if correlation already calculated

@@ -30,7 +30,6 @@ class CalculationEngine:
                     #Calculate variable values, var.values is populated
                     self.executeVariableEquation(var, store_results=True)
         
-    
     def calculateValues(self, var, update_var=True, calculate_dependencies=True, silent=True, indent=""):
         """ Checks if the values of all dependencies are calculated, optionally calculates dependencies, and then calculates values of specified variable """
         if not silent:
@@ -47,7 +46,6 @@ class CalculationEngine:
         if not silent:
             print(f"{indent}Calculation of {var.name} complete, values: {var.values}")
         return values
-        
     
     def executeVariableEquation(self, var, store_results=True, force_recalculation=True):
         if var.equation is None:
@@ -195,8 +193,6 @@ class CalculationEngine:
             new_values /= factor
         return new_values
         
-        
-            
     def decreaseTemporalResolution(self, var, new_timestep, benchmark_time, smuggle_limit=0):
         """ Returns array of values for the new time resolution for a given variable, benchmark time is a specified border between 2 bins """
         #Check if temporal operations make sense for this variable (e.g. not a float)
@@ -225,7 +221,6 @@ class CalculationEngine:
         if new_end_time>var.end_time:
             if (new_end_time - var.end_time).total_seconds() > smuggle_limit:
                 new_end_time -= timedelta(seconds=new_timestep)
-        
         
         #Identify the factor increase
         factor = new_timestep / var.timestep
@@ -267,10 +262,8 @@ class CalculationEngine:
         print("New start, end")
         print(new_start_time)
         print(new_end_time)
-        
         return harmonization_data
         
-    
     def timeSum_NEW(self, var, calculated_values):
         """ Handles the timesum calculation for a variable
             timesums are dependent on the variable aggregation rules, which can be passed directly at definition or are inferred from dependencies
@@ -288,8 +281,6 @@ class CalculationEngine:
         else:
             calculated_values = np.average(calculated_values)
         return calculated_values
-    
-    
     
     def timeSum(self, var):
         """ Handles the timesum calculation for a variable

@@ -318,7 +318,6 @@ class Variable:
         else:
             return True
         
-        
     def hasDirectUncertainties(self):               ###!!! Name
         if len(self.direct_uncertainties) == 0:
             return False
@@ -333,14 +332,12 @@ class Variable:
             #self.direct_uncertainties.append(uncertainty)
             self.uncertainty.direct_uncertainty_sources.append(uncertainty)
             
-    
     def getTimeAxis(self):
         if isinstance(self.values, (float, int)):
             raise ValueError("Cannot construct time axis for variable {self.name}, since the variable is not time-dependent.")
         n = len(self.values)
         return [self.first_time + timedelta(seconds=i * self.timestep) for i in range(n)]
             
-    
     def addTimeStep(self, time_range):
         """ Given the time range (which are the times of first and last datapoint registrations) - calculates timestep length """
         self.first_time = time_range[0]
@@ -359,8 +356,6 @@ class Variable:
         if not self.timestep.is_integer():
             raise ValueError(f"Timestep {self.timestep} is not integer, please ensure timesteps are an integer amount of seconds!")
         self.timestep = int(self.timestep)
-    
-    
     
     def executeEquation(self, store_results=True, force_recalculation=False, calculation_engine=None):
         """ Tries to call given or internal equation engine to execute variable equation """

@@ -257,7 +257,6 @@ class VariableHandler:
             else:
                 raise ValueError(f"Timestep string {self.timestep} not recognized, please check input.")
     
-    
     def _uncertaintyParser(self, lines, i):
         """ Parses uncertainties block and dispatches uncertainty handler """
         while True:

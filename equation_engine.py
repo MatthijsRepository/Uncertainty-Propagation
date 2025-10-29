@@ -28,7 +28,6 @@ class EquationEngine:
                 derived_variables.append(name)
         return basic_variables, derived_variables
     
-    
     def _equationTimeSumExtracter(self, equation):
         """ Detects, extracts and subsequently removes top-level timesum expressions from equations
         returns list of top-level timesum expressions and a cleaned equation """
@@ -70,7 +69,6 @@ class EquationEngine:
         #Extend dependencies with regular variables left in the equation after top-level timesum statements are removed
         dependency_names.extend(re.findall(r"'(.*?)'", clean_eq))
         return list(set(dependency_names))
-    
     
     def populateVariableDependencyNames(self, variables=None):
         """ Updates listed dependency names for a variable set to only include those detected in the listed equation """
@@ -191,7 +189,6 @@ class EquationEngine:
             var = variables[name]
             self.populateVariableDependencies(var, variables)
     
-    
     def _deriveTimeSumIntegrationRule(self, var):
         """ Extract the aggregation rule for a timesum (or any variable) from the dependencies 
             we work through simple seniority: integration > summing > averaging > None
@@ -214,8 +211,6 @@ class EquationEngine:
         var.aggregation_rule = rule
         return 
         
-    
-    
     def _buildSymPySymbolMap(self, variables):
         """ builds a dictionary relating variable names to sympy symbols """
         if isinstance(variables, dict):
@@ -259,7 +254,6 @@ class EquationEngine:
         cleaned_equation = re.sub(" ", "", cleaned_equation)
         return cleaned_equation
         
-    
     def buildVariableExecutable(self, var, symbol_map=None):
         """ Builds equation executable of a given variable, potentially using a provided sympy symbol map """
         #If Symbol map is not provided, build one from the dependency names of the variable
@@ -292,7 +286,6 @@ class EquationEngine:
         if var.is_timesum:
             self._deriveTimeSumIntegrationRule(var)
         
-            
     def buildEquationTreeExecutables(self, variables=None):
         """ Goes through all derived variables in a variable set and builds their equation executables using SymPy """
         if variables is None:
@@ -306,7 +299,6 @@ class EquationEngine:
             var = variables[name]
             self.buildVariableExecutable(var, symbol_map)
         
-    
     def buildPartialDerivativeExecutables(self, var, force_rebuild=False):
         """ builds a dictionary of partial derivative executables for each dependency of a given variable """
         #If partials are already built and forced rebuilding is not selected, simpyl return immediately
