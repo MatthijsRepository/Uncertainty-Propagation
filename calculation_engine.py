@@ -122,7 +122,7 @@ class CalculationEngine:
             #Update the harmonized_data dictionary with pruned datasets
         return harmonized_dataset
     
-    def harmonizeTimeSeries(self, dependencies, var_name=None, smuggle_limit=120): ###!!!WARNING!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    def harmonizeTimeSeries(self, dependencies, var_name=None, smuggle_limit=0):
         dep_names, start_times, end_times, timesteps = [], [], [], []
         for dep in dependencies.values():
             if dep.timestep is not None:
