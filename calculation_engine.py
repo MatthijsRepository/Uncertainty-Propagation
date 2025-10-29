@@ -1,4 +1,4 @@
-from my_dataclasses import Variable
+from my_dataclasses import Variable, TimeHarmonizationData
 import datetime
 import numpy as np
 from datetime import timedelta
@@ -62,14 +62,14 @@ class CalculationEngine:
             else:
                 return var.values
         
-        harmonized_data = self.harmonizeTimeSeries(var.dependencies)
+        harmonized_data = self.harmonizeTimeSeries(var.dependencies, var_name=var.name)
         
         #If harmonized data is None, the dependencies are already time-harmonious (same range, timestep) and calculation can be performed directly
         if harmonized_data is None:
             args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
             calculated_values = var.executable(*args)
         else:
-            args = [harmonized_data[dep_name][0] if dep_name in harmonized_data.keys() else var.dependencies[dep_name] for dep_name in var.dependency_names]
+            args = [harmonized_data[dep_name].new_values if dep_name in harmonized_data.keys() else var.dependencies[dep_name] for dep_name in var.dependency_names]
             calculated_values = var.executable(*args)
             
         if var.is_timesum:
@@ -94,33 +94,37 @@ class CalculationEngine:
             return True
         else:
             return False
-        
-    def _pruneHarmonizedTimeSeriesTails(self, harmonized_data, common_start_time, common_end_time, new_timestep):
+            
+    def _pruneHarmonizedTimeSeriesTails(self, harmonized_dataset, new_timestep):
         """ Takes a dictionary of harmonized time series data and ensures all start times and end times match perfectly - prunes data that do not fall within the specified range """
         datetime_timestep = timedelta(seconds=new_timestep)
         
-        for (dep_name, data) in harmonized_data.items():
-            values = data[0]
-            data = data[1]
+        #Extract common start, end time
+        start_times, end_times = [], []
+        for harmonized_data in harmonized_dataset.values():
+            start_times.append(harmonized_data.new_start_time)
+            end_times.append(harmonized_data.new_end_time)
+        common_start_time = max(start_times)
+        common_end_time   = min(end_times)
+        
+        for harmonized_data in harmonized_dataset.values():
+            print(f"PRUNING {harmonized_data.dep_var_name}")
             #Prune start
-            offset_steps = int((common_start_time - data["start_time"]) / datetime_timestep)
+            offset_steps = int((common_start_time - harmonized_data.new_start_time) / datetime_timestep)
             if offset_steps>0:
-                values = values[offset_steps:]
-                data["start_time"] += offset_steps * datetime_timestep
-                data["first_time"] += offset_steps * datetime_timestep
-                data["prune_offset_steps"] = offset_steps
+                harmonized_data.new_values              = harmonized_data.new_values[offset_steps:]
+                harmonized_data.new_start_time          += offset_steps * datetime_timestep
+                harmonized_data.prune_offset_start      = offset_steps
             #Prune tail
-            offset_steps_end = int((data["end_time"] - common_end_time) / datetime_timestep)
+            offset_steps_end = int((harmonized_data.new_end_time - common_end_time) / datetime_timestep)
             if offset_steps_end>0:
-                values = values[:-offset_steps_end]
-                data["end_time"] -= offset_steps_end * datetime_timestep
-                data["last_time"] -= offset_steps_end * datetime_timestep
-                data["prune_offset_steps_end"] = offset_steps_end
+                harmonized_data.new_values              = harmonized_data.new_values[:-offset_steps_end]
+                harmonized_data.new_end_time            -= offset_steps_end * datetime_timestep
+                harmonized_data.prune_offset_end        = offset_steps_end
             #Update the harmonized_data dictionary with pruned datasets
-            harmonized_data[dep_name] = (values, data)
-        return harmonized_data
+        return harmonized_dataset
     
-    def harmonizeTimeSeries(self, dependencies):
+    def harmonizeTimeSeries(self, dependencies, var_name=None, smuggle_limit=120): ###!!!WARNING!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         dep_names, start_times, end_times, timesteps = [], [], [], []
         for dep in dependencies.values():
             if dep.timestep is not None:
@@ -136,22 +140,23 @@ class CalculationEngine:
         if self._checkTimeSeriesHarmony(start_times, end_times, timesteps):
             return None
         
-        #Determine LCM timestep and time range in which all dependencies are defined
+        #Determine LCM timestep
         new_timestep = float(np.lcm.reduce(timesteps))
-        common_start_time = max(start_times)
-        common_end_time = min(end_times)
 
         #We take as benchmark time the start time of the dataset with the biggest timestep
-        #benchmark_time = start_times[np.argmin(timesteps)]
-        benchmark_time = common_start_time
-        print("Warning: benchmark time is common start time")
+        benchmark_time = start_times[np.argmax(timesteps)]
+        print(f"Warning: benchmark time for harmonization is start time of variable with biggest timestep: {benchmark_time}")
+        #benchmark_time = common_start_time
+        #print(f"Warning: benchmark time is common start time: {benchmark_time}")
         ###!!!
         
         harmonized_data = {}
         for dep_name in dep_names:
-            harmonized_data[dep_name] = self.decreaseTemporalResolution(dependencies[dep_name], new_timestep, benchmark_time=benchmark_time)
-            #each entry is a tuple (values, time_metadata)
-        harmonized_data = self._pruneHarmonizedTimeSeriesTails(harmonized_data, common_start_time, common_end_time, new_timestep)
+            temp_harmonization_data = self.decreaseTemporalResolution(dependencies[dep_name], new_timestep, benchmark_time=benchmark_time, smuggle_limit=smuggle_limit)
+            temp_harmonization_data.target_var_name = var_name
+            harmonized_data[dep_name] = temp_harmonization_data
+            #each entry is a TimeHarmonizationData object
+        harmonized_data = self._pruneHarmonizedTimeSeriesTails(harmonized_data, new_timestep)
         return harmonized_data
     
     def _rebinTimeSeries(self, var, low_index, high_index, low_fraction, high_fraction, factor):
@@ -238,33 +243,32 @@ class CalculationEngine:
 
         new_values = self._rebinTimeSeries(var, low_index, high_index, low_fraction, high_fraction, factor)
         
+        harmonization_data = TimeHarmonizationData(
+            dep_var_name    = var.name,
+            base_timestep   = var.timestep,
+            new_timestep    = var.timestep * factor,
+            new_start_time  = new_start_time,
+            new_end_time    = new_end_time,
+            low_fraction    = low_fraction,
+            high_fraction   = high_fraction,
+            upsample_factor = factor,
+            new_values      = new_values)
+        
         print()
+        print(f"Variable: {var.name}")
         print(new_values)
-        print(high_index)
-        print(offset_steps)
-        print(offset_steps_end)
+        print(f"Low index, high index: {low_index}, {high_index}")
+        print(f"Offset steps start: {offset_steps}, end: {offset_steps_end}")
         #print(offset_steps)
         #print(offset_steps_end)
+        print("Old start, end")
         print(var.start_time)
         print(var.end_time)
+        print("New start, end")
         print(new_start_time)
         print(new_end_time)
         
-        new_time_metadata = {
-            "start_time"    : new_start_time,
-            "end_time"      : new_end_time,
-            "first_time"    : new_start_time + timedelta(seconds=new_timestep/2),
-            "last_time"     : new_end_time - timedelta(seconds=new_timestep/2),
-            "timestep"      : new_timestep,
-            "factor"        : factor,
-            "low_fraction"  : low_fraction,
-            "low_index"     : low_index,
-            "high_index"    : high_index,
-            "prune_offset_steps"     : None,
-            "prune_offset_steps_end" : None}
-        
-        
-        return new_values, new_time_metadata
+        return harmonization_data
         
     
     def timeSum_NEW(self, var, calculated_values):
@@ -276,7 +280,7 @@ class CalculationEngine:
             #try to extract a timestep from the dependencies
             for dep in var.dependencies.values():           ###!!! not robust!!!
                 if dep.timestep is not None:
-                    timestep = dep.timestep
+                    timestep = dep.timestep   ###!!! WRONG
                     break
             calculated_values = np.sum(calculated_values) * timestep
         elif var.aggregation_rule == "sum":

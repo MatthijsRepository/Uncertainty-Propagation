@@ -12,6 +12,29 @@ class CSVData:
     data: dict
     timestep: Optional[float] = None
     time_range: Optional[list] = None
+    
+
+@dataclass
+class TimeHarmonizationData:
+    dep_var_name:       str         #Name of the affected variable
+    base_timestep:      float       #Original timestep of the variable
+    new_timestep:       float       #New timestep of the variable
+    new_start_time:     datetime    #New start time
+    new_end_time:       datetime    #New end time
+    low_fraction:       int         #If a new bin stretches from bin i to bin i+n, fraction of original bin i to include in new bin
+    high_fraction:      int         #Identical as above, but for bin i+n. high_fraction = 1-low_fraction: we assume integer upsample factors
+    upsample_factor:    int         #Factor increase of new bin size compared to old bin size
+    target_var_name:    Optional[str]   = None         #Name of the derived variable that required harmonization of dependencies
+    new_values:         Optional[Union[np.ndarray, float]] = None   #Can be used to store new values
+    prune_offset_start: Optional[int]   = None         #Number of new timesteps that are discarded at start to ensure a common start time
+    prune_offset_end:   Optional[int]   = None         #Number of new timesteps that are discarded at end to ensure a common end time
+    #smuggled_time:      Optional[float] = None         #Amount of seconds that  were smuggled during rebinning
+    
+    def getFirstLastTimes(self):
+        first_time = self.new_start_time + timedelta(seconds=self.new_timestep/2)
+        last_time  = self.new_end_time - timedelta(seconds=self.new_timestep/2)
+        return first_time, last_time
+    
 
 
 @dataclass
@@ -68,9 +91,6 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     direct_uncertainties_contributions:     Optional[Union[np.ndarray, float]] = None    #array or float containing the fractional split of relative weight to total uncertainty per direct source (per timestep)
     total_direct_uncertainty_contribution:  Optional[Union[np.ndarray, float]] = None    #array or float containing relative contribution of direct sources to total uncertainty - which includes that form dependencies (per timestep)
     #total_direct_uncertainty:               Optional[Union[np.ndarray, float]] = None  
-    
-    #dependency_uncertainties:               Optional[dict] = None                      ###!!!
-    #dependency_uncertainty_contributions:   Optional[Union[np.ndarray, float]] = None
     
     dependency_uncertainty_names:           Optional[list] = None                        #list of names of all dependencies
     weighted_dependency_uncertainties:      Optional[np.ndarray] = None                  #array, per dependency contains its total uncertainty times the sensitivity to this dependency (u_i * dvar/di) (per timestep)
@@ -164,46 +184,43 @@ class Variable:
     def __init__(self, name, description=None, values=None, is_basic=True, aggregation_rule=None, \
                  equation=None, dependency_names=None, first_time=None, last_time=None, \
                      is_timesum=False, timesum_settings=None):
-        self.name = name                    #str: variable name
-        self.description = description      #str: variable description
-        self.is_basic = is_basic            #bool: defines whether variable is basic or derived
-        self.aggregation_rule = aggregation_rule      #str: defines the quantity aggregation rule
+        self.name               = name              #str: variable name
+        self.description        = description       #str: variable description
+        self.is_basic           = is_basic          #bool: defines whether variable is basic or derived
+        self.aggregation_rule   = aggregation_rule  #str: defines the quantity aggregation rule
         
-        self.values = values                #[int, float, array, None]: variable values
-        self.partial_values = {}            #dict: dictionary of values of the evaluated partial derivatives of this variable with respect to each dependency
+        self.values             = values            #[int, float, array, None]: variable values
+        self.partial_values     = {}                #dict: dictionary of values of the evaluated partial derivatives of this variable with respect to each dependency
 
         #If it is a derived variable then an equation and constituent variables should be passed
         if not self.is_basic:
             if equation is None:
                 raise ValueError(f"{self.name} is defined as a derived variable, please include equation")
-        self.equation = equation            #str: defines variable equation
-        self.dependency_names = dependency_names      #list: lists variables in equation
-        self.dependencies = {}              #dict: dict of variables that are the direct dependencies
-        self.is_root_consistent = False     #bool: whether the variable traces consistently to basic variables
+        self.equation           = equation          #str: defines variable equation
+        self.dependency_names   = dependency_names  #list: lists variables in equation
+        self.dependencies       = {}                #dict: dict of variables that are the direct dependencies
+        self.is_root_consistent = False             #bool: whether the variable traces consistently to basic variables
         
-        self.is_timesum = is_timesum        #bool: defines whether variable is a timesum
-        self.timesum_settings = timesum_settings #list of options
+        self.is_timesum         = is_timesum       #bool: defines whether variable is a timesum
+        self.timesum_settings   = timesum_settings #list of options
         
-        self.sympy_symbol_map = None        #dict: dictionary of sympy symbols
-        self.sympy_equation = None          #sympy interpretable of the variable equation
-        self.executable = None              #executable: sympy-built executable of the variable equation - excluding timesums
+        self.sympy_symbol_map   = None      #dict: dictionary of sympy symbols
+        self.sympy_equation     = None      #sympy interpretable of the variable equation
+        self.executable         = None      #executable: sympy-built executable of the variable equation - excluding timesums
         self.partial_executables = None     #dict: dictionary of executables for the partial derivates of the variable for each dependency
         self.calculation_engine = None      #calculation engine: necessary for more complex calculations
                 
-        self.first_time = None              #datetime object: time of the first datapoint
-        self.last_time = None               #datetime object: time of the last datapoint
         if first_time is not None and last_time is not None:
-            self.addTimeStep([first_time, last_time])        #float: number of seconds per timestep
+            self.addTimeStep([first_time, last_time])        
         else:
-            self.timestep = None                
+            self.first_time    = None              #datetime object: time of the first datapoint
+            self.last_time     = None              #datetime object: time of the last datapoint
+            self.timestep      = None              #float:           number of seconds per timestep
         
-        self.uncertainty = VariableUncertainty(var_name=self.name, variable=self)
+        self.uncertainty       = VariableUncertainty(var_name=self.name, variable=self)
         
-        #self.direct_uncertainty_sources = []        #list: lists uncertainties of variable
-        #self.direct_uncertainties = None            #array: array of direct uncertainty magnitudes, 
-        #if not self.is_basic:
-        #    self.dependency_uncertainties = {}      #dict: per dependency contains total uncertainty information
-        #self.total_uncertainty = None       #[float, array]: total uncertainty of variable (per timestep)
+        self.harmonization_cache = {} #Holds time harmonization info
+        
     
     
     def __str__(self):
