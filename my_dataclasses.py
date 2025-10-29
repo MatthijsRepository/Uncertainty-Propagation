@@ -337,6 +337,22 @@ class Variable:
             raise ValueError("Cannot construct time axis for variable {self.name}, since the variable is not time-dependent.")
         n = len(self.values)
         return [self.first_time + timedelta(seconds=i * self.timestep) for i in range(n)]
+    
+    def getTimeData(self):
+        if self.timestep is None:
+            return None
+        else:
+            return (self.start_time, self.end_time, self.timestep, self.first_time, self.last_time)
+    
+    def setTimeData(self, time_data):
+        if time_data is None:
+            return
+        elif len(time_data)==3:
+            self.start_time, self.end_time, self.timestep = time_data
+            self.first_time = self.start_time + timedelta(seconds=self.timestep/2)
+            self.last_time = self.end_time - timedelta(seconds=self.timestep/2)
+        else:
+            self.start_time, self.end_time, self.timestep, self.first_time, self.last_time = time_data 
             
     def addTimeStep(self, time_range):
         """ Given the time range (which are the times of first and last datapoint registrations) - calculates timestep length """
