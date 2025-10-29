@@ -64,17 +64,24 @@ class CalculationEngine:
         
         harmonized_data = self.harmonizeTimeSeries(var.dependencies)
         
-        #if harmonized_data is None:
-        #    calculated_values 
-        
         #If harmonized data is None, the dependencies are already time-harmonious (same range, timestep) and calculation can be performed directly
-        
+        if harmonized_data is None:
+            args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
+            calculated_values = var.executable(*args)
+        else:
+            args = [harmonized_data[dep_name][0] if dep_name in harmonized_data.keys() else var.dependencies[dep_name] for dep_name in var.dependency_names]
+            calculated_values = var.executable(*args)
+            
+        if var.is_timesum:
+            calculated_values = self.timeSum_NEW(var, calculated_values)
+        """
         #Check if this variable is a timesum, in which case the executable is the equation INSIDE the timesum
         if var.is_timesum:
             calculated_values = self.timeSum(var)
         else:
             args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
             calculated_values = var.executable(*args)
+        """
         
         #Optionally store the result as the new variable values
         if store_results:
@@ -143,6 +150,7 @@ class CalculationEngine:
         harmonized_data = {}
         for dep_name in dep_names:
             harmonized_data[dep_name] = self.decreaseTemporalResolution(dependencies[dep_name], new_timestep, benchmark_time=benchmark_time)
+            #each entry is a tuple (values, time_metadata)
         harmonized_data = self._pruneHarmonizedTimeSeriesTails(harmonized_data, common_start_time, common_end_time, new_timestep)
         return harmonized_data
     
@@ -173,8 +181,9 @@ class CalculationEngine:
             else:
                 #General bin handling
                 new_values[i] = np.sum(var.values[start:start+factor-1])
-                new_values[i] += var.values[start-1] * low_fraction
+                new_values[i] += var.values[start] * low_fraction
                 new_values[i] += var.values[start+factor-1] * high_fraction
+
         
         #If aggregation rule is average, we take the time average
         if var.aggregation_rule == "average":
@@ -189,16 +198,22 @@ class CalculationEngine:
         if isinstance(var.values, float):
             raise ValueError(f"Rebinning of variable {var.name} terminated, variable is a constant.")
         
+        print("TEMPORAL RESOLUTION INCREASE: TEST")
+        
         #We calculate the new start and end times by seeing where bin limits - given the benchmark - fit in the previous timerange
         #Note: we allow to smuggle a specified amount; to allow manual avoiding of instances where an hour of data is discarded based on a small time mismatch.
+        #We calculate the difference between the benchmark time and the start time (negative if benchmark time > start time)
         delta_start = (var.start_time - benchmark_time).total_seconds()
+        #We calculate how many new timesteps can be taken down from the benchmark time until we are at the supremum step under the actual start time
         offset_steps = np.floor(delta_start/new_timestep)
+        #Declare new start time as this time
         new_start_time = benchmark_time + timedelta(seconds=offset_steps * new_timestep)
+        #Check whether this start time (at or under the actual start time) falls within the smuggle limit, if not, we increase by 1 timestep so we are within the allowed limit
         if new_start_time<var.start_time:
             if (var.start_time - new_start_time).total_seconds() > smuggle_limit:
                 new_start_time += timedelta(seconds=new_timestep)
                 
-        
+        #Same procedure but opposite logic
         delta_end = (var.end_time - benchmark_time).total_seconds()
         offset_steps_end = np.ceil(delta_end / new_timestep)
         new_end_time = benchmark_time + timedelta(seconds=offset_steps_end * new_timestep)
@@ -224,6 +239,10 @@ class CalculationEngine:
         new_values = self._rebinTimeSeries(var, low_index, high_index, low_fraction, high_fraction, factor)
         
         print()
+        print(new_values)
+        print(high_index)
+        print(offset_steps)
+        print(offset_steps_end)
         #print(offset_steps)
         #print(offset_steps_end)
         print(var.start_time)
@@ -247,6 +266,26 @@ class CalculationEngine:
         
         return new_values, new_time_metadata
         
+    
+    def timeSum_NEW(self, var, calculated_values):
+        """ Handles the timesum calculation for a variable
+            timesums are dependent on the variable aggregation rules, which can be passed directly at definition or are inferred from dependencies
+            aggregation rules work with simple seniority: presence of integrate > add > average """
+        #Time aggregation happens according to the variable aggregation rule
+        if var.aggregation_rule == "integrate":
+            #try to extract a timestep from the dependencies
+            for dep in var.dependencies.values():           ###!!! not robust!!!
+                if dep.timestep is not None:
+                    timestep = dep.timestep
+                    break
+            calculated_values = np.sum(calculated_values) * timestep
+        elif var.aggregation_rule == "sum":
+            calculated_values = np.sum(calculated_values)
+        else:
+            calculated_values = np.average(calculated_values)
+        return calculated_values
+    
+    
     
     def timeSum(self, var):
         """ Handles the timesum calculation for a variable
