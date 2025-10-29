@@ -41,11 +41,14 @@ class CalculationEngine:
                 raise ValueError(f"Calculation of variable {var.name} failed: dependency {dep.name} has no values defined and automatic dependency calculation is turned off.")
             else:
                 self.calculateValues(dep, update_var=update_var, silent=silent, indent=f"   {indent}")
+                
         #values = var.executeEquation(store_results=update_var, calculation_engine=self)
         values = self.executeVariableEquation(var, store_results=update_var)
+        
+        
         if not silent:
             print(f"{indent}Calculation of {var.name} complete, values: {var.values}")
-        return values
+        return values   
     
     def executeVariableEquation(self, var, store_results=True, force_recalculation=True):
         if var.equation is None:
@@ -60,41 +63,52 @@ class CalculationEngine:
             else:
                 return var.values
         
-        harmonized_data = self.harmonizeTimeSeries(var.dependencies, var_name=var.name)
-        
-        #If harmonized data is None, the dependencies are already time-harmonious (same range, timestep) and calculation can be performed directly
-        if harmonized_data is None:
+        ###!!!
+        #Check if the dependencies are already time-harmonious or time-independent and the equation can be executed directly
+        is_harmonious, timedata = self._checkDependencyTimeHarmony(var.dependencies)
+        if is_harmonious:
             args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
             calculated_values = var.executable(*args)
         else:
+            #Check if the harmonization is already performed
+            harmonized_data, timedata = self.harmonizeTimeSeries(var.dependencies, var_name=var.name)
             args = [harmonized_data[dep_name].new_values if dep_name in harmonized_data.keys() else var.dependencies[dep_name] for dep_name in var.dependency_names]
             calculated_values = var.executable(*args)
-            
+        
+        #Time aggregation if the variable is a timesum
         if var.is_timesum:
-            calculated_values = self.timeSum_NEW(var, calculated_values)
-        """
-        #Check if this variable is a timesum, in which case the executable is the equation INSIDE the timesum
-        if var.is_timesum:
-            calculated_values = self.timeSum(var)
-        else:
-            args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
-            calculated_values = var.executable(*args)
-        """
+            calculated_values = self.timeSum_NEW(var, calculated_values) ###!!!
+            timedata = None
         
         #Optionally store the result as the new variable values
         if store_results:
             var.values = calculated_values
+            var.setTimeData(timedata)
         return calculated_values
     
-    def _checkTimeSeriesHarmony(self, start_times, end_times, timesteps):
-        """ If all start times, end times and timesteps are the same, the time series are harmonious and no further action will be required """
-        if len(set(start_times))==1 and len(set(end_times))==1 and len(set(timesteps))==1:
-            return True
+    
+    def _checkDependencyTimeHarmony(self, dependencies):
+        """ Checks if a set of dependencies is time-harmonious """
+        start_times, end_times, timesteps = [], [], []
+        for dep in dependencies.values():
+            if dep.timestep is not None:
+                start_times.append(dep.start_time)
+                end_times.append(dep.end_time)
+                timesteps.append(dep.timestep)
+        #If no timestep was retrieved we are dealing exclusively with constants:
+        if len(timesteps)==0:
+            return True, None
+        #If all start times, end times and timesteps are the same, the time series are harmonious
+        elif len(set(start_times))==1 and len(set(end_times))==1 and len(set(timesteps))==1:
+            return True, (start_times[0], end_times[0], timesteps[0])
+        #Otherwise the dpeendencies are not time-harmonious
         else:
-            return False
-            
+            return False, None
+                    
     def _pruneHarmonizedTimeSeriesTails(self, harmonized_dataset, new_timestep):
-        """ Takes a dictionary of harmonized time series data and ensures all start times and end times match perfectly - prunes data that do not fall within the specified range """
+        """ Takes a dictionary of harmonized time series data and ensures all start times and end times match perfectly,
+            prunes data from the harmonized dataset that do not fall within the common timerange. 
+            Returns updated dataset and a tuple of the common start time, end time and timestep """
         datetime_timestep = timedelta(seconds=new_timestep)
         
         #Extract common start, end time
@@ -106,7 +120,6 @@ class CalculationEngine:
         common_end_time   = min(end_times)
         
         for harmonized_data in harmonized_dataset.values():
-            print(f"PRUNING {harmonized_data.dep_var_name}")
             #Prune start
             offset_steps = int((common_start_time - harmonized_data.new_start_time) / datetime_timestep)
             if offset_steps>0:
@@ -120,23 +133,15 @@ class CalculationEngine:
                 harmonized_data.new_end_time            -= offset_steps_end * datetime_timestep
                 harmonized_data.prune_offset_end        = offset_steps_end
             #Update the harmonized_data dictionary with pruned datasets
-        return harmonized_dataset
+        return harmonized_dataset, (common_start_time, common_end_time, new_timestep)
     
     def harmonizeTimeSeries(self, dependencies, var_name=None, smuggle_limit=0):
-        dep_names, start_times, end_times, timesteps = [], [], [], []
+        dep_names, start_times, timesteps = [], [], []
         for dep in dependencies.values():
             if dep.timestep is not None:
                 dep_names.append(dep.name)
                 start_times.append(dep.start_time)
-                end_times.append(dep.end_time)
                 timesteps.append(dep.timestep)
-        
-        #If dependencies are all time-independent we can simply stop here
-        if len(timesteps)==0:
-            return None
-        #If time series are all harmonious we can simply stop here
-        if self._checkTimeSeriesHarmony(start_times, end_times, timesteps):
-            return None
         
         #Determine LCM timestep
         new_timestep = float(np.lcm.reduce(timesteps))
@@ -154,8 +159,8 @@ class CalculationEngine:
             temp_harmonization_data.target_var_name = var_name
             harmonized_data[dep_name] = temp_harmonization_data
             #each entry is a TimeHarmonizationData object
-        harmonized_data = self._pruneHarmonizedTimeSeriesTails(harmonized_data, new_timestep)
-        return harmonized_data
+        harmonized_data, new_timedata = self._pruneHarmonizedTimeSeriesTails(harmonized_data, new_timestep)
+        return harmonized_data, new_timedata
     
     def _rebinTimeSeries(self, var, low_index, high_index, low_fraction, high_fraction, factor):
         """ Handles rebinning of variable time series data into a new timeseries of greater granularity 
@@ -198,8 +203,6 @@ class CalculationEngine:
         #Check if temporal operations make sense for this variable (e.g. not a float)
         if isinstance(var.values, float):
             raise ValueError(f"Rebinning of variable {var.name} terminated, variable is a constant.")
-        
-        print("TEMPORAL RESOLUTION INCREASE: TEST")
         
         #We calculate the new start and end times by seeing where bin limits - given the benchmark - fit in the previous timerange
         #Note: we allow to smuggle a specified amount; to allow manual avoiding of instances where an hour of data is discarded based on a small time mismatch.
@@ -249,6 +252,7 @@ class CalculationEngine:
             upsample_factor = factor,
             new_values      = new_values)
         
+        """
         print()
         print(f"Variable: {var.name}")
         print(new_values)
@@ -262,6 +266,7 @@ class CalculationEngine:
         print("New start, end")
         print(new_start_time)
         print(new_end_time)
+        """
         return harmonization_data
         
     def timeSum_NEW(self, var, calculated_values):
