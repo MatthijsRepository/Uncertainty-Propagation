@@ -109,6 +109,17 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
         #self.dependency_uncertainties = {}                                         ###!!!
         
         """ Handle initialization of non-inputs here! """
+    
+    def reset(self):
+        self.direct_uncertainties                   = None
+        self.direct_uncertainties_contributions     = None
+        self.total_direct_uncertainty_contribution  = None
+        self.weighted_dependency_uncertainties      = None
+        self.dependency_uncertainties_contributions = None
+        self.root_uncertainty_contribution_split    = None
+        self.total_uncertainty                      = None
+        self.correlation                            = None
+        self.is_calculated                          = False
         
     def getSourceNames(self):
         """ Returns list of names of all direct uncertainty sources """
@@ -219,7 +230,7 @@ class Variable:
         
         self.uncertainty       = VariableUncertainty(var_name=self.name, variable=self)
         
-        self.harmonization_cache = {} #Holds time harmonization info
+        self.harmonization_cache = None #Holds time harmonization info
         
     
     
@@ -353,6 +364,17 @@ class Variable:
             self.last_time = self.end_time - timedelta(seconds=self.timestep/2)
         else:
             self.start_time, self.end_time, self.timestep, self.first_time, self.last_time = time_data 
+            
+    def printTimeData(self):
+        if self.is_timesum:
+            print(f"Variable {self.name} is a timesum, thus it has no time data.")
+            return
+        elif self.timestep is None:
+            print(f"Variable {self.name} has no time data and is therefore either not initialized, or a constant.")
+            return
+        else:
+            print(f"Variable {self.name} is a time series. \nTime range: {self.start_time} - {self.end_time} with timestep {self.timestep}. Total number of datapoints: {len(self.values)}.")
+            return
             
     def addTimeStep(self, time_range):
         """ Given the time range (which are the times of first and last datapoint registrations) - calculates timestep length """
