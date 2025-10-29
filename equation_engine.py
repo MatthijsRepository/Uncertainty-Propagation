@@ -189,7 +189,7 @@ class EquationEngine:
             var = variables[name]
             self.populateVariableDependencies(var, variables)
     
-    def _deriveTimeSumIntegrationRule(self, var):
+    def _deriveTimeSumIntegrationRule(self, var): ###!!! Rename to deriveVariableAggregationRule
         """ Extract the aggregation rule for a timesum (or any variable) from the dependencies 
             we work through simple seniority: integration > summing > averaging > None
             Note: if an explicit aggregation rule is hard-specified in input, the function will automatically quit immediately """
