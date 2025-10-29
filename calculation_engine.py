@@ -72,7 +72,12 @@ class CalculationEngine:
             calculated_values = var.executable(*args)
         else:
             #Check if the harmonization is already performed
-            harmonized_data, timedata = self.harmonizeTimeSeries(var.dependencies, var_name=var.name)
+            if var.harmonization_cache is not None and force_recalculation is False:
+                harmonized_data = var.harmonization_cache
+                timedata = var.getTimeData()
+            #Else: perform time harmonization
+            else:
+                harmonized_data, timedata = self.harmonizeTimeSeries(var.dependencies, var_name=var.name)
             args = [harmonized_data[dep_name].new_values if dep_name in harmonized_data.keys() else var.dependencies[dep_name] for dep_name in var.dependency_names]
             calculated_values = var.executable(*args)
         
