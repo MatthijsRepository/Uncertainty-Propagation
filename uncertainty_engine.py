@@ -308,17 +308,76 @@ class UncertaintyEngine:
         
         return
     
-    def timeAggregateCorrelation(self, var):
+    def timeAggregateCorrelation(self, var, harmonization_data):
+        """ Handles rebinning of correlation data into a new correlation data of greater granularity 
+            Allows for fractional splitting of old bins between two new bins
+            NOTE: this function is almost an exact copy of the method in the calculation engine!!! """
+        low_index, high_index       = harmonization_data.low_index, harmonization_data.high_index
+        low_fraction, high_fraction = harmonization_data.low_fraction, harmonization_data.high_fraction
+        factor                      = harmonization_data.upsample_factor
         
-        # Time aggregate the correlation
-        
-        return
+        #Note: function cannot handle full time aggregation - use timesum for that
+        new_correlation = np.zeros( int((high_index-low_index)/factor) )
+        if len(new_correlation)==1:
+            raise ValueError("Aggregating correlation data into a single bin currently not supported. - Timesum calling not implemented yet") ###!!!
+
+        #Note: new bins can contain fractions of old bins - thus our loop should start on the same bin as the previous iteration ended on
+        #Since new bin i can for instance include 2/3 of old bin j, then new bin i+1 should contain 1/3 of old bin j!
+        for i in range(len(new_correlation)):
+            start = low_index + i*factor
+            if start < 0:
+                #First bin handling
+                new_correlation[i] = np.sum(var.uncertainty.correlation[:start+factor])
+                new_correlation[i] += abs(low_index)-1 * var.uncertainty.correlation[0]
+                new_correlation[i] += var.uncertainty.correlation[0] * low_fraction
+                new_correlation[i] += var.uncertainty.correlation[start+factor] * high_fraction
+            elif start + factor-1 >= len(var.uncertainty.correlation):
+                #Last bin handling
+                new_correlation[i] = np.sum(var.uncertainty.correlation[start:])
+                new_correlation[i] += var.uncertainty.correlation[start-1] * low_fraction
+                new_correlation[i] += (high_index - len(var.uncertainty.correlation)-1) * var.uncertainty.correlation[-1]
+                new_correlation[i] += var.uncertainty.correlation[-1] * high_fraction
+            else:
+                #General bin handling
+                new_correlation[i] = np.sum(var.uncertainty.correlation[start:start+factor-1])
+                new_correlation[i] += var.uncertainty.correlation[start] * low_fraction
+                new_correlation[i] += var.uncertainty.correlation[start+factor-1] * high_fraction
+
+        #We average the correlation - as is done in the excel spreadsheet
+        new_correlation /= factor
+        return new_correlation
     
     
     
     
     def partialAggregation(self, var, harmonization_data):
+        """ Performs time-aggregation by temporal subspaces, defined by the harmonization_data dataclass """
+        
+        #Check if we have to include fractional parts
+        #If so, we immediately fail
+        if harmonization_data.low_fraction != 1:
+            raise ValueError("Partial uncertainty aggregation of variable {var.name} failed: cannot handle fractional rebinning for uncertainty!")
+            
+        new_length = int((harmonization_data.high_index - harmonization_data.low_index) / harmonization_data.upsample_factor)
+        print(new_length)
+        
+        uncertainty_segments = var.uncertainty.total_uncertainty[harmonization_data.low_index:harmonization_data.high_index].reshape((new_length, harmonization_data.upsample_factor))
+        
+        correlation_matrices = var.uncertainty.correlation[harmonization_data.low_index:harmonization_data.high_index].reshape((new_length, 1, harmonization_data.upsample_factor))
+        correlation_matrices = np.repeat(correlation_matrices, repeats=harmonization_data.upsample_factor, axis=1)
+        correlation_matrices[:,np.eye(harmonization_data.upsample_factor,dtype=bool)] = 1
+        
+        new_uncertainties = np.matvec(correlation_matrices, uncertainty_segments)   #Mv
+        new_uncertainties = np.vecdot(uncertainty_segments, new_uncertainties)      #v^T (Mv)
+        new_uncertainties = np.sqrt(new_uncertainties)
+        new_correlations = np.average(var.uncertainty.correlation[harmonization_data.low_index:harmonization_data.high_index].reshape((new_length, harmonization_data.upsample_factor)), axis=1)
+        
+        
+        print(new_uncertainties/1000 * 60 * 2)
         #new_bins = 
+        print('WARNING: at the moment we do incorrect inclusion of time')
+        
+        
         return
     
     
