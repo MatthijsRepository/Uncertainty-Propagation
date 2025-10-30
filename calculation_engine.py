@@ -88,7 +88,7 @@ class CalculationEngine:
         if var.is_timesum:
             non_aggregated_values = calculated_values
             calculated_values     = self.timeSum(var, calculated_values, timedata) ###!!!
-            aggregation_step      = timedata[2]
+            aggregation_step      = timedata[-1]
             timedata              = None
         
         #Optionally store the result as the new variable values
@@ -180,12 +180,12 @@ class CalculationEngine:
                 new_start_time += timedelta(seconds=new_timestep)
                 
         #Same procedure but opposite logic
-        delta_end = (var.end_time - benchmark_time).total_seconds()
+        delta_end = (var.last_time - benchmark_time).total_seconds()
         offset_steps_end = np.ceil(delta_end / new_timestep)
-        new_end_time = benchmark_time + timedelta(seconds=offset_steps_end * new_timestep)
-        if new_end_time>var.end_time:
-            if (new_end_time - var.end_time).total_seconds() > smuggle_limit:
-                new_end_time -= timedelta(seconds=new_timestep)
+        new_last_time = benchmark_time + timedelta(seconds=offset_steps_end * new_timestep)
+        if new_last_time>var.last_time:
+            if (new_last_time - var.last_time).total_seconds() > smuggle_limit:
+                new_last_time -= timedelta(seconds=new_timestep)
         
         #Identify the factor increase
         factor = new_timestep / var.timestep
@@ -198,7 +198,7 @@ class CalculationEngine:
         low_index = int((new_start_time - var.start_time).total_seconds() // var.timestep)
         low_fraction = 1 - ((new_start_time - var.start_time).total_seconds() / var.timestep - low_index)
         #Identify last index to include in last bin
-        high_index = int((new_end_time - var.end_time).total_seconds() // var.timestep) + len(var.values)
+        high_index = int((new_last_time - var.last_time).total_seconds() // var.timestep) + len(var.values)
         high_fraction = 1-low_fraction  ### WARNING: we assume new timestep is always an integer multiple of the old timestep. If this is not the case, this method does not work
 
         return TimeHarmonizationData(
@@ -206,7 +206,7 @@ class CalculationEngine:
             base_timestep   = var.timestep,
             new_timestep    = var.timestep * factor,
             new_start_time  = new_start_time,
-            new_end_time    = new_end_time,
+            new_last_time   = new_last_time,
             low_index       = low_index,
             high_index      = high_index,
             low_fraction    = low_fraction,
@@ -221,7 +221,7 @@ class CalculationEngine:
         #Update the values of the actual variable
         if update_var:
             var.values = harmonization_data.new_values
-            var.setTimeData((harmonization_data.new_start_time, harmonization_data.new_end_time, harmonization_data.new_timestep))
+            var.setTimeData((harmonization_data.new_start_time, harmonization_data.new_last_time, harmonization_data.new_timestep))
             var.uncertainty.reset()
         return harmonization_data
     
@@ -267,18 +267,18 @@ class CalculationEngine:
     
     def _checkDependencyTimeHarmony(self, dependencies):
         """ Checks if a set of dependencies is time-harmonious """
-        start_times, end_times, timesteps = [], [], []
+        start_times, last_times, timesteps = [], [], []
         for dep in dependencies.values():
             if dep.timestep is not None:
                 start_times.append(dep.start_time)
-                end_times.append(dep.end_time)
+                last_times.append(dep.last_time)
                 timesteps.append(dep.timestep)
         #If no timestep was retrieved we are dealing exclusively with constants:
         if len(timesteps)==0:
             return True, None
         #If all start times, end times and timesteps are the same, the time series are harmonious
-        elif len(set(start_times))==1 and len(set(end_times))==1 and len(set(timesteps))==1:
-            return True, (start_times[0], end_times[0], timesteps[0])
+        elif len(set(start_times))==1 and len(set(last_times))==1 and len(set(timesteps))==1:
+            return True, (start_times[0], last_times[0], timesteps[0])
         #Otherwise the dpeendencies are not time-harmonious
         else:
             return False, None
@@ -290,12 +290,12 @@ class CalculationEngine:
         datetime_timestep = timedelta(seconds=new_timestep)
         
         #Extract common start, end time
-        start_times, end_times = [], []
+        start_times, last_times = [], []
         for harmonized_data in harmonized_dataset.values():
             start_times.append(harmonized_data.new_start_time)
-            end_times.append(harmonized_data.new_end_time)
+            last_times.append(harmonized_data.new_last_time)
         common_start_time = max(start_times)
-        common_end_time   = min(end_times)
+        common_last_time  = min(last_times)
         
         for harmonized_data in harmonized_dataset.values():
             #Prune start
@@ -305,13 +305,13 @@ class CalculationEngine:
                 harmonized_data.new_start_time          += offset_steps * datetime_timestep
                 harmonized_data.prune_offset_start      = offset_steps
             #Prune tail
-            offset_steps_end = int((harmonized_data.new_end_time - common_end_time) / datetime_timestep)
+            offset_steps_end = int((harmonized_data.new_last_time - common_last_time) / datetime_timestep)
             if offset_steps_end>0:
                 harmonized_data.new_values              = harmonized_data.new_values[:-offset_steps_end]
-                harmonized_data.new_end_time            -= offset_steps_end * datetime_timestep
+                harmonized_data.new_last_time            -= offset_steps_end * datetime_timestep
                 harmonized_data.prune_offset_end        = offset_steps_end
             #Update the harmonized_data dictionary with pruned datasets
-        return harmonized_dataset, (common_start_time, common_end_time, new_timestep)
+        return harmonized_dataset, (common_start_time, common_last_time, new_timestep)
         
 
 

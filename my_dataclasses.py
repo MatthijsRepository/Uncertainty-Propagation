@@ -20,7 +20,7 @@ class TimeHarmonizationData:
     base_timestep:      float       #Original timestep of the variable
     new_timestep:       float       #New timestep of the variable
     new_start_time:     datetime    #New start time
-    new_end_time:       datetime    #New end time
+    new_last_time:      datetime    #New end time
     low_index:          int         #Index to start rebinning in original array
     high_index:         int         #Index to end rebinning in original array
     low_fraction:       int         #If a new bin stretches from bin i to bin i+n, fraction of original bin i to include in new bin
@@ -32,10 +32,10 @@ class TimeHarmonizationData:
     prune_offset_end:   Optional[int]   = None         #Number of new timesteps that are discarded at end to ensure a common end time
     #smuggled_time:      Optional[float] = None         #Amount of seconds that  were smuggled during rebinning
     
-    def getFirstLastTimes(self):
-        first_time = self.new_start_time + timedelta(seconds=self.new_timestep/2)
-        last_time  = self.new_end_time - timedelta(seconds=self.new_timestep/2)
-        return first_time, last_time
+        
+    def getFirstTime(self):
+        return self.new_start_time + timedelta(seconds=self.new_timestep)
+        
     
 
 
@@ -230,6 +230,7 @@ class Variable:
         if first_time is not None and last_time is not None:
             self.addTimeStep([first_time, last_time])        
         else:
+            self.start_time    = None              #datetime object: start time of the timeseries (== the time of the first datapoint - timestep)
             self.first_time    = None              #datetime object: time of the first datapoint
             self.last_time     = None              #datetime object: time of the last datapoint
             self.timestep      = None              #float:           number of seconds per timestep
@@ -359,17 +360,16 @@ class Variable:
         if self.timestep is None:
             return None
         else:
-            return (self.start_time, self.end_time, self.timestep, self.first_time, self.last_time)
+            return (self.start_time, self.first_time, self.last_time, self.timestep)
     
     def setTimeData(self, time_data):
         if time_data is None:
             return
         elif len(time_data)==3:
-            self.start_time, self.end_time, self.timestep = time_data
-            self.first_time = self.start_time + timedelta(seconds=self.timestep/2)
-            self.last_time = self.end_time - timedelta(seconds=self.timestep/2)
+            self.start_time, self.last_time, self.timestep = time_data
+            self.first_time = self.start_time + timedelta(seconds=self.timestep)
         else:
-            self.start_time, self.end_time, self.timestep, self.first_time, self.last_time = time_data 
+            self.start_time, self.first_time, self.last_time, self.timestep = time_data 
             
     def printTimeData(self):
         if self.is_timesum:
@@ -379,7 +379,7 @@ class Variable:
             print(f"Variable {self.name} has no time data and is therefore either not initialized, or a constant.")
             return
         else:
-            print(f"Variable {self.name} is a time series. \nTime range: {self.start_time} - {self.end_time} with timestep {self.timestep}. Total number of datapoints: {len(self.values)}.")
+            print(f"Variable {self.name} is a time series. \nTime range: {self.start_time} - {self.last_time} with timestep {self.timestep}. Total number of datapoints: {len(self.values)}.")
             return
             
     def addTimeStep(self, time_range):
@@ -393,8 +393,7 @@ class Variable:
         #Calculate timestep
         timestep = (self.last_time - self.first_time) / (len(self.values) - 1)
         
-        self.start_time = self.first_time - timestep/2
-        self.end_time = self.last_time + timestep/2
+        self.start_time = self.first_time - timestep
         
         self.timestep = timestep.total_seconds()
         if not self.timestep.is_integer():
