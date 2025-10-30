@@ -21,6 +21,8 @@ class TimeHarmonizationData:
     new_timestep:       float       #New timestep of the variable
     new_start_time:     datetime    #New start time
     new_end_time:       datetime    #New end time
+    low_index:          int         #Index to start rebinning in original array
+    high_index:         int         #Index to end rebinning in original array
     low_fraction:       int         #If a new bin stretches from bin i to bin i+n, fraction of original bin i to include in new bin
     high_fraction:      int         #Identical as above, but for bin i+n. high_fraction = 1-low_fraction: we assume integer upsample factors
     upsample_factor:    int         #Factor increase of new bin size compared to old bin size
@@ -103,6 +105,7 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     total_uncertainty:                      Optional[Union[np.ndarray, float]] = None
     correlation:                            Optional[Union[np.ndarray, float]] = None
     is_calculated:                          Optional[bool] = False
+    is_certain:                             Optional[bool] = None
     
     def __post_init__(self):
         self.direct_uncertainty_sources = []
@@ -120,6 +123,7 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
         self.total_uncertainty                      = None
         self.correlation                            = None
         self.is_calculated                          = False
+        self.is_certain                             = None
         
     def getSourceNames(self):
         """ Returns list of names of all direct uncertainty sources """
@@ -213,6 +217,8 @@ class Variable:
         self.is_root_consistent = False             #bool: whether the variable traces consistently to basic variables
         
         self.is_timesum         = is_timesum       #bool: defines whether variable is a timesum
+        self.aggregation_step   = None             #float: timestep of the dependency over which the variable time-integrates, required for uncertainty calculation
+        self.non_aggregated_values = None          #array: values that are aggregated over - used in uncertainty calculation
         self.timesum_settings   = timesum_settings #list of options
         
         self.sympy_symbol_map   = None      #dict: dictionary of sympy symbols
