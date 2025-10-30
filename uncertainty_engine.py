@@ -64,7 +64,8 @@ class UncertaintyEngine:
                     raise ValueError(f"Cannot retrieve correlation of dependency {dep.name} of variable {var.name} - uncertainty not calculated yet. Please enable auto-calculation or call calculation manually.")
             
             #If no uncertainty: simply return 0 as correlation. This will not interfere with the actual uncertainty correlation: contribution of this dependency will be 0.
-            if dep.uncertainty.total_uncertainty == 0:
+            if dep.uncertainty.is_certain: 
+            #if dep.uncertainty.total_uncertainty == 0: ###!!!
                 correlations.append(np.array([0]))
                 continue
             #Now we retrieve or recursively calculate the correlation of this dependency
@@ -88,7 +89,7 @@ class UncertaintyEngine:
     def _convertNestedListTo2DArray(self, lst):
         """ Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array """
         max_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
-        lst = [np.full(max_length, v) if np.isscalar(v) else v for v in lst]
+        lst = [np.full(max_length, v) if (np.isscalar(v) or (isinstance(v, np.ndarray) and v.size == 1))  else v for v in lst]
         return np.vstack(lst).astype(float)
       
     def calculateUncertainty(self, var, recurse=False):
@@ -125,8 +126,17 @@ class UncertaintyEngine:
         else:
             var.uncertainty.total_uncertainty = var.uncertainty.total_direct_uncertainty
         
-        #Flag variable uncertainty to be calculated
+        #Flag the uncertainty to be calculated. We do this here to avoid errors in the correlation calculator in case we are dealing with a timesum
         var.uncertainty.is_calculated = True
+        #Check whether the variable is certain, if so we flag this and short circuit to return
+        if np.sum(var.uncertainty.total_uncertainty)==0:
+            var.uncertainty.is_certain = True
+            return var.uncertainty.total_uncertainty
+        
+        #If variable is a timesum: we need to aggregate uncertainty
+        if var.is_timesum:
+            #self.calculateCorrelation(var, auto_calculate=True, recurse=recurse)
+            var.uncertainty.total_uncertainty = self.timeAggregateTotalUncertainty(var, auto_calculate=True)
         return var.uncertainty.total_uncertainty
     
     def splitDirectUncertaintyContributions(self, var):
@@ -288,6 +298,68 @@ class UncertaintyEngine:
         
         var.uncertainty.correlation = direct_correlation_contributions + dependency_correlation_contributions
         return var.uncertainty.correlation
+    
+    def timeAggregateRootSourceSplit(self, var):
+        #Splitting uncertainty time aggregate by root source only makes sense if we correctly time aggregate each root source with its own correlation
+        
+        #NOTE: think about the following as well:
+            #Each root contribution is rescaled (perhaps even multiple times). Can we temporally integrate per root source and aggregate then? That is what is required.
+            #I'd assumse so. Consider a single root source with a given correlation on its own. We don't see all the rescale factor right? We simply see that time series. We should be able to simply aggregate that.
+        
+        return
+    
+    def timeAggregateCorrelation(self, var):
+        
+        # Time aggregate the correlation
+        
+        return
+    
+    
+    
+    
+    def partialAggregation(self, var, harmonization_data):
+        #new_bins = 
+        return
+    
+    
+    
+    
+    def timeAggregateTotalUncertainty_NEW(self, var):
+        self.calculateCorrelation()
+        return
+    
+    def timeAggregateTotalUncertainty(self, var, auto_calculate=False):
+        if not var.uncertainty.is_calculated:
+            if auto_calculate:
+                self.calculateUncertainty(var, recurse=True) ##Recursion error !! ###!!!
+            else:
+                raise ValueError(f"Cannot calculate aggregated uncertainty for variable {var.name}: please calculate total uncertainty first!")
+        if var.uncertainty.correlation is None:
+            if auto_calculate:
+                self.calculateCorrelation(var, auto_calculate=auto_calculate, recurse=True)
+            else:
+                raise ValueError(f"Cannot calculate aggregated uncertainty for variable {var.name}: please calculate correlation first!")
+        if isinstance(var.uncertainty.total_uncertainty, float):
+            raise ValueError(f"Cannot time aggregate uncertainty of variable {var.name} since its total uncertainty is not array-like but float.")
+            
+        #Construct correlation matrix
+        corr_matrix = np.repeat(var.uncertainty.correlation[np.newaxis,:], repeats=len(var.uncertainty.correlation), axis=0)
+        corr_matrix = (corr_matrix + corr_matrix.T) / 2
+        np.fill_diagonal(corr_matrix, 1)
+        
+        #Perform calculation
+        aggregate_uncertainty = np.sqrt(var.uncertainty.total_uncertainty @ corr_matrix @ var.uncertainty.total_uncertainty)
+        
+        #Aggregation rule implementation:
+        if var.aggregation_rule == "integrate":
+            aggregate_uncertainty *= var.aggregation_step
+        if var.aggregation_rule == "average":
+            aggregate_uncertainty /= len(var.uncertainty.total_uncertainty)
+        
+        return aggregate_uncertainty
+    
+    
+    
         
 
 
