@@ -227,7 +227,8 @@ class CalculationEngine:
     
     def _rebinTimeSeries(self, var, harmonization_data):
         """ Handles rebinning of variable time series data into a new timeseries of greater granularity 
-            Allows for fractional splitting of old bins between two new bins """
+            Allows for fractional splitting of old bins between two new bins 
+            NOTE: this function is almost exactly copied by the uncertainty engine for correlation aggregation """
         low_index, high_index       = harmonization_data.low_index, harmonization_data.high_index
         low_fraction, high_fraction = harmonization_data.low_fraction, harmonization_data.high_fraction
         factor                      = harmonization_data.upsample_factor
@@ -235,7 +236,7 @@ class CalculationEngine:
         #Note: function cannot handle full time aggregation - use timesum for that
         new_values = np.zeros( int((high_index-low_index)/factor) )
         if len(new_values)==1:
-            raise ValueError("Aggregating time series data into a single bin currently not supported. - Timesum calling not implemented yet")
+            raise ValueError("Aggregating time series data into a single bin currently not supported. - Timesum calling not implemented yet") ###!!!
 
         #Note: new bins can contain fractions of old bins - thus our loop should start on the same bin as the previous iteration ended on
         #Since new bin i can for instance include 2/3 of old bin j, then new bin i+1 should contain 1/3 of old bin j!
