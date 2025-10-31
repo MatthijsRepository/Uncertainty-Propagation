@@ -87,7 +87,7 @@ class EquationEngine:
             var.dependency_names = self.equationReader(var)            
         
     def createTimeSumVariable(self, name):
-        """ Creates a new variable that is a timesum of other variables """
+        """ Creates a new variable that is a time integration of other variables """
         #extract equation: name is TS(equation; options)
         data = name[4:-1].strip().split(",")
         if len(data)==2:
@@ -96,8 +96,8 @@ class EquationEngine:
         else:
             equation = data[0]
             settings = None
-        var = Variable(name=name, description=f"Timesum of: {equation}, with settings {settings}", \
-                       is_basic=False, equation=equation, is_timesum=True, timesum_settings=settings)
+        var = Variable(name=name, description=f"Timesum of: {equation}, with settings {settings}", is_rate=False, aggregation_rule="sum", \
+                       is_basic=False, equation=equation, is_timesum=True, timesum_settings=settings) ###!!!important aggregation rule is not necessarily sum
         self.populateVariableDependencyNames(var)
         return var
         
@@ -189,7 +189,7 @@ class EquationEngine:
             var = variables[name]
             self.populateVariableDependencies(var, variables)
     
-    def _deriveTimeSumIntegrationRule(self, var): ###!!! Rename to deriveVariableAggregationRule
+    def _deriveTimeSumIntegrationRule(self, var): ###!!! Rename to deriveVariableAggregationRule    ###!!!! Important --- is this function used?
         """ Extract the aggregation rule for a timesum (or any variable) from the dependencies 
             we work through simple seniority: integration > summing > averaging > None
             Note: if an explicit aggregation rule is hard-specified in input, the function will automatically quit immediately """
@@ -199,17 +199,17 @@ class EquationEngine:
         rules = []
         for dep in var.dependencies.values():
             rules.append(dep.aggregation_rule)
-        #integration > summing > averaging > None
-        if "integrate" in rules:
-            rule = "integrate"
-        elif "sum" in rules:
+        # summing > averaging > None    ###!!! Note: ratio between two extensive quantities is an intensive quantity, this logic does not account for that
+        #if "integrate" in rules:
+        #    rule = "integrate"
+        if "sum" in rules:
             rule = "sum"
         elif "average" in rules:
             rule = "average"
         else:
             raise ValueError(f"Could not extract aggregation rule for timesum variable {var.name} = {var.equation} with dependencies {var.dependency_names}")
-        var.aggregation_rule = rule
-        return 
+        # var.aggregation_rule = rule ###!!!
+        return rule
         
     def _buildSymPySymbolMap(self, variables):
         """ builds a dictionary relating variable names to sympy symbols """
@@ -220,7 +220,7 @@ class EquationEngine:
         return {name: sp.Symbol(self._cleanEquationForSymPy(name)) for name in names}
             
     def _cleanEquationForSymPy(self, equation):
-        """ prepares an equation for sympoy interpretation: quotes and spaces are removed, brackets and math symbols inside timesum statements are replaced by underscores """
+        """ prepares an equation for sympy interpretation: quotes and spaces are removed, brackets and math symbols inside timesum statements are replaced by underscores """
         cleaned_equation = ""
         #Parse through equation and replace all parentheses related to timesums by double underscores, but not mathematical ones
         i = 0
@@ -283,8 +283,8 @@ class EquationEngine:
             var.executable = sp.lambdify(symbols, var.sympy_equation)
         
         #If the variable is a timesum we need to give it an integration rule
-        if var.is_timesum:
-            self._deriveTimeSumIntegrationRule(var)
+        #if var.is_timesum:
+        #    var.aggregation_rule = self._deriveTimeSumIntegrationRule(var) ###!!! important: should be moved to variable builder, not here 
         
     def buildEquationTreeExecutables(self, variables=None):
         """ Goes through all derived variables in a variable set and builds their equation executables using SymPy """

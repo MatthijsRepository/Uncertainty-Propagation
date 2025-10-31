@@ -1,4 +1,4 @@
-from my_dataclasses import Variable, UncertaintySource
+from my_dataclasses import Variable #, UncertaintySource
 import numpy as np
 
 
@@ -7,6 +7,7 @@ class UncertaintyEngine:
         self.variables = variables
         self.equation_engine = equation_engine
         self.calculation_engine = calculation_engine
+        
         
     def _calculateDirectUncertainty(self, var):
         """ Calculates the magnitudes of the direct uncertainties for each source and returns these in an array; or 0 if there is no uncertainty """
@@ -371,11 +372,12 @@ class UncertaintyEngine:
         new_uncertainties = np.vecdot(uncertainty_segments, new_uncertainties)      #v^T (Mv)
         new_uncertainties = np.sqrt(new_uncertainties)
         new_correlations = np.average(var.uncertainty.correlation[harmonization_data.low_index:harmonization_data.high_index].reshape((new_length, harmonization_data.upsample_factor)), axis=1)
-        
+        ###!!! 
         
         print(new_uncertainties/1000 * 60 * 2)
+        print(new_correlations)
         #new_bins = 
-        print('WARNING: at the moment we do incorrect inclusion of time')
+        print('WARNING: at the moment we do incorrect aggregation of correlation')
         
         
         return

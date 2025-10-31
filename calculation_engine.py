@@ -51,7 +51,7 @@ class CalculationEngine:
             print(f"{indent}Calculation of {var.name} complete, values: {var.values}")
         return values   
     
-    def executeVariableEquation(self, var, store_results=True, force_recalculation=False):
+    def executeVariableEquation(self, var, store_results=True, force_recalculation=False, integrate=True):
         if var.equation is None:
             raise ValueError(f"Tried to execute the equation of variable {var.name}, for which no equation is defined.")
         elif var.executable is None:
@@ -87,7 +87,7 @@ class CalculationEngine:
         non_aggregated_values = None #Calculated values before aggregation - required for uncertainty calculation
         if var.is_timesum:
             non_aggregated_values = calculated_values
-            calculated_values     = self.timeSum(var, calculated_values, timedata) ###!!!
+            calculated_values     = self.timeSum(var, calculated_values, timedata, integrate=integrate) ###!!!
             aggregation_step      = timedata[-1]
             timedata              = None
         
@@ -101,7 +101,34 @@ class CalculationEngine:
 
         return calculated_values
     
-    def timeSum(self, var, calculated_values=None, timedata=None):
+    
+    def timeSum(self, var, calculated_values=None, timedata=None, integrate=True): ###!!! Integrate?
+        """ Handles the timesum calculation for a variable
+            timesums are dependent on the variable aggregation rules, which can be passed directly at definition or are inferred from dependencies
+            aggregation rules work with simple seniority: presence of integrate > add > average """
+        if calculated_values is None:
+            calculated_values = var.values
+            
+        if var.aggregation_rule == "sum":
+            calculated_values = np.sum(calculated_values)
+        elif var.aggregation_rule == "average":
+            calculated_values = np.average(calculated_values)
+        else:
+            print(var.aggregation_rule)
+            raise ValueError(f"Timesum failed: no aggregation rule defined for variable {var.name}.")
+            
+        #Handle integration: if the variable is extensive AND defined as a rate over time, we can multiply by the timestep to obtain a quantity
+        if var.is_rate and integrate:
+            if timedata is None:
+                timestep = var.timestep
+            else:
+                timestep = timedata[-1]
+            calculated_values *= timestep
+        
+        return calculated_values
+    
+    
+    def timeSum_OLD(self, var, calculated_values=None, timedata=None):
         """ Handles the timesum calculation for a variable
             timesums are dependent on the variable aggregation rules, which can be passed directly at definition or are inferred from dependencies
             aggregation rules work with simple seniority: presence of integrate > add > average """
@@ -139,7 +166,7 @@ class CalculationEngine:
 
         #We take as benchmark time the start time of the dataset with the biggest timestep ###!!!
         benchmark_time = start_times[np.argmax(timesteps)]
-        print(f"Warning: benchmark time for harmonization is start time of variable with biggest timestep: {benchmark_time}")
+        print(f"Warning: benchmark time for harmonization is start time of variable with biggest timestep: {benchmark_time.strftime('%H:%M:%S')}")
     
         #Populate the harmonized data dictionary with a TimeHarmonizationData object for each variable in the given set.        
         harmonized_data = {}
@@ -308,7 +335,7 @@ class CalculationEngine:
             offset_steps_end = int((harmonized_data.new_last_time - common_last_time) / datetime_timestep)
             if offset_steps_end>0:
                 harmonized_data.new_values              = harmonized_data.new_values[:-offset_steps_end]
-                harmonized_data.new_last_time            -= offset_steps_end * datetime_timestep
+                harmonized_data.new_last_time           -= offset_steps_end * datetime_timestep
                 harmonized_data.prune_offset_end        = offset_steps_end
             #Update the harmonized_data dictionary with pruned datasets
         return harmonized_dataset, (common_start_time, common_last_time, new_timestep)

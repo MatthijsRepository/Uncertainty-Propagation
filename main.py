@@ -65,8 +65,13 @@ if __name__=="__main__":
     for var_name in derived_variables:
         calculation_engine.evaluateVariable(variables[var_name], update_var=True, silent=True)
     
+    print(f"Calculated performance ratio: {variables['PR'].values}")
+    print(f"Calculated temperature corrected performance ratio: {variables['PR_temp_corr'].values}")
     
-    print(variables['PR'].values)
+    print("\n \n \n")
+    print("TESTING AREA")
+    print()
+    print("Calculating uncertainties... - TESTING FROM HERE")
     
     uncertainty_engine = UncertaintyEngine(variables, equation_engine = equation_engine)
     
@@ -89,7 +94,7 @@ if __name__=="__main__":
     
     
     print()
-    print("TESTING AREA")
+    
     from datetime import datetime
     timeformat = "%H:%M:%S"
     
@@ -108,9 +113,9 @@ if __name__=="__main__":
     
     #variables['G'].values = variables['G'].values[1:]
     #variables['G'].start_time = datetime.strptime("00:00:30", timeformat)
-    variables['G'].first_time = datetime.strptime("00:01:00", timeformat)
-    import numpy as np
-    variables['G'].values = np.ones(len(variables['G'].values))
+    #variables['G'].first_time = datetime.strptime("00:01:00", timeformat)
+    #import numpy as np
+    #variables['G'].values = np.ones(len(variables['G'].values))
     #calculation_engine.decreaseVariableTemporalResolution(variables['G'], 3600, benchmark_time=start_time_a, smuggle_limit=60)
     
     #"""
@@ -128,54 +133,6 @@ if __name__=="__main__":
     print(variables['PR'].uncertainty.total_uncertainty)
 
 
-    """ 
-    for i, name in enumerate(variables['G'].uncertainty.root_uncertainty_sources):
-        #plt.plot(variables['G'].uncertainty.root_uncertainty_contribution_split[i], label=name)
-        plt.plot(absolute_uncertainty_split[i], label=name)
-        #plt.plot(relative_uncertainty_split[i], label=name)
-
-    plt.legend()
-    plt.show()
-    """ 
-    
-    
-    
-    
-    
-    """
-    #####
-    #print(variables['time_c'].equation)
-    #print(variables['time_c'].dependency_names)
-    #print(variables['time_c'].dependencies.keys())
-    
-    #calculation_engine.harmonizeTimeSeries(variables['time_c'].dependencies)
-    
-    print("TEST TRIVIAL")
-    calculation_engine.calculateValues(variables['test_trivial'])
-    print(variables['test_trivial'].values)
-    
-    
-    calculation_engine.calculateValues(variables['timesumtest'])
-    
-    print('HA')
-    #var = variables["timesumtest"]
-    
-    var = variables["TS_('G' * TS_('C_25'))"]
-    
-    equation_engine.buildPartialDerivativeExecutables(var)
-    var.executeAllPartials()
-    
-
-    #"""
-    
-    #calculation_engine.calculateValues(variables["PR"], update_var=True)
-    
-    #calculation_engine.calculateValues(variables["PR_temp_corr"], update_var=True)
-    
-    #print("Derived variables:")
-    #for name in equation_engine.derived_variables:
-    #    print(name)
-    #print()
     
     
 

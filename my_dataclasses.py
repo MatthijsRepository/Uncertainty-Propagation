@@ -196,13 +196,16 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
 
         
 class Variable:
-    def __init__(self, name, description=None, values=None, is_basic=True, aggregation_rule=None, \
+    def __init__(self, name, description=None, values=None, is_basic=True, is_rate=None, aggregation_rule=None, \
                  equation=None, dependency_names=None, first_time=None, last_time=None, \
                      is_timesum=False, timesum_settings=None):
         self.name               = name              #str: variable name
         self.description        = description       #str: variable description
         self.is_basic           = is_basic          #bool: defines whether variable is basic or derived
-        self.aggregation_rule   = aggregation_rule  #str: defines the quantity aggregation rule
+        self.is_rate            = is_rate           #bool: defines whether the quantity is a rate (quantity per unit time) or a quantity
+        self.aggregation_rule   = aggregation_rule  #str: defines the quantity aggregation rule - depends on whether variable is extensive or intensive
+        if self.is_rate and self.aggregation_rule=="average":
+            raise ValueError(f"Variable {self.name} not well-defined: variable is defined as the rate of an intensive quantity over time")
         
         self.values             = values            #[int, float, array, None]: variable values
         self.partial_values     = {}                #dict: dictionary of values of the evaluated partial derivatives of this variable with respect to each dependency
@@ -219,7 +222,7 @@ class Variable:
         self.is_timesum         = is_timesum       #bool: defines whether variable is a timesum
         self.aggregation_step   = None             #float: timestep of the dependency over which the variable time-integrates, required for uncertainty calculation
         self.non_aggregated_values = None          #array: values that are aggregated over - used in uncertainty calculation
-        self.timesum_settings   = timesum_settings #list of options
+        self.timesum_settings   = timesum_settings #list of options ###!!!
         
         self.sympy_symbol_map   = None      #dict: dictionary of sympy symbols
         self.sympy_equation     = None      #sympy interpretable of the variable equation

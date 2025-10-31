@@ -149,6 +149,7 @@ class VariableHandler:
         self.timestep = None            #[float, str]: timestep of variable, or setting ###!!!
         self.description = None         #str: variable description
         self.is_basic_variable = None   #bool: flags if variable is basic or derived
+        self.is_rate = None             #bool: flags whether variable is a rate (quantity over time) or a quantity
         self.aggregation_rule = None    #str: aggregation rule of the quantity
         self.equation = None            #str: equation of the variable
         self.dependency_names = None    #list: lists all variables used in the equation
@@ -181,6 +182,11 @@ class VariableHandler:
             elif line.startswith("description"):
                 self.description = line.split(":", maxsplit=1)[1].strip()
                 i += 1 ; continue
+            elif line.startswith("rate"):
+                self.is_rate = line.split(":", maxsplit=1)[1].strip()
+                if self.is_rate.lower() == "true":
+                    self.is_rate = True
+                i += 1 ; continue
             elif line.startswith("aggregation"):
                 self.aggregation_rule = line.split(":", maxsplit=1)[1].strip()
                 i += 1 ; continue
@@ -210,7 +216,7 @@ class VariableHandler:
         self._handleTimestep()
         
         new_variable = Variable(name=self.var_name, description=self.description, values=self.var_values, \
-                                is_basic=self.is_basic_variable, aggregation_rule=self.aggregation_rule, equation=self.equation)
+                                is_basic=self.is_basic_variable, is_rate=self.is_rate, aggregation_rule=self.aggregation_rule, equation=self.equation)
         if not self.timestep is None:
             new_variable.addTimeStep(self.time_range)
         if len(self.uncertainties)>0:

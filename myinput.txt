@@ -25,7 +25,8 @@ input BASIC VARIABLES
 		value: CSV.Pout
 		timestep: CSV
 		description: Power output
-		aggregation: integrate
+		aggregation: sum
+		rate over time: True
 		UNCERTAINTIES:
 			-single module rating at STC: relative, normal, symmetric, correlation=1, sigma=1.5, include=True
 		END UNCERTAINTIES
@@ -35,12 +36,12 @@ input BASIC VARIABLES
 		description: Pyranometer sensitivity
 		aggregation: None
 		UNCERTAINTIES:
-			-calibration: relative, normal, symmetric, correlation=1, bound=1.5
-			-non-stability: relative, rectangular, symmetric, correlation=1, bound=0.8
-			-nonlinearity: relative, rectangular, symmetric, correlation=1, bound=0.5
+			-calibration: 		   relative, normal, symmetric, correlation=1, bound=1.5
+			-non-stability: 	   relative, rectangular, symmetric, correlation=1, bound=0.8
+			-nonlinearity: 		   relative, rectangular, symmetric, correlation=1, bound=0.5
 			-clear sky spectral error: relative, rectangular, symmetric, correlation=1, bound=0.5
-			-temperature response: relative, rectangular, symmetric, correlation=1, bound=1
-			-tilt response: relative, rectangular, symmetric, correlation=1, bound=0.5
+			-temperature response: 	   relative, rectangular, symmetric, correlation=1, bound=1
+			-tilt response: 	   relative, rectangular, symmetric, correlation=1, bound=0.5
 		END UNCERTAINTIES
 	end var S
 	var V
@@ -51,6 +52,7 @@ input BASIC VARIABLES
 		variables: 'G', 'S'
 		UNCERTAINTIES:
 			-datalogger accuracy: absolute, rectangular, symmetric, correlation=1, bound=0, include=False
+			-testUncertainty: absolute, rectangular, symmetric, correlation=1, bound=0, include=False
 		END UNCERTAINTIES
 	end var V
 	var P0
@@ -68,7 +70,11 @@ input BASIC VARIABLES
 	var testA
 		value: 10
 		aggregation: integrate
+		rate over time: True
 		description: test A
+		UNCERTAINTIES
+			-testu: absolute, rectangular, symmetric, correlation=1, bound=1
+		END UNCERTAINTIES
 	end var testB
 	var testB
 		value: 10
@@ -77,6 +83,14 @@ input BASIC VARIABLES
 end input BASIC VARIABLES
 
 input DERIVED VARIABLES
+#	eq recursion_2
+#		value: NO
+#		equation: 'recursion_test'
+#	end eq recursion_2
+#	eq recursion_test
+#		value: NO
+#		equation: 'recursion_2'
+#	end eq recursion_test
 	eq test_trivial
 		value: NO
 		equation: 'testA'
@@ -94,10 +108,11 @@ input DERIVED VARIABLES
 		value: CSV.G
 		timestep: CSV
 		description: POA irradiance
-		aggregation: integrate
+		rate over time: True
+		aggregation: sum
 		equation: 'V'/'S'
 		UNCERTAINTIES:
-			-zero off-set A: absolute, rectangular, one-sided, correlation=1, bound=7
+			-zero off-set A: absolute, rectangular, one-sided, correlation=0, bound=7
 			-zero off-set B: absolute, rectangular, symmetric, correlation=1, bound=2
 			-zero off-set other sources: absolute, rectangular, symmetric, correlation=1, bound=1
 			-directional response: absolute, rectangular, symmetric, correlation=1, bound=10
