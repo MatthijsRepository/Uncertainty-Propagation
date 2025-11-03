@@ -321,6 +321,8 @@ class VariableHandler:
                 multiplier = data[i].split("=")[1].strip() ; continue
             elif temp_data.startswith("include=false"):
                 return None
+            elif temp_data.startswith("include=true"):
+                continue
             else:
                 print(f"Uncertainty input field not recognized: {temp_data}")
                 continue
