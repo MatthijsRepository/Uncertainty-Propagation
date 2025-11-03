@@ -283,35 +283,48 @@ class VariableHandler:
     def _handleUncertainty(self, line):
         """ Handles a single line in an uncertainty block """
         #Check inclusion
-        if line.lower().endswith("false"):
+        if line.lower().endswith("include=false"):
             return None
 
         line = line[1:].split(":") #Remove dash in front, split name and data
         name = line[0].strip()
         data = line[1].split(",") #Split data over commas
-        #Absolute or relative
-        if data[0].strip().lower().startswith("rel"):
-            is_relative=True
-        else:
-            is_relative=False
-        #Shape is passed directly
-        shape = data[1].strip().lower()
-        #Sidedness
-        if data[2].strip().lower().startswith("sym"):
-            is_symmetric = True
-        else:
-            is_symmetric = False
-        #Correlation
-        correlation = float(data[3].split("=")[1].strip())
-        #Bound or sigma
-        if data[4].strip().lower().startswith("sig"):
-            bound = None
-            sigma = float(data[4].split("=")[1].strip())
-        else:
-            bound = float(data[4].split("=")[1].strip())
-            sigma = None
         
-        new_uncertainty =  UncertaintySource(name, is_relative, is_symmetric, shape, correlation, sigma=sigma, bound=bound)
+        is_relative = shape = is_symmetric = correlation = bound = sigma = multiplier = None
+        for i in range(len(data)):
+            temp_data = data[i].strip().lower()
+            #Relative or absolute
+            if temp_data.startswith("relative"):
+                is_relative=True ; continue
+            elif temp_data.startswith("absolute"):
+                is_relative=False ; continue
+            #Shape
+            elif temp_data.startswith("shape"):
+                shape = temp_data.split("=")[1].strip().lower() ; continue
+            #Symmetry
+            elif temp_data.startswith("symme"):
+                is_symmetric=True ; continue
+            elif temp_data.startswith("one-"):
+                is_symmetric=False ; continue
+            #Correlation
+            elif temp_data.startswith("corre"):
+                correlation = float(temp_data.split("=")[1].strip()) ; continue
+            #Bound and sigma
+            elif temp_data.startswith("bound"):
+                bound = float(temp_data.split("=")[1].strip())
+                continue
+            elif temp_data.startswith("sigma"):
+                sigma = float(temp_data.split("=")[1].strip())
+                continue
+            #multiplier
+            elif temp_data.startswith("multiplier"):
+                multiplier = data[i].split("=")[1].strip() ; continue
+            elif temp_data.startswith("include=false"):
+                return None
+            else:
+                print(f"Uncertainty input field not recognized: {temp_data}")
+                continue
+        new_uncertainty =  UncertaintySource(name, is_relative, is_symmetric, shape, correlation, sigma=sigma, bound=bound, multiplier=multiplier)
         self.uncertainties.append(new_uncertainty)
         
     

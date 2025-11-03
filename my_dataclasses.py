@@ -36,8 +36,6 @@ class TimeHarmonizationData:
     def getFirstTime(self):
         return self.new_start_time + timedelta(seconds=self.new_timestep)
         
-    
-
 
 @dataclass
 class UncertaintySource:
@@ -49,6 +47,7 @@ class UncertaintySource:
     #Mutually exclusive fields
     sigma: Optional[Union[float, int, np.ndarray]] = None
     bound: Optional[Union[float, int, np.ndarray]] = None
+    multiplier: Optional[str] = None
     
     def __post_init__(self):
         #Check input consistency
@@ -57,7 +56,9 @@ class UncertaintySource:
         if not (self.shape=="rectangular" or self.shape=="normal" or self.shape=="triangular" or self.shape=="U-shaped"):
             raise ValueError(f"Uncertainty distribution shape: '{self.shape}' not recognized.")
         if (self.sigma is None and self.bound is None):
-            raise ValueError(f"Either a standard deviation or a bound should be provided for uncertainty {self.name}.")
+            raise ValueError(f"Either a standard deviation or a bound should be provided for uncertainty {self.name}, neither is provided.")
+        if (self.sigma is not None and self.bound is not None):
+            raise ValueError(f"Either a standard deviation or a bound should be provided for uncertainty {self.name}, not both!")
         
         #Populate sigma or bound
         #First, determine difference factor which is dependent on the distribution shape
