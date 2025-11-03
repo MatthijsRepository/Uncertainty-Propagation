@@ -221,7 +221,7 @@ class Variable:
         self.is_root_consistent = False             #bool: whether the variable traces consistently to basic variables
         
         self.is_timesum         = is_timesum       #bool: defines whether variable is a timesum
-        self.aggregation_step   = None             #float: timestep of the dependency over which the variable time-integrates, required for uncertainty calculation
+        self.aggregation_step   = None             #float: timestep of the dependency over which the variable is time-integrated, required for uncertainty calculation
         self.non_aggregated_values = None          #array: values that are aggregated over - used in uncertainty calculation
         self.timesum_settings   = timesum_settings #list of options ###!!!
         

@@ -108,14 +108,12 @@ class CalculationEngine:
             aggregation rules work with simple seniority: presence of integrate > add > average """
         if calculated_values is None:
             calculated_values = var.values
-            
         if var.aggregation_rule == "sum":
             calculated_values = np.sum(calculated_values)
         elif var.aggregation_rule == "average":
             calculated_values = np.average(calculated_values)
         else:
-            print(var.aggregation_rule)
-            raise ValueError(f"Timesum failed: no aggregation rule defined for variable {var.name}.")
+            raise ValueError(f"Timesum failed: no correct aggregation rule defined for variable {var.name}.")
             
         #Handle integration: if the variable is extensive AND defined as a rate over time, we can multiply by the timestep to obtain a quantity
         if var.is_rate and integrate:
