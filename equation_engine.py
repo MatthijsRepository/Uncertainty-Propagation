@@ -88,18 +88,69 @@ class EquationEngine:
         
     def createTimeSumVariable(self, name):
         """ Creates a new variable that is a time integration of other variables """
-        #extract equation: name is TS(equation; options)
+        #extract equation; name is of the form: TS(equation, options)
         data = name[4:-1].strip().split(",")
-        if len(data)==2:
+        if len(data)>1:
             equation = data[0]
-            settings = data[1]
+            aggregation_rule, is_rate = self._getTimeSumSettingsFromString(data[1:])
         else:
             equation = data[0]
-            settings = None
-        var = Variable(name=name, description=f"Timesum of: {equation}, with settings {settings}", is_rate=False, aggregation_rule="sum", \
-                       is_basic=False, equation=equation, is_timesum=True, timesum_settings=settings) ###!!!important aggregation rule is not necessarily sum
+            aggregation_rule = is_rate = None
+        var = Variable(name=name, description=f"Timesum of: {equation}", aggregation_rule=aggregation_rule, is_rate=is_rate, \
+                       is_basic=False, equation=equation, is_timesum=True) 
         self.populateVariableDependencyNames(var)
         return var
+    
+    def _getTimeSumSettingsFromString(self, settings):
+        """ Converts timesum settings to variable flags """        
+        aggregation_rule = None
+        is_rate = None
+        for setting in settings:
+            setting = setting.strip().lower()
+            if setting.startswith("agg"):
+                aggregation_rule = setting.split("=")[1].strip()
+            elif setting.startswith("rate"):
+                is_rate = setting.split("=")[1].strip()
+                if is_rate == "true":
+                    is_rate = True
+                else:
+                    is_rate = False
+        return aggregation_rule, is_rate
+    
+    def _getAggregationRulesFromDependencies(self, var):
+        """ Extract the aggregation rule for a timesum (or any variable) from the dependencies 
+            we work through simple seniority: summing > averaging > None
+            NOTE: it is better to manually specify integration rules """
+        rules = []
+        is_rate = None
+        for dep in var.dependencies.values():
+            rules.append(dep.aggregation_rule)
+            if dep.is_rate:
+                is_rate=True
+        # summing > averaging > None    ###!!! Note: ratio between two extensive quantities is an intensive quantity, 
+        ### this function does not handle any complex algebra for this. When in doubt: specify manually
+        if "sum" in rules:
+            rule = "sum"
+        elif "average" in rules:
+            rule = "average"
+        else:
+            rule = None
+        return rule, is_rate
+        
+    def populateEquationTreeTimeSumSettings(self, variables=None):
+        """ This function checks whether all timesums have defined settings, and tries to extract these from the variable dependencies otherwise """
+        if variables is None:
+            variables = self.variables
+        
+        for var in variables.values():
+            if var.is_timesum:
+                rule, is_rate = self._getAggregationRulesFromDependencies(var)
+                if var.aggregation_rule is None:
+                    if rule is None:
+                        raise ValueError(f"Could not give variable {var.name} an aggregation rule from dependencies {var.dependency_names}, please provide one.")
+                    var.aggregation_rule = rule
+                if var.is_rate is None:
+                    var.is_rate = is_rate    
         
     def _checkEquationTreeRecursive(self, variables, variables_to_check, silent, indent="", stack=[]):
         """ Internal function that recursively checks equation tree consistency """
@@ -189,27 +240,7 @@ class EquationEngine:
             var = variables[name]
             self.populateVariableDependencies(var, variables)
     
-    def _deriveTimeSumIntegrationRule(self, var): ###!!! Rename to deriveVariableAggregationRule    ###!!!! Important --- is this function used?
-        """ Extract the aggregation rule for a timesum (or any variable) from the dependencies 
-            we work through simple seniority: integration > summing > averaging > None
-            Note: if an explicit aggregation rule is hard-specified in input, the function will automatically quit immediately """
-            #
-        if var.aggregation_rule is not None:
-            return 
-        rules = []
-        for dep in var.dependencies.values():
-            rules.append(dep.aggregation_rule)
-        # summing > averaging > None    ###!!! Note: ratio between two extensive quantities is an intensive quantity, this logic does not account for that
-        #if "integrate" in rules:
-        #    rule = "integrate"
-        if "sum" in rules:
-            rule = "sum"
-        elif "average" in rules:
-            rule = "average"
-        else:
-            raise ValueError(f"Could not extract aggregation rule for timesum variable {var.name} = {var.equation} with dependencies {var.dependency_names}")
-        # var.aggregation_rule = rule ###!!!
-        return rule
+
         
     def _buildSymPySymbolMap(self, variables):
         """ builds a dictionary relating variable names to sympy symbols """
@@ -236,7 +267,7 @@ class EquationEngine:
                     elif equation[i]==")":
                         depth -= 1
                         cleaned_equation += "__"
-                    elif equation[i] in ["+", "-", "*","/"]: #Math symbols are not allowed inside TS expressions
+                    elif equation[i] in ["+", "-", "*","/","="]: #Math symbols are not allowed inside TS expressions
                         cleaned_equation += "_"
                         i += 1 ; continue
                     else:
@@ -277,14 +308,11 @@ class EquationEngine:
                 if isinstance(var, Variable):
                     return var.values
                 else:
-                    return var
+                    return var #If we have numerical input, we simply return it back
             var.executable = wrapper
         else:
             var.executable = sp.lambdify(symbols, var.sympy_equation)
         
-        #If the variable is a timesum we need to give it an integration rule
-        #if var.is_timesum:
-        #    var.aggregation_rule = self._deriveTimeSumIntegrationRule(var) ###!!! important: should be moved to variable builder, not here 
         
     def buildEquationTreeExecutables(self, variables=None):
         """ Goes through all derived variables in a variable set and builds their equation executables using SymPy """
