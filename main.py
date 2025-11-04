@@ -2,6 +2,7 @@ from input_handler import InputHandler
 from equation_engine import EquationEngine
 from calculation_engine import CalculationEngine
 from uncertainty_engine import UncertaintyEngine
+from time_engine import TimeEngine
 
 
 if __name__=="__main__":
@@ -37,7 +38,7 @@ if __name__=="__main__":
     #""" 
     
     
-    #Verifying equation tree consistency, building equation tree in SimPy
+    #Verifying equation tree consistency, building equation tree in SymPy
     print("Verifying root-consistency of equation tree")
     equation_engine = EquationEngine(variables)
     equation_engine.checkEquationTreeConsistency(silent=True)
@@ -45,12 +46,13 @@ if __name__=="__main__":
     print("Populating equation tree dependencies \n")
     equation_engine.populateEquationTreeDependencies()
     
+    equation_engine.populateEquationTreeTimeSumSettings()
     
     print("Creating variable equation executables \n")
     equation_engine.buildEquationTreeExecutables()
     
-    
-    calculation_engine = CalculationEngine(variables)
+    time_engine = TimeEngine()
+    calculation_engine = CalculationEngine(variables, time_engine=time_engine)
     calculation_engine.validateBasicVariables(equation_engine)
     
     #calculation_engine.harmonizeTimeSeries(variables['time_c'].dependencies)
@@ -73,6 +75,7 @@ if __name__=="__main__":
     print()
     print("Calculating uncertainties... - TESTING FROM HERE")
     
+    
     uncertainty_engine = UncertaintyEngine(variables, equation_engine = equation_engine)
     
     uncertainty_engine.calculateUncertainty(variables["G"], recurse=True)
@@ -80,7 +83,7 @@ if __name__=="__main__":
     uncertainty_engine.splitTotalUncertaintyContributions(variables['G'])
     uncertainty_engine.splitToSourceContributions(variables['G'])
     
-    uncertainty_engine.calculateCorrelation(variables['G'], auto_calculate=True, recurse=True, recalculate=False)
+    uncertainty_engine.calculateCorrelation(variables['G'], auto_calculate=True, recurse=True, force_recalculation=False)
     
     
     print(variables['G'].uncertainty.correlation)
@@ -91,7 +94,7 @@ if __name__=="__main__":
     
     variables['G'].uncertainty.plotRelativeRootSplit(k=2)
     variables['G'].uncertainty.plotAbsoluteRootSplit(k=2)
-    
+    s    
     
     print()
     
@@ -100,7 +103,7 @@ if __name__=="__main__":
     
     
     test_time = datetime.strptime("12:59:00", timeformat)
-    test_harmonization_data = calculation_engine.decreaseVariableTemporalResolution(variables['G'], new_timestep=3600, benchmark_time=test_time, update_var=False, smuggle_limit=0)
+    test_harmonization_data = time_engine.decreaseVariableTemporalResolution(variables['G'], new_timestep=3600, benchmark_time=test_time, update_var=False, smuggle_limit=0)
     
     
     
@@ -129,7 +132,7 @@ if __name__=="__main__":
     print(variables['G'].uncertainty.total_uncertainty[800])
     print(variables['G'].uncertainty.correlation[800])
     print(variables["TS_('G')"].uncertainty.total_uncertainty / 1000)
-    print(variables["TS_('Pout', h)"].uncertainty.total_uncertainty / 1000)
+    print(variables["TS_('Pout')"].uncertainty.total_uncertainty / 1000)
     print(variables['PR'].uncertainty.total_uncertainty)
 
 
