@@ -35,7 +35,18 @@ class TimeHarmonizationData:
         
     def getFirstTime(self):
         return self.new_start_time + timedelta(seconds=self.new_timestep)
-        
+    
+    def getTotalOffsetSteps(self):
+        if self.prune_offset_start is None:
+            low_index_total = self.low_index
+        else:
+            low_index_total = self.low_index + self.upsample_factor * self.prune_offset_start
+
+        if self.prune_offset_end is None:
+            high_index_total = self.high_index
+        else:
+            high_index_total = self.high_index - self.upsample_factor * self.prune_offset_end
+        return low_index_total, high_index_total
 
 @dataclass
 class UncertaintySource:
@@ -75,11 +86,11 @@ class UncertaintySource:
         if self.is_relative:
             factor *= 100
         
-        #Populate the missing sigma or the missing bound
+        #Populate the missing sigma if a bound is given
         if self.sigma is None:
             self.sigma = self.bound / factor
-        else:
-            self.bound = self.sigma * factor
+            self.bound = None
+
         #Correct for one-sidedness
         if not self.is_symmetric:
             self.sigma = self.sigma / 2
@@ -126,6 +137,22 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
         self.is_calculated                          = False
         self.is_certain                             = None
         
+    def rescaleUncertaintySources(self, upsample_factor):
+        """ Rescales the variance of all uncertainty sources to account for the partial time-aggregation/rebinning of the uncertainty parent variable """
+        for source in self.direct_uncertainty_sources:
+            if source.correlation == 1:
+                source.sigma *= upsample_factor ; continue
+            if source.correlation == 0:
+                source.sigma *= np.sqrt(upsample_factor) ; continue
+            else:
+                u_vec = np.ones(upsample_factor) * source.sigma
+                m_corr = np.ones((upsample_factor, upsample_factor)) * source.correlation
+                np.fill_diagonal(m_corr, 1)
+                source.sigma = u_vec.T @ m_corr @ u_vec
+        
+            
+    
+    
     def getSourceNames(self):
         """ Returns list of names of all direct uncertainty sources """
         return [u.name for u in self.direct_uncertainty_sources]

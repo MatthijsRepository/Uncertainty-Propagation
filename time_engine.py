@@ -24,7 +24,6 @@ class TimeEngine:
             else:
                 harmonized_data, timedata = self.harmonizeTimeSeries(var.dependencies, var_name=var.name)
             args = [harmonized_data[dep_name].new_values if dep_name in harmonized_data.keys() else var.dependencies[dep_name] for dep_name in var.dependency_names]
-             
         return args, timedata, harmonized_data
     
     def harmonizeTimeSeries(self, dependencies, var_name=None, smuggle_limit=0):
@@ -127,6 +126,8 @@ class TimeEngine:
             var.values = harmonization_data.new_values
             var.setTimeData((harmonization_data.new_start_time, harmonization_data.new_last_time, harmonization_data.new_timestep))
             var.uncertainty.reset()
+            var.uncertainty.rescaleUncertaintySources(harmonization_data.upsample_factor)
+            print(f"WARNING: hard-rescaled variable {var.name} to a new timestep. Direct uncertainties for this variable will be rescaled, but this action is destructive for uncertainty information.")            
         return harmonization_data
     
     def _rebinTimeSeries(self, var, harmonization_data):
