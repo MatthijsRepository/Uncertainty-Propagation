@@ -241,7 +241,7 @@ class Variable:
         
         self.uncertainty       = VariableUncertainty(var_name=self.name, variable=self)
         
-        self.harmonization_cache = None #Holds time harmonization info
+        self.harmonization_cache = None            #Dictionary of TimeHarmonizationData objects, stores how each dependency is time-harmonized to calculate this variable
         
     
     
@@ -413,73 +413,7 @@ class Variable:
                 calculation_engine = self.calculation_engine
         return calculation_engine.executeVariableEquation(self, store_results=store_results, force_recalculation=force_recalculation)
     
-    
-    """
-    ###!!! OLD method below, should be phased out
-    def executeEquation_OLD(self, store_results=True, force_recalculation=False, calculation_engine=None):
-        "" Executes equation built by sympy and checks whether everything is initialized correctly ""
-        if self.equation is None:
-            raise ValueError(f"Tried to execute the equation of variable {self.name}, for which no equation is defined.")
-        elif self.executable is None:
-            raise ValueError(f"Tried to execute the equation of variable {self.name} = {self.equation}, but no equation executable has been built for this variable.")
-        
-        #If values already defined: do nothing unless forced recalculation is desired
-        if self.values is not None:
-            if force_recalculation is True:
-                print(f"WARNING: executing equation of variable {self.name} while values are already defined!")
-            else:
-                return self.values
-        
-        
-        #calculation_engine.harmonizeTimeSeries(self.dependencies)
-        
-        #Check if this variable is a timesum, in which case the executable is the equation INSIDE the timesum
-        if self.is_timesum:
-            if calculation_engine is None:
-                raise ValueError(f"Asked to perform timesum of variable {self.name} while no equation engine is given to this variable")
-            calculated_values = calculation_engine.timeSum(self)
-        else:
-            args = [self.dependencies[dep_name] for dep_name in self.dependency_names]
-            calculated_values = self.executable(*args)
-        
-        #Optionally store the result as the new variable values
-        if store_results:
-            self.values = calculated_values
-        return calculated_values
-    """
 
-    def executePartialDerivative(self, dep_name, absolute_values=False, store_results=True, force_recalculation=False):
-        """ Executes the partial derivative executable of the variable for a given dependency, optionally stores values in partial_values dictionary """
-        #If no forced recalculation and if the values are already calculated we simply return the already calculated values
-        if force_recalculation is False and dep_name in self.partial_values:
-            return self.partial_values[dep_name]
-        #If there is no executable for this dependency we raise an error
-        if self.partial_executables is None:
-            raise ValueError(f"Tried to evaluate partial derivative of variable {self.name} while partial derivative executables have not been built yet.")
-        
-        #Get partial executable, pass arguments
-        partial_executable = self.partial_executables[dep_name]
-        args = [self.dependencies[dep_name] for dep_name in self.dependency_names]
-        calculated_values = partial_executable(*args)
-        
-        #In case of a trivial equation, calculated values will be a Variable object. Here we fix that
-        if isinstance(calculated_values, Variable):     ###!!! change this to be handled through an equation engine wrapper
-            calculated_values = calculated_values.values
-        
-        if absolute_values:
-            calculated_values = np.abs(calculated_values)
-        
-        #Optionally store results
-        if store_results:
-            self.partial_values[dep_name] = calculated_values
-        return calculated_values
-    
-    def executeAllPartials(self, absolute_values=False, store_results=True, force_recalculation=False):
-        """ Evaluates all partial derivatives of a variable """
-        partial_values = {}
-        for dep_name in self.dependency_names:
-            partial_values[dep_name] = self.executePartialDerivative(dep_name, absolute_values=absolute_values, store_results=store_results, force_recalculation=force_recalculation)
-        return partial_values
         
     
 

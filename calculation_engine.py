@@ -6,9 +6,10 @@ import numpy as np
 
     
 class CalculationEngine:
-    def __init__(self, variables, time_engine):
+    def __init__(self, variables, time_engine, equation_engine=None):
         self.variables = variables
         self.time_engine = time_engine
+        self.equation_engine = equation_engine
         return
     
     def validateBasicVariables(self, equation_engine, variables=None):
@@ -106,6 +107,48 @@ class CalculationEngine:
             calculated_values *= timestep
         
         return calculated_values
+    
+    
+    def executePartialDerivative(self, var, dep_name, absolute_values=False, store_results=True, force_recalculation=False):
+        """ Executes the partial derivative executable of a variable for a given dependency, optionally stores values in partial_values dictionary """
+        #If no forced recalculation and if the values are already calculated we simply return the already calculated values
+        if force_recalculation is False and dep_name in var.partial_values:
+            return var.partial_values[dep_name]
+        #If there is no executable for this dependency we raise an error
+        if var.partial_executables is None:
+            if self.equation_engine is not None:
+                self.equation_engine.buildPartialDerivativeExecutables(var)
+            else:
+                raise ValueError(f"Tried to evaluate partial derivative of variable {var.name} while partial derivative executables have not been built yet.")
+        
+        #Get partial executable, pass arguments
+        partial_executable = var.partial_executables[dep_name]
+        
+        args, timedata, harmonized_data = self.time_engine.ensureDependencyTimeHarmony(var, force_recalculation=force_recalculation)
+        #args = [var.dependencies[dep_name] for dep_name in var.dependency_names]
+        
+        calculated_values = partial_executable(*args)
+        
+        #In case of a trivial equation, calculated values will be a Variable object. Here we fix that
+        if isinstance(calculated_values, Variable):     ###!!! change this to be handled through an equation engine wrapper
+            calculated_values = calculated_values.values
+        
+        if absolute_values:
+            calculated_values = np.abs(calculated_values)
+        
+        #Optionally store results
+        if store_results:
+            var.partial_values[dep_name] = calculated_values
+        return calculated_values
+    
+    
+    
+    def executeAllPartials(self, var, absolute_values=False, store_results=True, force_recalculation=False):
+        """ Evaluates all partial derivatives of a variable """
+        partial_values = {}
+        for dep_name in var.dependency_names:
+            partial_values[dep_name] = self.executePartialDerivative(var, dep_name, absolute_values=absolute_values, store_results=store_results, force_recalculation=force_recalculation)
+        return partial_values
     
     
     

@@ -3,10 +3,11 @@ import numpy as np
 
 
 class UncertaintyEngine:
-    def __init__(self, variables, equation_engine=None, calculation_engine=None):
+    def __init__(self, variables, equation_engine=None, calculation_engine=None, time_engine=None):
         self.variables = variables
         self.equation_engine = equation_engine
         self.calculation_engine = calculation_engine
+        self.time_engine = time_engine
         
         
     def _calculateDirectUncertainty(self, var):
@@ -14,7 +15,6 @@ class UncertaintyEngine:
         if len(var.uncertainty.direct_uncertainty_sources)==0:
             return 0
         else:
-            #names_list = [] ###!!!
             #Prepare uncertainty array
             if isinstance(var.values, np.ndarray):
                 u_array = np.zeros((len(var.uncertainty.direct_uncertainty_sources), len(var.values)))
@@ -49,7 +49,7 @@ class UncertaintyEngine:
             total_dep_uncertainties[dep.name] = dep.uncertainty.total_uncertainty
         return total_dep_uncertainties
     
-    def _retrieveDependencyCorrelations(self, var, auto_calculate, recurse, recalculate=False):
+    def _retrieveDependencyCorrelations(self, var, auto_calculate, recurse, force_recalculation=False):
         """ Retrieve correlations of the dependencies; optionally auto-calculates necessary elements, recurses through tree or recalculates all values """
         if var.is_basic:
             return 0
@@ -59,7 +59,7 @@ class UncertaintyEngine:
         for dep in var.dependencies.values():
             #Check if uncertainty calculation is performed, optionally auto calculate this
             if not dep.uncertainty.is_calculated:
-                if auto_calculate or recalculate:
+                if auto_calculate or force_recalculation:
                     self.calculateUncertainty(var, recurse=True)
                 else:
                     raise ValueError(f"Cannot retrieve correlation of dependency {dep.name} of variable {var.name} - uncertainty not calculated yet. Please enable auto-calculation or call calculation manually.")
@@ -70,21 +70,23 @@ class UncertaintyEngine:
                 correlations.append(np.array([0]))
                 continue
             #Now we retrieve or recursively calculate the correlation of this dependency
-            if (dep.uncertainty.correlation is None and recurse) or recalculate:
-                cor = self.calculateCorrelation(dep, auto_calculate=auto_calculate, recurse=recurse, recalculate=recalculate)
+            if (dep.uncertainty.correlation is None and recurse) or force_recalculation:
+                cor = self.calculateCorrelation(dep, auto_calculate=auto_calculate, recurse=recurse, force_recalculation=force_recalculation)
             else:
                 cor = dep.uncertainty.correlation
             correlations.append(cor)
         return self._convertNestedListTo2DArray(correlations)
                 
-    def _getDependencyPartialsValues(self, var, equation_engine=None):
+    def _getDependencyPartialsValues(self, var, equation_engine=None, calculation_engine=None):
         """ Executes partial derivative executable builder form the equation engine and executes calculation of partial values, 
             returns dictionary of partial derivative values per dependency """
         if equation_engine is None:
             equation_engine = self.equation_engine
+        if calculation_engine is None:
+            calculation_engine = self.calculation_engine
         #Populate variable partial executables
         equation_engine.buildPartialDerivativeExecutables(var)
-        partials_dict = var.executeAllPartials(absolute_values=True, store_results=False, force_recalculation=False)
+        partials_dict = calculation_engine.executeAllPartials(var, absolute_values=True, store_results=False, force_recalculation=False)
         return partials_dict
     
     def _convertNestedListTo2DArray(self, lst):
@@ -182,13 +184,13 @@ class UncertaintyEngine:
                                                                                where=(total_sum!=0))
         return
     
-    def splitToSourceContributions(self, var, recalculate=False):
+    def splitToSourceContributions(self, var, force_recalculation=False):
         """ Splits uncertainty contributions down to all root uncertainty sources """
         if not var.uncertainty.is_calculated:
             raise ValueError(f"Cannot split uncertainty contributions for variable {var.name}, please calculate uncertainties first")
         
         #If the root split is already calculated and forced recalculation is not chosen, we simply return previously calculated values
-        if var.uncertainty.root_uncertainty_contribution_split is not None and not recalculate:
+        if var.uncertainty.root_uncertainty_contribution_split is not None and not force_recalculation:
             return var.uncertainty.root_uncertainty_contribution_split
         
         #If var is basic the root uncertainties are simply the direct uncertainties
@@ -215,7 +217,7 @@ class UncertaintyEngine:
         #Recursively retrieve root contributions of all dependencies and scale these to the relative dependency contribution
         for index, dep_name in enumerate(var.uncertainty.dependency_uncertainty_names):
             #Split each dependency recursively to source contributions!
-            dep_sources, dep_root_split = self.splitToSourceContributions(var.dependencies[dep_name], recalculate=recalculate)
+            dep_sources, dep_root_split = self.splitToSourceContributions(var.dependencies[dep_name], force_recalculation=force_recalculation)
             #If there is no root uncertainty split: there is no uncertainty in this entire branch - continue
             if dep_root_split is None:
                 continue
@@ -232,11 +234,63 @@ class UncertaintyEngine:
             var.uncertainty.root_uncertainty_sources = sources
             var.uncertainty.root_uncertainty_contribution_split = self._convertNestedListTo2DArray(root_contributions_scaled)
             return var.uncertainty.root_uncertainty_sources, var.uncertainty.root_uncertainty_contribution_split
+        
+    
+    
+    def timeAggregateRootSplit(self, var, harmonization_data, force_recalculation=True):
+        if not var.uncertainty.is_calculated:
+            raise ValueError(f"Cannot split uncertainty contributions for variable {var.name}, please calculate uncertainties first")
             
-    def _correlationCalculationRequirementsHelper(self, var, auto_calculate, recurse, recalculate):
+        #if var.uncertainty.root_uncertainty_contribution_split is not None and not force_recalculation:
+        #    return var.uncertainty.root_uncertainty_contribution_split
+        
+        new_length = int((harmonization_data.high_index - harmonization_data.low_index) / harmonization_data.upsample_factor)
+        
+        new_direct_uncertainties = np.zeros((len(var.uncertainty.direct_uncertainty_sources), new_length))
+        
+        #Get time aggregation of direct uncertainty sources
+        for i, source in enumerate(var.uncertainty.direct_uncertainty_sources):
+            u_source = var.uncertainty.direct_uncertainties[i, harmonization_data.low_index:harmonization_data.high_index].reshape((new_length, harmonization_data.upsample_factor))
+            corr_matrix = np.ones((harmonization_data.upsample_factor, harmonization_data.upsample_factor)) * source.correlation
+            np.fill_diagonal(corr_matrix, 1)
+            
+            u_new = np.tensordot(u_source, corr_matrix, axes=(1,0))
+            u_new = np.vecdot(u_new, u_source)
+            new_direct_uncertainties[i] = np.sqrt(u_new)
+            
+            
+        #Dependencies
+        #for i, dep_name in enumerate(var.uncertainty.dependency_uncertainty_names):
+            #We check if the calculation of the present variable required time harmonization
+            #If this is the case, a cache of TimeHarmonizationData objects should be present
+            #If it is not present, we can return the regular uncertainty root split
+            #if var.harmonization_cache is None:
+                
+            
+            
+            #Find correct time harmonization data object
+            
+            #recurse
+            #multiply outcome by the dependency sensitivity
+            #aggregate further, by source
+        
+        
+        #if var.is_basic:
+        #    if var.uncertainty.direct_uncertainties_contributions is None:
+        #        self.splitDirectUncertaintyContributions(var)
+        #    return var.uncertainty.getSourceNames(), var.uncertainty.direct_uncertainties_contributions
+        
+        
+        
+        #Get absolute values of the uncertainty split
+
+        return
+    
+            
+    def _correlationCalculationRequirementsHelper(self, var, auto_calculate, recurse, force_recalculation):
         """ check if necessary elements are already calculated, and optionally auto-calculate these """
-        #If recalculate is True we simply recalculate all required elements here and return, otherwise we pass the regular checks
-        if recalculate:
+        #If force_recalculation is True we simply recalculate all required elements here and return, otherwise we pass the regular checks
+        if force_recalculation:
             self.calculateUncertainty(var, recurse=True)
             self.splitDirectUncertaintyContributions(var)
             self.splitTotalUncertaintyContributions(var)
@@ -270,14 +324,14 @@ class UncertaintyEngine:
             else:
                 raise ValueError(f"Please calculate direct uncertainty contribution split for variable {var.name} before calculating correlation.")
         
-    def calculateCorrelation(self, var, auto_calculate=False, recurse=True, recalculate=False):
+    def calculateCorrelation(self, var, auto_calculate=False, recurse=True, force_recalculation=False):
         """ Calculates the correlation of the uncertainty for each timestep """
         #Check if correlation already calculated
-        if var.uncertainty.correlation is not None and recalculate is False:
+        if var.uncertainty.correlation is not None and force_recalculation is False:
             return var.uncertainty.correlation
         
         #Check if all requirements for the calculation are in place, optionally auto-calculate these
-        self._correlationCalculationRequirementsHelper(var, auto_calculate, recurse, recalculate)
+        self._correlationCalculationRequirementsHelper(var, auto_calculate, recurse, force_recalculation)
 
         #Calculate correlation per timestep
         #Direct contributions
@@ -291,7 +345,7 @@ class UncertaintyEngine:
         
         #Dependency contributions
         if var.uncertainty.dependency_uncertainties_contributions is not None:
-            dependency_correlations = self._retrieveDependencyCorrelations(var, auto_calculate=auto_calculate, recurse=recurse, recalculate=recalculate)
+            dependency_correlations = self._retrieveDependencyCorrelations(var, auto_calculate=auto_calculate, recurse=recurse, force_recalculation=force_recalculation)
             dependency_correlation_contributions = np.multiply(dependency_correlations, var.uncertainty.dependency_uncertainties_contributions)
             dependency_correlation_contributions = np.sum(dependency_correlation_contributions, axis=0)
         else:
@@ -300,59 +354,21 @@ class UncertaintyEngine:
         var.uncertainty.correlation = direct_correlation_contributions + dependency_correlation_contributions
         return var.uncertainty.correlation
     
-    def timeAggregateRootSourceSplit(self, var):
+    def timeAggregateRootSourceSplit(self, var, harmonization_data):
         #Splitting uncertainty time aggregate by root source only makes sense if we correctly time aggregate each root source with its own correlation
         
         #NOTE: think about the following as well:
             #Each root contribution is rescaled (perhaps even multiple times). Can we temporally integrate per root source and aggregate then? That is what is required.
             #I'd assumse so. Consider a single root source with a given correlation on its own. We don't see all the rescale factor right? We simply see that time series. We should be able to simply aggregate that.
         
+        
+        #Time-aggregating dependency uncertainty as a total is a destructive process
+        
+        
         return
     
-    def timeAggregateCorrelation(self, var, harmonization_data):
-        """ Handles rebinning of correlation data into a new correlation data of greater granularity 
-            Allows for fractional splitting of old bins between two new bins
-            NOTE: this function is almost an exact copy of the method in the calculation engine!!! """
-        low_index, high_index       = harmonization_data.low_index, harmonization_data.high_index
-        low_fraction, high_fraction = harmonization_data.low_fraction, harmonization_data.high_fraction
-        factor                      = harmonization_data.upsample_factor
-        
-        #Note: function cannot handle full time aggregation - use timesum for that
-        new_correlation = np.zeros( int((high_index-low_index)/factor) )
-        if len(new_correlation)==1:
-            raise ValueError("Aggregating correlation data into a single bin currently not supported. - Timesum calling not implemented yet") ###!!!
-
-        #Note: new bins can contain fractions of old bins - thus our loop should start on the same bin as the previous iteration ended on
-        #Since new bin i can for instance include 2/3 of old bin j, then new bin i+1 should contain 1/3 of old bin j!
-        for i in range(len(new_correlation)):
-            start = low_index + i*factor
-            if start < 0:
-                #First bin handling
-                new_correlation[i] = np.sum(var.uncertainty.correlation[:start+factor])
-                new_correlation[i] += abs(low_index)-1 * var.uncertainty.correlation[0]
-                new_correlation[i] += var.uncertainty.correlation[0] * low_fraction
-                new_correlation[i] += var.uncertainty.correlation[start+factor] * high_fraction
-            elif start + factor-1 >= len(var.uncertainty.correlation):
-                #Last bin handling
-                new_correlation[i] = np.sum(var.uncertainty.correlation[start:])
-                new_correlation[i] += var.uncertainty.correlation[start-1] * low_fraction
-                new_correlation[i] += (high_index - len(var.uncertainty.correlation)-1) * var.uncertainty.correlation[-1]
-                new_correlation[i] += var.uncertainty.correlation[-1] * high_fraction
-            else:
-                #General bin handling
-                new_correlation[i] = np.sum(var.uncertainty.correlation[start:start+factor-1])
-                new_correlation[i] += var.uncertainty.correlation[start] * low_fraction
-                new_correlation[i] += var.uncertainty.correlation[start+factor-1] * high_fraction
-
-        #We average the correlation - as is done in the excel spreadsheet
-        new_correlation /= factor
-        return new_correlation
-    
-    
-    
-    
     def partialAggregation(self, var, harmonization_data):
-        """ Performs time-aggregation by temporal subspaces, defined by the harmonization_data dataclass """
+        """ Performs time-aggregation by temporal subspaces, defined by the harmonization_data TimeHarmonizationData dataclass instance """
         
         #Check if we have to include fractional parts
         #If so, we immediately fail
@@ -371,16 +387,15 @@ class UncertaintyEngine:
         new_uncertainties = np.matvec(correlation_matrices, uncertainty_segments)   #Mv
         new_uncertainties = np.vecdot(uncertainty_segments, new_uncertainties)      #v^T (Mv)
         new_uncertainties = np.sqrt(new_uncertainties)
+       
         new_correlations = np.average(var.uncertainty.correlation[harmonization_data.low_index:harmonization_data.high_index].reshape((new_length, harmonization_data.upsample_factor)), axis=1)
-        ###!!! 
-        
-        print(new_uncertainties/1000 * 60 * 2)
-        print(new_correlations)
-        #new_bins = 
+        ###!!! should maybe be a weighted average
         print('WARNING: at the moment we do incorrect aggregation of correlation')
         
+        if var.aggregation_rule == "average":
+            new_uncertainties /= harmonization_data.upsample_factor
         
-        return
+        return new_uncertainties, new_correlations
     
     
     
@@ -411,8 +426,8 @@ class UncertaintyEngine:
         #Perform calculation
         aggregate_uncertainty = np.sqrt(var.uncertainty.total_uncertainty @ corr_matrix @ var.uncertainty.total_uncertainty)
         
-        #Aggregation rule implementation:
-        if var.aggregation_rule == "integrate":
+        #Aggregation rule implementation: ###!!!
+        if var.aggregation_rule == "integrate": ###!!! OLD
             aggregate_uncertainty *= var.aggregation_step
         if var.aggregation_rule == "average":
             aggregate_uncertainty /= len(var.uncertainty.total_uncertainty)

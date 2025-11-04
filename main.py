@@ -6,7 +6,7 @@ from time_engine import TimeEngine
 
 
 if __name__=="__main__":
-    inputfile = "C:\\Users\\mate\\Desktop\\python\\Uncertainty-Propagation\\myinput.txt"
+    inputfile = "C:\\Users\\mate\\Desktop\\python\\Uncertainty-Propagation\\uncertainty_testinput.txt"
     
     #Handling input
     print("Started parsing input")
@@ -29,10 +29,14 @@ if __name__=="__main__":
     first_time_b = datetime.strptime("13:00:00", timeformat)        #Hourly
     last_time_b = datetime.strptime("16:00:00", timeformat)
     
-    variables["time_a"] = Variable("time_a", values=np.ones(26), is_basic=True, aggregation_rule="sum", first_time=first_time_a, last_time=last_time_a)
+    variables["time_a"] = Variable("time_a", values=np.ones(26)*5, is_basic=True, aggregation_rule="sum", first_time=first_time_a, last_time=last_time_a)
     #variables["time_a"] = Variable("time_a", values=np.arange(26), is_basic=True, aggregation_rule="sum", first_time=first_time_a, last_time=last_time_a)
-    variables["time_b"] = Variable("time_b", values=np.array([1,2,3,4]), is_basic=True, aggregation_rule="sum", first_time=first_time_b, last_time=last_time_b)
-    variables["time_c"] = Variable("time_c", values=None, is_basic=False, aggregation_rule="sum", equation="'time_a' + 'time_b'")
+    variables["time_b"] = Variable("time_b", values=np.array([3,2,3,4]), is_basic=True, aggregation_rule="sum", first_time=first_time_b, last_time=last_time_b)
+    variables["time_c"] = Variable("time_c", values=None, is_basic=False, aggregation_rule="sum", equation="'time_a' * 'time_b'")
+    
+    variables['time_a'].addUncertaintySource(variables['G'].uncertainty.direct_uncertainty_sources[2])
+    variables['time_b'].addUncertaintySource(variables['G'].uncertainty.direct_uncertainty_sources[1])
+
     print("End hardcoding testing variables")
     print()
     #""" 
@@ -57,7 +61,10 @@ if __name__=="__main__":
     
     #calculation_engine.harmonizeTimeSeries(variables['time_c'].dependencies)
 
+    equation_engine.buildPartialDerivativeExecutables(variables['time_c'])
     calculation_engine.evaluateVariable(variables['time_c'], update_var=True, silent=True)
+    calculation_engine.executeAllPartials(variables['time_c'], absolute_values=False, store_results=True, force_recalculation=False)
+    print(variables['time_c'].partial_values['time_b'])
 
     
     #calculation_engine.decreaseTemporalResolution(variables['G'], new_timestep=120, update_var=True, smuggle_limit=30)
@@ -76,7 +83,13 @@ if __name__=="__main__":
     print("Calculating uncertainties... - TESTING FROM HERE")
     
     
-    uncertainty_engine = UncertaintyEngine(variables, equation_engine = equation_engine)
+    uncertainty_engine = UncertaintyEngine(variables, equation_engine = equation_engine, calculation_engine = calculation_engine)
+    
+    
+    
+    uncertainty_engine.calculateUncertainty(variables['time_c'], recurse=True)
+    
+    
     
     uncertainty_engine.calculateUncertainty(variables["G"], recurse=True)
     uncertainty_engine.splitDirectUncertaintyContributions(variables['G'])
@@ -92,9 +105,9 @@ if __name__=="__main__":
            
     
     
-    variables['G'].uncertainty.plotRelativeRootSplit(k=2)
-    variables['G'].uncertainty.plotAbsoluteRootSplit(k=2)
-    s    
+    #variables['G'].uncertainty.plotRelativeRootSplit(k=2)
+    #variables['G'].uncertainty.plotAbsoluteRootSplit(k=2)
+        
     
     print()
     
@@ -134,6 +147,11 @@ if __name__=="__main__":
     print(variables["TS_('G')"].uncertainty.total_uncertainty / 1000)
     print(variables["TS_('Pout')"].uncertainty.total_uncertainty / 1000)
     print(variables['PR'].uncertainty.total_uncertainty)
+    print()
+    
+    
+    
+    
 
 
     
