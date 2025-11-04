@@ -54,6 +54,35 @@ class UncertaintyEngine:
         if var.is_basic:
             return 0
         
+        correlations = {}
+        #Loop through dependencies and retrieve correlations
+        for dep_name in var.uncertainty.dependency_uncertainty_names:
+            dep = var.dependencies[dep_name]
+            #Check if uncertainty calculation is performed, optionally auto calculate this
+            if not dep.uncertainty.is_calculated:
+                if auto_calculate or force_recalculation:
+                    self.calculateUncertainty(var, recurse=True)
+                else:
+                    raise ValueError(f"Cannot retrieve correlation of dependency {dep.name} of variable {var.name} - uncertainty not calculated yet. Please enable auto-calculation or call calculation manually.")
+            
+            #If no uncertainty: simply return 0 as correlation. This will not interfere with the actual uncertainty correlation: contribution of this dependency will be 0.
+            if dep.uncertainty.is_certain: 
+            #if dep.uncertainty.total_uncertainty == 0: ###!!!
+                correlations[dep_name] = np.array([0])
+                continue
+            #Now we retrieve or recursively calculate the correlation of this dependency
+            if (dep.uncertainty.correlation is None and recurse) or force_recalculation:
+                cor = self.calculateCorrelation(dep, auto_calculate=auto_calculate, recurse=recurse, force_recalculation=force_recalculation)
+            else:
+                cor = dep.uncertainty.correlation
+            correlations[dep_name] = cor
+        return correlations
+    
+    def _retrieveDependencyCorrelations_OLD(self, var, auto_calculate, recurse, force_recalculation=False):
+        """ Retrieve correlations of the dependencies; optionally auto-calculates necessary elements, recurses through tree or recalculates all values """
+        if var.is_basic:
+            return 0
+        
         correlations = []
         #Loop through dependencies and retrieve correlations
         for dep in var.dependencies.values():
@@ -89,6 +118,48 @@ class UncertaintyEngine:
         partials_dict = calculation_engine.executeAllPartials(var, absolute_values=True, store_results=False, force_recalculation=False)
         return partials_dict
     
+    
+    def _harmonizeDependencyUncertainties(self, var, dependency_uncertainties): ###!!! perhaps move to time engine
+        """  """
+        if var.harmonization_cache is None:
+            return dependency_uncertainties
+        
+        #If the cache is not empty a harmonization was performed. For each dependency, we check if a rescale was performed
+        for dep_name in dependency_uncertainties.keys():
+            harmonization_data = var.harmonization_cache[dep_name]
+            print()
+            print(f"Uncertainty harmonizing {dep_name}")
+            print(f"Original uncertainties: {dependency_uncertainties[dep_name]}")
+            #Check if the uncertainty needs to be aggregated
+            if harmonization_data.upsample_factor>1:
+                self.calculateCorrelation(var.dependencies[dep_name], auto_calculate=True, recurse=True, force_recalculation=False)
+                dependency_uncertainties[dep_name], aggregated_correlation = self.partialAggregation(var.dependencies[dep_name], harmonization_data)
+            else:
+                #Only prune tails at the start and end if necessary
+                low_index, high_index = harmonization_data.getTotalOffsetSteps()
+                dependency_uncertainties[dep_name] = dependency_uncertainties[dep_name][low_index:high_index]
+            print(f"Harmonized uncertainties: {dependency_uncertainties[dep_name]}")
+        return dependency_uncertainties
+    
+    def _harmonizeDependencyCorrelations(self, var, dependency_correlations): ###!!! perhaps move to time engine
+        """ """
+        if var.harmonization_cache is None:
+            return dependency_correlations
+        
+        for dep_name in dependency_correlations.keys():
+            harmonization_data = var.harmonization_cache[dep_name]
+            #Check if the correlation needs to be aggregated
+            if harmonization_data.upsample_factor>1:
+                ###!!! Terribly inefficient but necessary for now
+                dependency_uncertainties, aggregated_correlation = self.partialAggregation(var.dependencies[dep_name], harmonization_data)
+                dependency_correlations[dep_name] = aggregated_correlation
+            else:
+                #Only prune tails at the start and end if necessary
+                low_index, high_index = harmonization_data.getTotalOffsetSteps()
+                dependency_correlations[dep_name] = dependency_correlations[dep_name][low_index:high_index]
+        return dependency_correlations
+    
+    
     def _convertNestedListTo2DArray(self, lst):
         """ Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array """
         max_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
@@ -112,6 +183,16 @@ class UncertaintyEngine:
             #dep_names, total_dep_uncertainties = self._retrieveDependencyUncertainties(var, recurse)
             total_dep_uncertainties = self._retrieveDependencyUncertainties(var, recurse)
             dep_partial_values = self._getDependencyPartialsValues(var)
+            
+            
+            #Here we should check whether timeseries are harmonious
+            #If one or more dependencies was rescaled, we must partially-aggregate its uncertainties to match
+            #Partial aggregation requires correlation information per timestep - which is computationally expensive to obtain
+            #Therefore, we only calculate this where absolutely necessary
+            total_dep_uncertainties = self._harmonizeDependencyUncertainties(var, total_dep_uncertainties)                
+            
+            
+            
             
             #Get a list of ordered dependency names, and an array of weighted contributions
             dep_names = dep_partial_values.keys()
@@ -346,6 +427,8 @@ class UncertaintyEngine:
         #Dependency contributions
         if var.uncertainty.dependency_uncertainties_contributions is not None:
             dependency_correlations = self._retrieveDependencyCorrelations(var, auto_calculate=auto_calculate, recurse=recurse, force_recalculation=force_recalculation)
+            dependency_correlations = self._harmonizeDependencyCorrelations(var, dependency_correlations)
+            dependency_correlations = self._convertNestedListTo2DArray(dependency_correlations.values())
             dependency_correlation_contributions = np.multiply(dependency_correlations, var.uncertainty.dependency_uncertainties_contributions)
             dependency_correlation_contributions = np.sum(dependency_correlation_contributions, axis=0)
         else:
@@ -396,7 +479,6 @@ class UncertaintyEngine:
             new_uncertainties /= harmonization_data.upsample_factor
         
         return new_uncertainties, new_correlations
-    
     
     
     
