@@ -87,7 +87,7 @@ class EquationEngine:
             var.dependency_names = self.equationReader(var)            
         
     def createTimeSumVariable(self, name):
-        """ Creates a new variable that is a time integration of other variables """
+        """ Creates a new variable that is a time aggregation of an equation """
         #extract equation; name is of the form: TS(equation, options)
         data = name[4:-1].strip().split(",")
         if len(data)>1:
