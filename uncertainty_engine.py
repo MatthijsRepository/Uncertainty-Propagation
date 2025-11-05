@@ -119,7 +119,7 @@ class UncertaintyEngine:
         return partials_dict
     
     
-    def _harmonizeDependencyUncertainties(self, var, dependency_uncertainties): ###!!! perhaps move to time engine
+    def _harmonizeDependencyUncertainties(self, var, dependency_uncertainties, time_engine=None): ###!!! perhaps move to time engine
         """  """
         if var.harmonization_cache is None:
             return dependency_uncertainties
@@ -134,6 +134,8 @@ class UncertaintyEngine:
             if harmonization_data.upsample_factor>1:
                 self.calculateCorrelation(var.dependencies[dep_name], auto_calculate=True, recurse=True, force_recalculation=False)
                 dependency_uncertainties[dep_name], aggregated_correlation = self.partialAggregation(var.dependencies[dep_name], harmonization_data)
+                #The partial aggregation also returns correlation aggregates, which we cache for later reuse
+                var.harmonization_cache[dep_name].aggregated_correlation = aggregated_correlation
             else:
                 #Only prune tails at the start and end if necessary
                 low_index, high_index = harmonization_data.getTotalOffsetSteps()
@@ -150,9 +152,8 @@ class UncertaintyEngine:
             harmonization_data = var.harmonization_cache[dep_name]
             #Check if the correlation needs to be aggregated
             if harmonization_data.upsample_factor>1:
-                ###!!! Terribly inefficient but necessary for now
-                dependency_uncertainties, aggregated_correlation = self.partialAggregation(var.dependencies[dep_name], harmonization_data)
-                dependency_correlations[dep_name] = aggregated_correlation
+                #In this case the aggregated correlations were already calculated during uncertainty aggregation, and should therefore be cached
+                dependency_correlations[dep_name] = var.harmonization_cache[dep_name].aggregated_correlation
             else:
                 #Only prune tails at the start and end if necessary
                 low_index, high_index = harmonization_data.getTotalOffsetSteps()
@@ -190,9 +191,6 @@ class UncertaintyEngine:
             #Partial aggregation requires correlation information per timestep - which is computationally expensive to obtain
             #Therefore, we only calculate this where absolutely necessary
             total_dep_uncertainties = self._harmonizeDependencyUncertainties(var, total_dep_uncertainties)                
-            
-            
-            
             
             #Get a list of ordered dependency names, and an array of weighted contributions
             dep_names = dep_partial_values.keys()

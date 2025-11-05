@@ -27,11 +27,12 @@ class TimeHarmonizationData:
     high_fraction:      int         #Identical as above, but for bin i+n. high_fraction = 1-low_fraction: we assume integer upsample factors
     upsample_factor:    int         #Factor increase of new bin size compared to old bin size
     target_var_name:    Optional[str]   = None         #Name of the derived variable that required harmonization of dependencies
-    new_values:         Optional[Union[np.ndarray, float]] = None   #Can be used to store new values
     prune_offset_start: Optional[int]   = None         #Number of new timesteps that are discarded at start to ensure a common start time
     prune_offset_end:   Optional[int]   = None         #Number of new timesteps that are discarded at end to ensure a common end time
     #smuggled_time:      Optional[float] = None         #Amount of seconds that  were smuggled during rebinning
-    
+    new_values:         Optional[Union[np.ndarray, float]] = None   #Can be used to store new values
+    aggregated_correlation: Optional[np.ndarray] = None             #Can be used to cache aggregated correlations
+        
         
     def getFirstTime(self):
         return self.new_start_time + timedelta(seconds=self.new_timestep)
@@ -110,6 +111,7 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     weighted_dependency_uncertainties:      Optional[np.ndarray] = None                  #array, per dependency contains its total uncertainty times the sensitivity to this dependency (u_i * dvar/di) (per timestep)
     dependency_uncertainties_contributions: Optional[Union[np.ndarray, float]] = None    #array or float, containing relative contribution of each dependency to total uncertainty - which includes direct sources (per timestep)
     #total_dependency_uncertainty:           Optional[Union[np.ndarray, float]] = None
+    dependency_aggregated_correlations_cache: Optional[Union[np.ndarray, float]] = None
     
     root_sources:                           Optional[list] = None                        #list, lists all direct uncertainty sources and direct uncertainties of dependencies all the way down the tree
     root_uncertainty_contribution_split:    Optional[Union[np.ndarray]] = None           #array, containts fractional contribution of each direct uncertainty source (direct or down-tree) to the total uncertainty of this variable (per timestep) 
@@ -121,6 +123,7 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     
     def __post_init__(self):
         self.direct_uncertainty_sources = []
+        self.dependency_aggregated_correlations_cache = {}
         #self.dependency_uncertainties = {}                                         ###!!!
         
         """ Handle initialization of non-inputs here! """
