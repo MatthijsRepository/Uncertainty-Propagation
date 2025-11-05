@@ -465,6 +465,7 @@ class UncertaintyEngine:
         
         correlation_matrices = var.uncertainty.correlation[harmonization_data.low_index:harmonization_data.high_index].reshape((new_length, 1, harmonization_data.upsample_factor))
         correlation_matrices = np.repeat(correlation_matrices, repeats=harmonization_data.upsample_factor, axis=1)
+        correlation_matrices = (correlation_matrices + correlation_matrices.transpose(0,2,1)) / 2
         correlation_matrices[:,np.eye(harmonization_data.upsample_factor,dtype=bool)] = 1
         
         new_uncertainties = np.matvec(correlation_matrices, uncertainty_segments)   #Mv
