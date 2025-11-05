@@ -68,6 +68,8 @@ class TimeEngine:
         #Default benchmark time to 12:00:00
         if benchmark_time is None:
             benchmark_time = datetime.strptime("12:00:00", "%H:%M:%S")
+        if isinstance(benchmark_time, str):
+            benchmark_time = datetime.strptime(benchmark_time, "%H:%M:%S")
         
         #We calculate the new start and end times by seeing where bin limits - given the benchmark - fit in the previous timerange
         #Note: we allow to smuggle a specified amount; to allow manual avoiding of instances where an hour of data is discarded based on a small time mismatch.
