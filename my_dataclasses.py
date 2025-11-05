@@ -51,16 +51,19 @@ class TimeHarmonizationData:
 
 @dataclass
 class UncertaintySource:
-    name: str
-    is_relative: bool
-    is_symmetric: bool
-    shape: str
-    correlation: Union[float, int, np.ndarray]
+    name:               str
+    is_relative:        bool
+    is_symmetric:       bool
+    shape:              str
+    correlation:        Union[float, int, np.ndarray]
+    multiplier:         Optional[str] = None
+    values:             Optional[Union[float, int, np.ndarray]] = None
+    aggregated_values:  Optional[dict] = None
+    parent_variable:    Optional[str] = None
     #Mutually exclusive fields
-    sigma: Optional[Union[float, int, np.ndarray]] = None
-    bound: Optional[Union[float, int, np.ndarray]] = None
-    multiplier: Optional[str] = None
-    
+    sigma:              Optional[Union[float, int, np.ndarray]] = None
+    bound:              Optional[Union[float, int, np.ndarray]] = None
+
     def __post_init__(self):
         #Check input consistency
         if not 0 <= self.correlation <= 1:
@@ -83,6 +86,10 @@ class UncertaintySource:
         elif self.shape.lower()=="u-shaped":
             factor = np.sqrt(2)
         
+        #Check if correlation is either 0 or 1 - the only currently supported values
+        if self.correlation not in (0,1):
+            raise ValueError(f"Correlation for uncertainty source {self.name} is given as {self.correlation}. Currently only correlations 0 or 1 are supported.")
+        
         #If the uncertainty is relative: apply factor 100 correction to change percentage value to fraction
         if self.is_relative:
             factor *= 100
@@ -101,29 +108,22 @@ class UncertaintySource:
 class VariableUncertainty: ###!!! Handle some stuff in post-init?
     var_name:                               str
     variable:                               "Variable" #Placeholder!
-    direct_uncertainty_sources:             Optional[list] = None                        #list containing UncertaintySource objects
-    direct_uncertainties:                   Optional[Union[np.ndarray, float]] = None    #array or float containing the magnitudes of all direct uncertainties (per timestep)
-    direct_uncertainties_contributions:     Optional[Union[np.ndarray, float]] = None    #array or float containing the fractional split of relative weight to total uncertainty per direct source (per timestep)
-    total_direct_uncertainty_contribution:  Optional[Union[np.ndarray, float]] = None    #array or float containing relative contribution of direct sources to total uncertainty - which includes that form dependencies (per timestep)
-    #total_direct_uncertainty:               Optional[Union[np.ndarray, float]] = None  
     
-    dependency_uncertainty_names:           Optional[list] = None                        #list of names of all dependencies
-    weighted_dependency_uncertainties:      Optional[np.ndarray] = None                  #array, per dependency contains its total uncertainty times the sensitivity to this dependency (u_i * dvar/di) (per timestep)
-    dependency_uncertainties_contributions: Optional[Union[np.ndarray, float]] = None    #array or float, containing relative contribution of each dependency to total uncertainty - which includes direct sources (per timestep)
-    #total_dependency_uncertainty:           Optional[Union[np.ndarray, float]] = None
-    dependency_aggregated_correlations_cache: Optional[Union[np.ndarray, float]] = None
+    direct_uncertainty_sources:             Optional[list] = None
     
-    root_sources:                           Optional[list] = None                        #list, lists all direct uncertainty sources and direct uncertainties of dependencies all the way down the tree
-    root_uncertainty_contribution_split:    Optional[Union[np.ndarray]] = None           #array, containts fractional contribution of each direct uncertainty source (direct or down-tree) to the total uncertainty of this variable (per timestep) 
-    
+    all_uncertainty_sources:                Optional[list] = None
+    all_uncertainty_sensitivities:          Optional[dict] = None
+
     total_uncertainty:                      Optional[Union[np.ndarray, float]] = None
     correlation:                            Optional[Union[np.ndarray, float]] = None
-    is_calculated:                          Optional[bool] = False
+    
+    direct_uncertainties_calculated:        Optional[bool] = False
+    total_uncertainty_calculated:           Optional[bool] = False
     is_certain:                             Optional[bool] = None
     
     def __post_init__(self):
         self.direct_uncertainty_sources = []
-        self.dependency_aggregated_correlations_cache = {}
+
         #self.dependency_uncertainties = {}                                         ###!!!
         
         """ Handle initialization of non-inputs here! """

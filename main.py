@@ -6,7 +6,7 @@ from time_engine import TimeEngine
 
 
 if __name__=="__main__":
-    inputfile = "C:\\Users\\mate\\Desktop\\python\\Uncertainty-Propagation\\uncertainty_testinput.txt"
+    inputfile = "C:\\Users\\mate\\Desktop\\python\\Experimental\\uncertainty_testinput.txt"
     
     #Handling input
     print("Started parsing input")
@@ -83,72 +83,28 @@ if __name__=="__main__":
     print("Calculating uncertainties... - TESTING FROM HERE")
     
     
+    harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=3600, benchmark_time = "12:59:00")
+
+    
     uncertainty_engine = UncertaintyEngine(variables, equation_engine = equation_engine, calculation_engine = calculation_engine)
     
     
     
-    uncertainty_engine.calculateUncertainty(variables['time_c'], recurse=True)
+    #uncertainty_engine.calculateUncertainty(variables['time_c'], recurse=True)
+    
+    uncertainty_engine.prepareAllDirectUncertainties(variables.values())
+    
+    uncertainty_engine.calculateTotalUncertainty(variables['G'], recurse=True)
+    hourly_aggregation = uncertainty_engine.partialAggregation(variables['G'], harm_dat)
+    print(hourly_aggregation * 60 * 2 / 1000)
     
     
+    print(variables['G'].uncertainty.total_uncertainty)
     
-    uncertainty_engine.calculateUncertainty(variables["G"], recurse=True)
-    uncertainty_engine.splitDirectUncertaintyContributions(variables['G'])
-    uncertainty_engine.splitTotalUncertaintyContributions(variables['G'])
-    uncertainty_engine.splitToSourceContributions(variables['G'])
-    
-    uncertainty_engine.calculateCorrelation(variables['G'], auto_calculate=True, recurse=True, force_recalculation=False)
-    
-    
-    print(variables['G'].uncertainty.correlation)
-    print(variables['G'].uncertainty.correlation[400])
-    print(variables['G'])
-           
-    
-    
-    #variables['G'].uncertainty.plotRelativeRootSplit(k=2)
-    #variables['G'].uncertainty.plotAbsoluteRootSplit(k=2)
-        
-    
-    print()
-    
-    from datetime import datetime
-    timeformat = "%H:%M:%S"
-    
-    
-    test_time = datetime.strptime("12:59:00", timeformat)
-    test_harmonization_data = time_engine.decreaseVariableTemporalResolution(variables['G'], new_timestep=3600, benchmark_time=test_time, update_var=False, smuggle_limit=0)
-    
-    
-    
-    uncertainty_engine.partialAggregation(variables['G'], test_harmonization_data)
-    
-    #"""
-
-    start_time_a = datetime.strptime("12:04:15", timeformat)
-    #start_time_a = datetime.strptime("12:59:01", timeformat)
-    
-    #variables['G'].values = variables['G'].values[1:]
-    #variables['G'].start_time = datetime.strptime("00:00:30", timeformat)
-    #variables['G'].first_time = datetime.strptime("00:01:00", timeformat)
-    #import numpy as np
-    #variables['G'].values = np.ones(len(variables['G'].values))
-    #calculation_engine.decreaseVariableTemporalResolution(variables['G'], 3600, benchmark_time=start_time_a, smuggle_limit=60)
-    
-    #"""
-    print(variables['PR'].values)
-    
-    uncertainty_engine.calculateUncertainty(variables['PR'], recurse=True)
-    uncertainty_engine.calculateCorrelation(variables['PR'], auto_calculate=True)
-    #u = uncertainty_engine.timeAggregateTotalUncertainty(variables['PR'])
-    #print(u)
-    #print(u / variables['PR'].values)
     print(variables['G'].uncertainty.total_uncertainty[800])
-    print(variables['G'].uncertainty.correlation[800])
-    print(variables["TS_('G')"].uncertainty.total_uncertainty / 1000)
-    print(variables["TS_('Pout')"].uncertainty.total_uncertainty / 1000)
-    print(variables['PR'].uncertainty.total_uncertainty)
-    print()
-    
+
+    print(np.shape(variables['G'].uncertainty.total_uncertainty))
+
     
     
     
