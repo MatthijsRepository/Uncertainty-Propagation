@@ -132,6 +132,7 @@ class TimeEngine:
             print(f"WARNING: hard-rescaled variable {var.name} to a new timestep. Direct uncertainties for this variable will be rescaled, but this action is destructive for uncertainty information.")            
         return harmonization_data
     
+    
     def _rebinTimeSeries(self, var, harmonization_data):
         """ Handles rebinning of variable time series data into a new timeseries of greater granularity 
             Allows for fractional splitting of old bins between two new bins 
@@ -140,32 +141,29 @@ class TimeEngine:
         low_fraction, high_fraction = harmonization_data.low_fraction, harmonization_data.high_fraction
         factor                      = harmonization_data.upsample_factor
         
-        #Note: function cannot handle full time aggregation - use timesum for that
         new_values = np.zeros( int((high_index-low_index)/factor) )
         if len(new_values)==1:
             raise ValueError("Aggregating time series data into a single bin currently not supported. - Timesum calling not implemented yet") ###!!!
 
-        #Note: new bins can contain fractions of old bins - thus our loop should start on the same bin as the previous iteration ended on
-        #Since new bin i can for instance include 2/3 of old bin j, then new bin i+1 should contain 1/3 of old bin j!
         for i in range(len(new_values)):
             start = low_index + i*factor
             if start < 0:
                 #First bin handling
                 new_values[i] = np.sum(var.values[:start+factor])
-                new_values[i] += abs(low_index)-1 * var.values[0]
+                new_values[i] += (abs(start)-1) * var.values[0]
                 new_values[i] += var.values[0] * low_fraction
                 new_values[i] += var.values[start+factor] * high_fraction
-            elif start + factor-1 >= len(var.values):
+            elif start + factor >= len(var.values):
                 #Last bin handling
-                new_values[i] = np.sum(var.values[start:])
-                new_values[i] += var.values[start-1] * low_fraction
-                new_values[i] += (high_index - len(var.values)-1) * var.values[-1]
+                new_values[i] = np.sum(var.values[start+1:])
+                new_values[i] += var.values[start] * low_fraction
+                new_values[i] += (high_index - len(var.values)) * var.values[-1]
                 new_values[i] += var.values[-1] * high_fraction
             else:
                 #General bin handling
-                new_values[i] = np.sum(var.values[start:start+factor-1])
+                new_values[i] = np.sum(var.values[start+1:start+factor])
                 new_values[i] += var.values[start] * low_fraction
-                new_values[i] += var.values[start+factor-1] * high_fraction
+                new_values[i] += var.values[start+factor] * high_fraction
 
         #If aggregation rule is to average, we take the time average
         if var.aggregation_rule == "average": 
