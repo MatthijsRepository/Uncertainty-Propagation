@@ -87,7 +87,10 @@ if __name__=="__main__":
     
     
     
+
+    
     uncertainty_engine.calculateUncertainty(variables['time_c'], recurse=True)
+    uncertainty_engine.calculateCorrelation(variables['time_c'], auto_calculate=True, recurse=True, force_recalculation=False)
     
     
     
@@ -95,21 +98,37 @@ if __name__=="__main__":
     uncertainty_engine.splitDirectUncertaintyContributions(variables['G'])
     uncertainty_engine.splitTotalUncertaintyContributions(variables['G'])
     uncertainty_engine.splitToSourceContributions(variables['G'])
-    
     uncertainty_engine.calculateCorrelation(variables['G'], auto_calculate=True, recurse=True, force_recalculation=False)
     
+    #Aggregation test
+    harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=3600, benchmark_time = "12:59:00")
+    u_new, c_new = uncertainty_engine.partialAggregation(variables['G'], harm_dat)
+    print("Hourly aggregation G")
+    print(u_new*60 / 1000 * 2)
+    print(c_new)
+    print()
+    c_new = np.repeat(c_new[:,np.newaxis],axis=1, repeats=24)
+    c_new = (c_new + c_new.T) / 2
+    np.fill_diagonal(c_new, 1)
     
-    print(variables['G'].uncertainty.correlation)
-    print(variables['G'].uncertainty.correlation[400])
-    print(variables['G'])
-           
+    #u_new[:4] = 0
+    #u_new[-4:] = 0
+    print(u_new*60 / 1000 * 2)
     
+    tot = np.sqrt(u_new.T @ c_new @ u_new)
+    tot = tot * 60 * 2 / 1000 / 1000
+    print(tot)
+    print()
+    tot_2 = uncertainty_engine.timeAggregateTotalUncertainty(variables['G'])
+    print(tot_2 * 60 * 2 / 1000 / 1000)
+    print("END section")
+    
+
     
     #variables['G'].uncertainty.plotRelativeRootSplit(k=2)
     #variables['G'].uncertainty.plotAbsoluteRootSplit(k=2)
         
-    
-    print()
+
     
     from datetime import datetime
     timeformat = "%H:%M:%S"
