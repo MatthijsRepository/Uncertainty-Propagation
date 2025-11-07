@@ -40,7 +40,7 @@ class UncertaintyEngine:
         else:
             for dep in var.dependencies.values():
                 self.prepareDownTreeDirectUncertainties(dep)
-        
+    
     
     def getDependencyUncertainties(self, var,recurse=True):
         root_sources = []
@@ -75,12 +75,187 @@ class UncertaintyEngine:
         print(f"WARNING: dependency sensitivity retriever retrieves uncertainties multiplied by sensitivities. Calculations using this function are erroneous!!!")
         return self.partialAggregation(dep, var.harmonization_cache[dep.name])
         
-            
+     
+    def getDependencyUncertaintySources(self, var,recurse=True):
+        root_sources = []
+        root_sensitivities = {}
+        for dep in var.dependencies.values():
+            if not dep.uncertainty.total_uncertainty_calculated:
+                if recurse:
+                    self.calculateTotalUncertainty(dep)
+                else:
+                    raise ValueError(f"Cannot calculate uncertainty for variable {var.name}: dependency uncertainty of {dep.name} not calculated. Please enable recursion or do this manually.")
+            #If the dependency has no uncertainty sources, we can skip appending to our registries
+            if len(dep.uncertainty.all_uncertainty_sources) == 0:
+                continue
+
+
+
+    def _rootWeightedUncertaintyCalculator(self, var, dep_name, new_sensitivities, dep_weighted_uncertainties, total_upsample_factors):
+        """ For a given variable and dependency, this function will prune the weighted uncertainties to the right length, and multiply sections
+            of length 'total_upsample_factor' of the old sensitivities by its corresponding entry in the new_sensitivities
+            in other words: if variable var has timesep of a factor 'total_upsample_factor=x' greater than the timestep of the original uncertainty 
+            then each set of x consecutive entries of the source weighted uncertainty should be reweighted by the same factor in new_sensitivities 
+            important to note is that dep_weighted_uncertainties has the original temporal resolution of the uncertainty source, not necessarily that of the variable or dependency """
         
-    
+        #If a temporal resolution decrease was performed at the calculation of var, then we should prune the weighted uncertainties and update the total upsample factor accordingly
+        if var.harmonization_cache is not None:
+            harmonization_data = var.harmonization_cache[dep_name]
+            for i in range(len(dep_weighted_uncertainties)):
+                #First we prune the weighted uncertainties using the original total upsample factor
+                dep_weighted_uncertainties[i] = dep_weighted_uncertainties[i][int(harmonization_data.low_index * total_upsample_factors[i]) : \
+                                                                              int(harmonization_data.high_index * total_upsample_factors[i]) ]
+                #now we update the total upsample factor
+                total_upsample_factors[i] *= harmonization_data.upsample_factor
+                #Here we extend the new sensitivities by copying each entry 'total_upsample_factors[i]' times
+                shaped_new_sensitivities = np.kron(new_sensitivities[dep_name], np.ones(int(total_upsample_factors[i])))
+                #now the two arrays are both of the same shape and we can multiply the two arrays directly
+                dep_weighted_uncertainties[i] = dep_weighted_uncertainties[i] * shaped_new_sensitivities
+        else:
+            for i in range(len(dep_weighted_uncertainties)):
+                #Here we extend the new sensitivities by copying each entry 'total_upsample_factors[i]' times
+                shaped_new_sensitivities = np.kron(new_sensitivities[dep_name], np.ones(total_upsample_factors[i]))
+                #now the two arrays are both of the same shape and we can multiply the two arrays directly
+                dep_weighted_uncertainties[i] = dep_weighted_uncertainties[i] * shaped_new_sensitivities
+        return dep_weighted_uncertainties, total_upsample_factors
+
+
+
+    def getWeightedRootUncertainties(self, var, store=False):
+        """ Get all weighted root uncertainties of a variable. Specifically, for all uncertainty sources downtree,
+            it returns an array of the weighted uncertainties with respect to the present variable, in the original temporal resolution of the uncertainty.
+            Thus, if the temporal timestep of this variable is 10 times greater than that of a root uncertainty,
+            each 10 consecutive entries in the weighted root uncertainty will be multiplied by the same top-level sensitivity.
+            Returns a list of uncertainty source objects, a list of their corresponding weighted uncertainties, 
+            and the total temporal resolution difference factor between the source and the present variable """
+        if not var.uncertainty.direct_uncertainties_calculated:
+            self._prepareVariableDirectUncertainties(var)
+        
+        if var.uncertainty.is_certain:
+            return [], [], []
+        #Handler for the case when everything is already calculated
+        #if var.is_certain, for instance
+        #Or if the three elements are already populated ###!!!
+        
+        n_values = 1 if isinstance(var.values, (float,int)) else len(var.values)
+        
+        #Initialize the relevant objects using the direct uncertainty sources of this variable
+        var.uncertainty.all_uncertainty_sources = var.uncertainty.direct_uncertainty_sources
+        if len(var.uncertainty.direct_uncertainty_sources)>0:
+            all_weighted_uncertainties = [source.values * np.ones(n_values) for source in var.uncertainty.direct_uncertainty_sources]
+        else:
+            all_weighted_uncertainties = []
+        all_total_upsample_factors = [1 for _ in var.uncertainty.direct_uncertainty_sources]
+        
+        #If the variable is not a basic variable, we recursively retrieve all required data from the dependencies
+        if not var.is_basic:
+            new_sensitivities = self._getDependencyPartialsValues(var)
+            
+            all_dep_weighted_uncertainties, all_upsample_factors = [], []
+            for dep_name in var.dependency_names:
+                #Recursively retrieve uncertainty data from the dependencies
+                dep_sources, dep_weighted_uncertainties, total_upsample_factors = self.getWeightedRootUncertainties(var.dependencies[dep_name])
+                #If there are no uncertainties for this dependency we skip it immediately
+                if len(dep_sources)==0:
+                    continue
+                
+                dep_weighted_uncertainties, total_upsample_factors = self._rootWeightedUncertaintyCalculator(var, dep_name, new_sensitivities, \
+                                                                                                             dep_weighted_uncertainties, total_upsample_factors)
+                #Append to the relevant containers
+                var.uncertainty.all_uncertainty_sources += dep_sources
+                all_weighted_uncertainties += dep_weighted_uncertainties
+                all_total_upsample_factors += total_upsample_factors
+        
+        #Optionally store the results
+        if store:
+            var.uncertainty.root_weighted_uncertainties = all_weighted_uncertainties
+            var.uncertainty.root_upsample_factors = all_total_upsample_factors
+        return var.uncertainty.all_uncertainty_sources, all_weighted_uncertainties, all_total_upsample_factors
+                
+                
+                        
+    def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors):
+        """ Performs a time-aggregation on a retrieved set of root sources, weighted root uncertainties and upsample factors
+            In other words, this function brings the weighted root uncertainties for a variable retrieved by the getWeightedRootUncertainties function
+            and aggregates all uncertainty arrays to the timestep of the variable.
+            Note that the time aggregation is a destructive procedure in general; time aggregation of time aggregates only makes sense for fully (un)correlated error sources """
+        #Note, we cannot make this function fully numpy in general, because the arrays inside weighted_uncertainties can be of different lengths
+        for i, source in enumerate(sources):
+            corr_matrix = source.getCorrelationMatrix(total_upsample_factors[i])
+            new_size = int(len(weighted_uncertainties[i]) / total_upsample_factors[i])
+            
+            wu = weighted_uncertainties[i].reshape((new_size, total_upsample_factors[i]))
+            
+            new_weighted_uncertainties = np.matvec(corr_matrix, wu)
+            weighted_uncertainties[i] = np.vecdot(wu, new_weighted_uncertainties)
+        return np.array(weighted_uncertainties, dtype=float)
+        
+            
+
     
     
     def calculateTotalUncertainty(self, var, recurse=True):
+        print(f"Calculating total uncertainty for variable {var.name}")
+        if var.uncertainty.total_uncertainty_calculated is True:
+            return
+        if not var.uncertainty.direct_uncertainties_calculated:
+            self._prepareVariableDirectUncertainties(var)
+        
+        #Retrieve root sources, weighted uncertainties and upsample factors
+        root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors = self.getWeightedRootUncertainties(var)
+        
+        print("\n \n")
+        print(f"Variable {var.name}")
+        print([source.name for source in root_sources])
+        print(var.uncertainty.root_upsample_factors)
+        
+        aggregated_weighted_uncertainties = self.aggregateWeightedRootUncertainties(root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors)
+        
+        #If there are no root sources: break it off here
+        if len(root_sources)==0:
+            var.uncertainty.total_uncertainty_calculated = True
+            var.uncertainty.is_certain = True
+            return
+        
+        print(aggregated_weighted_uncertainties)
+        
+        var.uncertainty.total_uncertainty = np.sqrt(np.sum(aggregated_weighted_uncertainties, axis=0))
+        var.uncertainty.total_uncertainty_calculated = True
+        
+        
+        #Final architecture
+        #all uncertainty sources = {source, comes_from}
+        #sensitivities = {comes_from, sensitivities} where sensitivities is ones for self and partials for dependencies
+        
+        #Then, we calculate the uncertainty as follows:
+        #You make a list of weighted uncertainties
+        #Append direct uncertainties using ones as weight
+        #We go downtree from our node
+        #For each dependency: 
+            #We ask to retrieve the weighted uncertainties
+            #Check whether harmonised
+            #
+        
+        
+        #At root: pass the complete uncertainty array and a corresponding series of ones and metadata of all
+        #Arbitrary level: 
+        #Get direct sources, sensitivities = 1
+        #for each dependency dep:
+            #We can even get ([sources], [sensitivities_mult_uncertainties], [upsample_factors, nested list], [nested list of offset tuples])
+            #you get: [sources], [uncertainties], [sensitivities], [upsample factor from root]
+            #you get ({sources : uncertainties}, {sources: sensitivity or index}, [sensitivities], {sources: upsample_factors_from_root})
+            #If harmonization_cache: prune retrieved uncertainty, sensitivities using upsample_factor; multiply with new sensitivities; update upsample_factor_from_root
+            #Else: simply multiply sensitivities with new sensitivities
+            #Combine previous sources with this
+        #Pass on
+        
+        #all uncertainty sources: list of source objects, source objects contain the hard uncertainty values
+        #sensitivities = result of partial aggregation
+        #source_sensitivity_registry = {source, sensitivity pointer}
+        return var.uncertainty.total_uncertainty
+    
+    
+    def calculateTotalUncertainty_OLD(self, var, recurse=True):
         print(f"Calculating total uncertainty for variable {var.name}")
         if var.uncertainty.total_uncertainty_calculated is True:
             return
@@ -262,10 +437,11 @@ class UncertaintyEngine:
         return
     
     
-    def _convertNestedListTo2DArray(self, lst):
+    def _convertNestedListTo2DArray(self, lst, forced_length=None):
         """ Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array """
-        max_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
-        lst = [np.full(max_length, v) if (np.isscalar(v) or (isinstance(v, np.ndarray) and v.size == 1))  else v for v in lst]
+        if forced_length is None:
+            forced_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
+        lst = [np.full(forced_length, v) if (np.isscalar(v) or (isinstance(v, np.ndarray) and v.size == 1))  else v for v in lst]
         return np.vstack(lst).astype(float)
       
     

@@ -99,7 +99,11 @@ if __name__=="__main__":
     uncertainty_engine.calculateTotalUncertainty(variables['G'], recurse=True)
     
     harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=120, benchmark_time = "12:59:00")
-    hourly_aggregation = uncertainty_engine.partialAggregation(variables['G'], harm_dat)
+    
+    
+    
+    
+    #hourly_aggregation = uncertainty_engine.partialAggregation(variables['G'], harm_dat)
     
     
 

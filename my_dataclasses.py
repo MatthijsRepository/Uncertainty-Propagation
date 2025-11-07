@@ -118,6 +118,7 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     
     all_uncertainty_sources:                Optional[list] = None
     all_uncertainty_sensitivities:          Optional[dict] = None
+    all_uncertainty_harmonizations:         Optional[list] = None
 
     total_uncertainty:                      Optional[Union[np.ndarray, float]] = None
     correlation:                            Optional[Union[np.ndarray, float]] = None
