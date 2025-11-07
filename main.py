@@ -64,10 +64,9 @@ if __name__=="__main__":
     equation_engine.buildPartialDerivativeExecutables(variables['time_c'])
     calculation_engine.evaluateVariable(variables['time_c'], update_var=True, silent=True)
     calculation_engine.executeAllPartials(variables['time_c'], absolute_values=False, store_results=True, force_recalculation=False)
-    print(variables['time_c'].partial_values['time_b'])
 
-    
-    #calculation_engine.decreaseTemporalResolution(variables['G'], new_timestep=120, update_var=True, smuggle_limit=30)
+
+    #calculation_engine.decreaseTemporalResolution(variables['G'], new_timestep=60, update_var=True, smuggle_limit=0)
     
     
     derived_variables = equation_engine.splitBasicDerived(variables)[1]    
@@ -83,29 +82,46 @@ if __name__=="__main__":
     print("Calculating uncertainties... - TESTING FROM HERE")
     
     
-    harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=3600, benchmark_time = "12:59:00")
+   
 
+    #second_harm_dat = time_engine.decreaseVariableTemporalResolution(variables['G'], new_timestep=3600, benchmark_time="12:59:00", update_var=False, smuggle_limit=0)
+    #print("Hourly totals")
+    #print(second_harm_dat.new_values * 60)
     
     uncertainty_engine = UncertaintyEngine(variables, equation_engine = equation_engine, calculation_engine = calculation_engine)
     
     
     
-    #uncertainty_engine.calculateUncertainty(variables['time_c'], recurse=True)
+    uncertainty_engine.calculateTotalUncertainty(variables['time_c'], recurse=True)
     
     uncertainty_engine.prepareAllDirectUncertainties(variables.values())
     
     uncertainty_engine.calculateTotalUncertainty(variables['G'], recurse=True)
-    hourly_aggregation = uncertainty_engine.partialAggregation(variables['G'], harm_dat)
-    print(hourly_aggregation * 60 * 2 / 1000)
     
+    harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=120, benchmark_time = "12:59:00")
+    hourly_aggregation = uncertainty_engine.partialAggregation(variables['G'], harm_dat)
+    
+    
+
+    
+
+    
+
+    print()
+
+
     
     print(variables['G'].uncertainty.total_uncertainty)
     
     print(variables['G'].uncertainty.total_uncertainty[800])
+    print(variables['G'].uncertainty.total_uncertainty[750])
+    print(variables['G'].uncertainty.total_uncertainty[700])
+    print(variables['G'].uncertainty.total_uncertainty[650])
+    print(variables['G'].uncertainty.total_uncertainty[600])
+
 
     print(np.shape(variables['G'].uncertainty.total_uncertainty))
 
-    
     
     
 

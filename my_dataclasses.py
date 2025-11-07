@@ -102,6 +102,11 @@ class UncertaintySource:
         #Correct for one-sidedness
         if not self.is_symmetric:
             self.sigma = self.sigma / 2
+    
+    def getCorrelationMatrix(self, size):
+        M = np.ones((size, size)) * self.correlation
+        np.fill_diagonal(M, 1)
+        return M
             
 
 @dataclass
@@ -129,15 +134,10 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
         """ Handle initialization of non-inputs here! """
     
     def reset(self):
-        self.direct_uncertainties                   = None
-        self.direct_uncertainties_contributions     = None
-        self.total_direct_uncertainty_contribution  = None
-        self.weighted_dependency_uncertainties      = None
-        self.dependency_uncertainties_contributions = None
-        self.root_uncertainty_contribution_split    = None
+        self.all_uncertainty_sensitivities          = None
         self.total_uncertainty                      = None
-        self.correlation                            = None
-        self.is_calculated                          = False
+        self.direct_uncertainties_calculated        = False
+        self.total_uncertainty_calculated           = False
         self.is_certain                             = None
         
     def rescaleUncertaintySources(self, upsample_factor):

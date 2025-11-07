@@ -56,8 +56,27 @@ class UncertaintyEngine:
                 continue
             #Add all root sources from this dependency to our registry, and all root sensitivities to a new dictionary entry
             root_sources += dep.uncertainty.all_uncertainty_sources
-            root_sensitivities[dep.name] = dep.uncertainty.all_uncertainty_sensitivities
+            #root_sensitivities[dep.name] = dep.uncertainty.all_uncertainty_sensitivities ###!!!
+            root_sensitivities[dep.name] = self._retrieveDependencySensitivities(var, dep)
         return root_sources, root_sensitivities
+    
+    def _retrieveDependencySensitivities(self, var, dep):
+        #If no time harmonization cache is present we can safely return the sensitivities from the dependency
+        if var.harmonization_cache is None:
+            return dep.uncertainty.all_uncertainty_sensitivities
+        
+        #Only if a time harmonization was performed at this level do we need to perform special handling
+        
+        print("WARNING: at present we reaggregate uncertainty at top level for time-harmonized data. Aggregation should instead be reaggregated from base values to include correlation correctly for complex correlation forms.")
+        
+        #harmonization_data = var.harmonization_cache[dep.name] ###!!!
+        #if harmonization_data.upsample_factor == 1:
+        #    return dep.uncertainty.all_uncertainty_sensitivities[:, harmonization_data.low_index, harmonization_data.high_index]
+        print(f"WARNING: dependency sensitivity retriever retrieves uncertainties multiplied by sensitivities. Calculations using this function are erroneous!!!")
+        return self.partialAggregation(dep, var.harmonization_cache[dep.name])
+        
+            
+        
     
     
     
@@ -87,7 +106,6 @@ class UncertaintyEngine:
             var.uncertainty.all_uncertainty_sensitivities = np.append(np.ones((len(var.uncertainty.direct_uncertainty_sources), n_values)),\
                                                                       new_sensitivities,
                                                                       axis=0)
-            print(np.shape(var.uncertainty.all_uncertainty_sensitivities))
         
         if len(var.uncertainty.all_uncertainty_sources) == 0:
             var.uncertainty.total_uncertainty_calculated = True
@@ -101,6 +119,11 @@ class UncertaintyEngine:
         var.uncertainty.total_uncertainty = np.sqrt(np.sum( (all_uncertainty_magnitudes * var.uncertainty.all_uncertainty_sensitivities)**2 , axis=0) )
         var.uncertainty.total_uncertainty_calculated = True
         print(f"Finished calculating total uncertainty for variable {var.name}")
+        
+        print(f"Total sensitivity_magnitudes for variable {var.name} \n{all_uncertainty_magnitudes}")
+        
+        if var.is_timesum:
+            raise ValueError("Cannot calculate uncertainties for timesums yet.")
         return
 
 
@@ -110,7 +133,7 @@ class UncertaintyEngine:
             raise ValueError(f"Cannot aggregate uncertainty of variable {var.name} because its uncertainty is not yet evaluated.")
         
         low_index, high_index = harmonization_data.getTotalOffsetSteps()
-        #If there the harmonization was only edge pruning and no change in temporal resolution, we simply return the pruned uncertainty
+        #If the harmonization was only edge pruning and no change in temporal resolution, we simply return the pruned uncertainty
         if harmonization_data.upsample_factor == 1:
             return var.uncertainty.total_uncertainty[low_index:high_index]
         
@@ -123,29 +146,24 @@ class UncertaintyEngine:
         
         #Multiply the magnitudes with their respective sensitivities
         all_magnitudes_sensitivities = all_uncertainty_magnitudes * var.uncertainty.all_uncertainty_sensitivities
-        print(np.shape(all_magnitudes_sensitivities))
+        
         #Prune ends, divide into the new segments
         all_magnitudes_sensitivities = all_magnitudes_sensitivities[:, low_index:high_index].reshape((-1, new_length, harmonization_data.upsample_factor))
-        #Take root square sum for each bin
-        all_magnitudes_sensitivities = np.sqrt(np.sum(all_magnitudes_sensitivities**2, axis=2))
-        print("HERE")
-        print(np.shape(all_magnitudes_sensitivities))        
-        #Now we must identify the correction factor for each uncertainty source independently
-        #Correction factor is based on aggregation rule and correlation of each source (aggregation rule is that of the variable the uncertainty acts on)
-        correction_factors = np.ones(len(var.uncertainty.all_uncertainty_sources))
         
-        #aggregation_rules = np.array([source.parent_variable.aggregation_rule for source in var.uncertainty.all_uncertainty_sources])
-        #correction_factors[np.where(aggregation_rules=="average")] = 1 / harmonization_data.upsample_factor
+        
+        
+        correlation_matrices = np.array([u.getCorrelationMatrix(harmonization_data.upsample_factor) for u in var.uncertainty.all_uncertainty_sources])
+        all_magnitudes_sensitivities = np.einsum('stf, sfg, stg -> st', all_magnitudes_sensitivities, correlation_matrices, all_magnitudes_sensitivities)
+        
+        #Correction factor is based on aggregation rule of the variable
+        ###!!! Ensure that correction factors are applied in the correct way! Once for each variance in the covariance!
+        correction_factors = np.ones(len(var.uncertainty.all_uncertainty_sources))
         if var.aggregation_rule == "average":
             correction_factors *= 1 / harmonization_data.upsample_factor
+        all_magnitudes_sensitivities = correction_factors[:, np.newaxis]**2 * all_magnitudes_sensitivities
         
-        correlations = np.array([source.correlation for source in var.uncertainty.all_uncertainty_sources])
-        correction_factors[np.where(correlations == 0)] *= 1/np.sqrt(harmonization_data.upsample_factor)
-        
-        all_magnitudes_sensitivities = correction_factors[:, np.newaxis] * all_magnitudes_sensitivities
-        
-        return np.sqrt(np.sum( (all_magnitudes_sensitivities)**2 , axis=0) )
-        
+        #return np.sqrt(np.sum(all_magnitudes_sensitivities , axis=0) )
+        return all_magnitudes_sensitivities
         
         
     
