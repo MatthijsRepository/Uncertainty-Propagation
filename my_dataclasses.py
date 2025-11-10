@@ -282,6 +282,14 @@ class Variable:
         else:
             return (f"Derived variable: {self.name} = {self.equation} \nDescription: {self.description}")
     
+    def __len__(self):
+        if self.values is None:
+            raise ValueError(f"Tried to obtain length of variable {self.name} for which no values are defined (yet).")
+        elif isinstance(self.values,(float,int)):
+            return 1
+        else:
+            return len(self.values)
+    
     def __neg__(self):
         return -self.values
     
