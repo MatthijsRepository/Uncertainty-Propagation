@@ -31,11 +31,13 @@ if __name__=="__main__":
     
     variables["time_a"] = Variable("time_a", values=np.ones(26)*5, is_basic=True, aggregation_rule="sum", first_time=first_time_a, last_time=last_time_a)
     #variables["time_a"] = Variable("time_a", values=np.arange(26), is_basic=True, aggregation_rule="sum", first_time=first_time_a, last_time=last_time_a)
-    variables["time_b"] = Variable("time_b", values=np.array([3,2,3,4]), is_basic=True, aggregation_rule="sum", first_time=first_time_b, last_time=last_time_b)
+    variables["time_b"] = Variable("time_b", values=np.array([2,4,3,2]), is_basic=True, aggregation_rule="sum", first_time=first_time_b, last_time=last_time_b)
     variables["time_c"] = Variable("time_c", values=None, is_basic=False, aggregation_rule="sum", equation="'time_a' * 'time_b'")
     
-    variables['time_a'].addUncertaintySource(variables['G'].uncertainty.direct_uncertainty_sources[2])
-    variables['time_b'].addUncertaintySource(variables['G'].uncertainty.direct_uncertainty_sources[1])
+    
+    import copy
+    variables['time_a'].addUncertaintySource(copy.deepcopy(variables['G'].uncertainty.direct_uncertainty_sources[2]))
+    variables['time_b'].addUncertaintySource(copy.deepcopy(variables['G'].uncertainty.direct_uncertainty_sources[1]))
 
     print("End hardcoding testing variables")
     print()
@@ -92,15 +94,27 @@ if __name__=="__main__":
     
     
     
-    uncertainty_engine.calculateTotalUncertainty(variables['time_c'], recurse=True)
+
     
     uncertainty_engine.prepareAllDirectUncertainties(variables.values())
+    
+    
+    uncertainty_engine.calculateTotalUncertainty(variables['time_c'], recurse=True)
+    
+    print(variables['time_c'].uncertainty.total_uncertainty)
+    
+    
     
     uncertainty_engine.calculateTotalUncertainty(variables['G'], recurse=True)
     
     harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=120, benchmark_time = "12:59:00")
     
     
+    uncertainty_engine.calculateTotalUncertainty(variables["TS_('G')"], recurse=True)
+    print(variables["TS_('G')"].uncertainty.total_uncertainty)
+    
+    
+    uncertainty_engine.calculateTotalUncertainty(variables['my_test'], recurse=True)
     
     
     #hourly_aggregation = uncertainty_engine.partialAggregation(variables['G'], harm_dat)
@@ -128,7 +142,6 @@ if __name__=="__main__":
 
     
     
-
 
     
     

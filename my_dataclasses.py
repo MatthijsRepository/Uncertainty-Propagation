@@ -116,9 +116,9 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     
     direct_uncertainty_sources:             Optional[list] = None
     
-    all_uncertainty_sources:                Optional[list] = None
-    all_uncertainty_sensitivities:          Optional[dict] = None
-    all_uncertainty_harmonizations:         Optional[list] = None
+    root_sources:                           Optional[list] = None
+    root_weighted_uncertainties:            Optional[dict] = None
+    root_upsample_factors:                  Optional[list] = None
 
     total_uncertainty:                      Optional[Union[np.ndarray, float]] = None
     correlation:                            Optional[Union[np.ndarray, float]] = None

@@ -116,6 +116,8 @@ class UncertaintyEngine:
                 #Here we extend the new sensitivities by copying each entry 'total_upsample_factors[i]' times
                 shaped_new_sensitivities = np.kron(new_sensitivities[dep_name], np.ones(total_upsample_factors[i]))
                 #now the two arrays are both of the same shape and we can multiply the two arrays directly
+                print(f"Variable {var.name}, dependency {dep_name}, total factor {total_upsample_factors[i]}")
+                print(f"Shape current: {np.shape(dep_weighted_uncertainties[i])}, shape sensitivities {np.shape(shaped_new_sensitivities)}")
                 dep_weighted_uncertainties[i] = dep_weighted_uncertainties[i] * shaped_new_sensitivities
         return dep_weighted_uncertainties, total_upsample_factors
 
@@ -133,9 +135,10 @@ class UncertaintyEngine:
         
         if var.uncertainty.is_certain:
             return [], [], []
-        #Handler for the case when everything is already calculated
-        #if var.is_certain, for instance
-        #Or if the three elements are already populated ###!!!
+        
+        if var.uncertainty.total_uncertainty_calculated and var.uncertainty.root_weighted_uncertainties is not None:
+            return var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors
+
         
         n_values = 1 if isinstance(var.values, (float,int)) else len(var.values)
         
@@ -151,7 +154,6 @@ class UncertaintyEngine:
         if not var.is_basic:
             new_sensitivities = self._getDependencyPartialsValues(var)
             
-            all_dep_weighted_uncertainties, all_upsample_factors = [], []
             for dep_name in var.dependency_names:
                 #Recursively retrieve uncertainty data from the dependencies
                 dep_sources, dep_weighted_uncertainties, total_upsample_factors = self.getWeightedRootUncertainties(var.dependencies[dep_name])
@@ -173,22 +175,35 @@ class UncertaintyEngine:
         return var.uncertainty.all_uncertainty_sources, all_weighted_uncertainties, all_total_upsample_factors
                 
                 
-                        
+    
+    def timeSumWeightedRootUncertainties(self, sources, weighted_uncertainties):
+        new_weighted_uncertainties = []
+        for i, source in enumerate(sources):
+            corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
+            new_weighted_uncertainties.append(np.vecdot(weighted_uncertainties[i],
+                                                        np.matvec(corr_matrix, weighted_uncertainties[i])))
+        return np.array(new_weighted_uncertainties, dtype=float)
+
+
+                 
     def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors):
         """ Performs a time-aggregation on a retrieved set of root sources, weighted root uncertainties and upsample factors
             In other words, this function brings the weighted root uncertainties for a variable retrieved by the getWeightedRootUncertainties function
             and aggregates all uncertainty arrays to the timestep of the variable.
             Note that the time aggregation is a destructive procedure in general; time aggregation of time aggregates only makes sense for fully (un)correlated error sources """
         #Note, we cannot make this function fully numpy in general, because the arrays inside weighted_uncertainties can be of different lengths
+        new_weighted_uncertainties = []
         for i, source in enumerate(sources):
-            corr_matrix = source.getCorrelationMatrix(total_upsample_factors[i])
-            new_size = int(len(weighted_uncertainties[i]) / total_upsample_factors[i])
-            
-            wu = weighted_uncertainties[i].reshape((new_size, total_upsample_factors[i]))
-            
-            new_weighted_uncertainties = np.matvec(corr_matrix, wu)
-            weighted_uncertainties[i] = np.vecdot(wu, new_weighted_uncertainties)
-        return np.array(weighted_uncertainties, dtype=float)
+            factor = total_upsample_factors[i]
+            #We take a shortcut if the total upsample factor is 1, then no rebinning has to take place for thsi source
+            if factor == 1:
+                new_weighted_uncertainties.append(weighted_uncertainties[i]**2)
+                continue
+            #Else: we rebin using the correlation matrix
+            corr_matrix = source.getCorrelationMatrix(factor)
+            wu = weighted_uncertainties[i].reshape((-1, factor))
+            new_weighted_uncertainties.append(np.vecdot(wu, np.matvec(corr_matrix, wu)))
+        return np.array(new_weighted_uncertainties, dtype=float)
         
             
 
@@ -202,22 +217,19 @@ class UncertaintyEngine:
             self._prepareVariableDirectUncertainties(var)
         
         #Retrieve root sources, weighted uncertainties and upsample factors
-        root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors = self.getWeightedRootUncertainties(var)
+        var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors = self.getWeightedRootUncertainties(var)
         
-        print("\n \n")
-        print(f"Variable {var.name}")
-        print([source.name for source in root_sources])
-        print(var.uncertainty.root_upsample_factors)
         
-        aggregated_weighted_uncertainties = self.aggregateWeightedRootUncertainties(root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors)
+        if var.is_timesum:
+            aggregated_weighted_uncertainties = self.timeSumWeightedRootUncertainties(var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties)
+        else:
+            aggregated_weighted_uncertainties = self.aggregateWeightedRootUncertainties(var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors)
         
         #If there are no root sources: break it off here
-        if len(root_sources)==0:
+        if len(var.uncertainty.root_sources)==0:
             var.uncertainty.total_uncertainty_calculated = True
             var.uncertainty.is_certain = True
             return
-        
-        print(aggregated_weighted_uncertainties)
         
         var.uncertainty.total_uncertainty = np.sqrt(np.sum(aggregated_weighted_uncertainties, axis=0))
         var.uncertainty.total_uncertainty_calculated = True
@@ -255,51 +267,7 @@ class UncertaintyEngine:
         return var.uncertainty.total_uncertainty
     
     
-    def calculateTotalUncertainty_OLD(self, var, recurse=True):
-        print(f"Calculating total uncertainty for variable {var.name}")
-        if var.uncertainty.total_uncertainty_calculated is True:
-            return
-        if not var.uncertainty.direct_uncertainties_calculated:
-            self._prepareVariableDirectUncertainties(var)
-        
-        n_values = 1 if isinstance(var.values, (float,int)) else len(var.values)
-        if var.is_basic:
-            var.uncertainty.all_uncertainty_sources = var.uncertainty.direct_uncertainty_sources
-            var.uncertainty.all_uncertainty_sensitivities = np.ones((len(var.uncertainty.all_uncertainty_sources), n_values))
-        else:
-            root_sources, root_sensitivities = self.getDependencyUncertainties(var, recurse=recurse)
-            var.uncertainty.all_uncertainty_sources = var.uncertainty.direct_uncertainty_sources + root_sources
-            
-            #Update sensitivity coefficients by multiplying old sensitivities with the new sensitivity coefficients
-            new_sensitivities = self._getDependencyPartialsValues(var)
-            totals = []
-            print(f"Working for variable {var.name}, root sensitivities: {[np.shape(a) for a in root_sensitivities.values()]}")
-            for dep_name in root_sensitivities.keys():
-                totals.append(root_sensitivities[dep_name] * new_sensitivities[dep_name])
-            new_sensitivities = self._convertNestedListTo2DArray(totals)
-            
-            var.uncertainty.all_uncertainty_sensitivities = np.append(np.ones((len(var.uncertainty.direct_uncertainty_sources), n_values)),\
-                                                                      new_sensitivities,
-                                                                      axis=0)
-        
-        if len(var.uncertainty.all_uncertainty_sources) == 0:
-            var.uncertainty.total_uncertainty_calculated = True
-            var.uncertainty.is_certain = True
-            print(f"Finished calculating total uncertainty for variable {var.name}")
-            return
-        
-        all_uncertainty_magnitudes = [u.values for u in var.uncertainty.all_uncertainty_sources]
-        all_uncertainty_magnitudes = self._convertNestedListTo2DArray(all_uncertainty_magnitudes)
-        
-        var.uncertainty.total_uncertainty = np.sqrt(np.sum( (all_uncertainty_magnitudes * var.uncertainty.all_uncertainty_sensitivities)**2 , axis=0) )
-        var.uncertainty.total_uncertainty_calculated = True
-        print(f"Finished calculating total uncertainty for variable {var.name}")
-        
-        print(f"Total sensitivity_magnitudes for variable {var.name} \n{all_uncertainty_magnitudes}")
-        
-        if var.is_timesum:
-            raise ValueError("Cannot calculate uncertainties for timesums yet.")
-        return
+   
 
 
     def partialAggregation(self, var, harmonization_data):
