@@ -99,29 +99,40 @@ if __name__=="__main__":
     uncertainty_engine.prepareAllDirectUncertainties(variables.values())
     
     
-    uncertainty_engine.calculateTotalUncertainty(variables['time_c'], recurse=True)
+    #uncertainty_engine.calculateTotalUncertainty(variables['time_c'], recurse=True)
     
-    print(variables['time_c'].uncertainty.total_uncertainty)
+    #print(variables['time_c'].uncertainty.total_uncertainty)
     
     
     
     uncertainty_engine.calculateTotalUncertainty(variables['G'], recurse=True)
     
-    harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=120, benchmark_time = "12:59:00")
+    #harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=120, benchmark_time = "12:59:00")
     
     
-    uncertainty_engine.calculateTotalUncertainty(variables["TS_('G')"], recurse=True)
-    print(variables["TS_('G')"].uncertainty.total_uncertainty)
+    #uncertainty_engine.calculateTotalUncertainty(variables["TS_('G')"], recurse=True)
+    #print(variables["TS_('G')"].uncertainty.total_uncertainty)
     
-    
+    print()
     uncertainty_engine.calculateTotalUncertainty(variables['my_test'], recurse=True)
     
-    
+    print()
+    print(variables['my_test'].uncertainty.root_weighted_uncertainties)
     #hourly_aggregation = uncertainty_engine.partialAggregation(variables['G'], harm_dat)
     
+    uncertainty_engine.calculateTotalUncertainty(variables["TS_('G')"], recurse=True)
+    print(variables["TS_('G')"].uncertainty.total_uncertainty * 60 * 2 / 1000)
     
 
+    uncertainty_engine.calculateTotalUncertainty(variables['PR'], recurse=True)
+    #print(variables['PR'].uncertainty.root_sources)
+    #print(variables['PR'].uncertainty.root_weighted_uncertainties)
+    print(variables['PR'].uncertainty.total_uncertainty)
     
+    #uncertainty_engine.calculateTotalUncertainty(variables['PR_temp_corr'], recurse=True)
+    #print(variables['PR_temp_corr'].uncertainty.root_sources)
+    #print(variables['PR_temp_corr'].uncertainty.root_weighted_uncertainties)
+    #print(variables['PR_temp_corr'].uncertainty.total_uncertainty)
 
     
 
