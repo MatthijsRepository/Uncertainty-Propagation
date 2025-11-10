@@ -41,7 +41,7 @@ class UncertaintyEngine:
             for dep in var.dependencies.values():
                 self.prepareDownTreeDirectUncertainties(dep)
     
-    
+    """
     def getDependencyUncertainties(self, var,recurse=True):
         root_sources = []
         root_sensitivities = {}
@@ -74,8 +74,8 @@ class UncertaintyEngine:
         #    return dep.uncertainty.all_uncertainty_sensitivities[:, harmonization_data.low_index, harmonization_data.high_index]
         print(f"WARNING: dependency sensitivity retriever retrieves uncertainties multiplied by sensitivities. Calculations using this function are erroneous!!!")
         return self.partialAggregation(dep, var.harmonization_cache[dep.name])
-        
-     
+    """   
+    """
     def getDependencyUncertaintySources(self, var,recurse=True):
         root_sources = []
         root_sensitivities = {}
@@ -88,6 +88,7 @@ class UncertaintyEngine:
             #If the dependency has no uncertainty sources, we can skip appending to our registries
             if len(dep.uncertainty.all_uncertainty_sources) == 0:
                 continue
+    """
 
 
 
@@ -116,10 +117,19 @@ class UncertaintyEngine:
                 #Here we extend the new sensitivities by copying each entry 'total_upsample_factors[i]' times
                 shaped_new_sensitivities = np.kron(new_sensitivities[dep_name], np.ones(total_upsample_factors[i]))
                 #now the two arrays are both of the same shape and we can multiply the two arrays directly
-                print(f"Variable {var.name}, dependency {dep_name}, total factor {total_upsample_factors[i]}")
-                print(f"Shape current: {np.shape(dep_weighted_uncertainties[i])}, shape sensitivities {np.shape(shaped_new_sensitivities)}")
+                
+                
+                #print()
+                #Current problem: the sensitivities are of length 1 when we are dealing with timesums, but we want the partials from the expression inside the timesum
+                #print(f"SHape new sensitivities {new_sensitivities[dep_name]}")
+                #print(f"Variable {var.name}, dependency {dep_name}, total factor {total_upsample_factors[i]}")
+                #print(f"Shape current: {np.shape(dep_weighted_uncertainties[i])}, shape sensitivities {np.shape(shaped_new_sensitivities)}")
                 dep_weighted_uncertainties[i] = dep_weighted_uncertainties[i] * shaped_new_sensitivities
+                #if var.name == 'my_test':
+                #    print(dep_weighted_uncertainties)
         return dep_weighted_uncertainties, total_upsample_factors
+
+
 
 
 
@@ -138,8 +148,8 @@ class UncertaintyEngine:
         
         if var.uncertainty.total_uncertainty_calculated and var.uncertainty.root_weighted_uncertainties is not None:
             return var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors
-
         
+
         n_values = 1 if isinstance(var.values, (float,int)) else len(var.values)
         
         #Initialize the relevant objects using the direct uncertainty sources of this variable
@@ -153,7 +163,7 @@ class UncertaintyEngine:
         #If the variable is not a basic variable, we recursively retrieve all required data from the dependencies
         if not var.is_basic:
             new_sensitivities = self._getDependencyPartialsValues(var)
-            
+                        
             for dep_name in var.dependency_names:
                 #Recursively retrieve uncertainty data from the dependencies
                 dep_sources, dep_weighted_uncertainties, total_upsample_factors = self.getWeightedRootUncertainties(var.dependencies[dep_name])
@@ -168,6 +178,12 @@ class UncertaintyEngine:
                 all_weighted_uncertainties += dep_weighted_uncertainties
                 all_total_upsample_factors += total_upsample_factors
         
+            #In case the variable is a timesum we are at a destructive node in our equation tree.
+            #We must pass the timesummed root uncertainties here.
+            if var.is_timesum:
+                all_weighted_uncertainties = self.timeSumWeightedRootUncertainties(var.uncertainty.all_uncertainty_sources, all_weighted_uncertainties)
+                all_total_upsample_factors = [1 for _ in all_total_upsample_factors]
+        
         #Optionally store the results
         if store:
             var.uncertainty.root_weighted_uncertainties = all_weighted_uncertainties
@@ -180,9 +196,9 @@ class UncertaintyEngine:
         new_weighted_uncertainties = []
         for i, source in enumerate(sources):
             corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
-            new_weighted_uncertainties.append(np.vecdot(weighted_uncertainties[i],
-                                                        np.matvec(corr_matrix, weighted_uncertainties[i])))
-        return np.array(new_weighted_uncertainties, dtype=float)
+            result = np.sqrt(np.vecdot(weighted_uncertainties[i], np.matvec(corr_matrix, weighted_uncertainties[i])))
+            new_weighted_uncertainties.append(result)
+        return new_weighted_uncertainties
 
 
                  
@@ -197,13 +213,16 @@ class UncertaintyEngine:
             factor = total_upsample_factors[i]
             #We take a shortcut if the total upsample factor is 1, then no rebinning has to take place for thsi source
             if factor == 1:
-                new_weighted_uncertainties.append(weighted_uncertainties[i]**2)
+                new_weighted_uncertainties.append(weighted_uncertainties[i])
                 continue
             #Else: we rebin using the correlation matrix
             corr_matrix = source.getCorrelationMatrix(factor)
             wu = weighted_uncertainties[i].reshape((-1, factor))
-            new_weighted_uncertainties.append(np.vecdot(wu, np.matvec(corr_matrix, wu)))
-        return np.array(new_weighted_uncertainties, dtype=float)
+            #Calculate new uncertainties, append to list
+            result = np.sqrt(np.vecdot(wu, np.matvec(corr_matrix, wu)))
+            new_weighted_uncertainties.append(result)
+            
+        return new_weighted_uncertainties
         
             
 
@@ -220,10 +239,14 @@ class UncertaintyEngine:
         var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors = self.getWeightedRootUncertainties(var)
         
         
-        if var.is_timesum:
-            aggregated_weighted_uncertainties = self.timeSumWeightedRootUncertainties(var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties)
-        else:
-            aggregated_weighted_uncertainties = self.aggregateWeightedRootUncertainties(var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors)
+        #if var.is_timesum:
+        #    aggregated_weighted_uncertainties = self.timeSumWeightedRootUncertainties(var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties)
+        #    var.uncertainty.root_weighted_uncertainty = aggregated_weighted_uncertainties
+        #    var.uncertainty.root_upsample_factors = np.ones(len(var.uncertainty.root_upsample_factors))
+        #    print(var.uncertainty.root_weighted_uncertainty)
+        #else:
+        aggregated_weighted_uncertainties = self.aggregateWeightedRootUncertainties(var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_upsample_factors)
+        aggregated_weighted_uncertainties = np.array(aggregated_weighted_uncertainties, dtype=float)
         
         #If there are no root sources: break it off here
         if len(var.uncertainty.root_sources)==0:
@@ -231,7 +254,7 @@ class UncertaintyEngine:
             var.uncertainty.is_certain = True
             return
         
-        var.uncertainty.total_uncertainty = np.sqrt(np.sum(aggregated_weighted_uncertainties, axis=0))
+        var.uncertainty.total_uncertainty = np.sqrt(np.sum(aggregated_weighted_uncertainties**2, axis=0))
         var.uncertainty.total_uncertainty_calculated = True
         
         
