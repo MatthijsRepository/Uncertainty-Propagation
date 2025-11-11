@@ -43,6 +43,42 @@ class UncertaintyEngine:
 
 
 
+    def _getDependencyPartialsValues(self, var, equation_engine=None, calculation_engine=None):
+        """ Executes partial derivative executable builder form the equation engine and executes calculation of partial values, 
+            returns dictionary of partial derivative values per dependency """
+        if equation_engine is None:
+            equation_engine = self.equation_engine
+        if calculation_engine is None:
+            calculation_engine = self.calculation_engine
+        #Populate variable partial executables
+        equation_engine.buildPartialDerivativeExecutables(var)
+        partials_dict = calculation_engine.executeAllPartials(var, absolute_values=True, store_results=False, force_recalculation=False)
+        return partials_dict
+    
+    
+    
+    def _convertNestedListTo2DArray(self, lst, forced_length=None):
+        """ Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array """
+        if forced_length is None:
+            forced_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
+        lst = [np.full(forced_length, v) if (np.isscalar(v) or (isinstance(v, np.ndarray) and v.size == 1))  else v for v in lst]
+        return np.vstack(lst).astype(float)
+
+
+    def _initializeUncertaintyPropagation(self, var):
+        if not var.uncertainty.direct_uncertainties_calculated:
+            self._prepareVariableDirectUncertainties(var)
+        if var.uncertainty.is_certain:
+            return [], [], [], [], []
+        if var.uncertainty.total_uncertainty_calculated and var.uncertainty.root_weighted_uncertainties is not None:
+            return (var.uncertainty.root_sources,
+                    var.uncertainty.root_weighted_uncertainties,
+                    var.uncertainty.root_total_upsample_factors,
+                    var.uncertainty.root_local_upsample_factors,
+                    var.uncertainty.root_propagation_paths)
+        return None
+
+
     def _rootWeightedUncertaintyCalculator(self, var, dep_name, new_sensitivities, dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors):
         """ For a given variable and dependency, this function will prune the weighted uncertainties to the right length, and multiply sections
             of length 'total_upsample_factor' of the old sensitivities by its corresponding entry in the new_sensitivities
@@ -80,24 +116,8 @@ class UncertaintyEngine:
                 dep_weighted_uncertainties[i] = dep_weighted_uncertainties[i] * shaped_new_sensitivities
                 #if var.name == 'my_test':
                 #    print(dep_weighted_uncertainties)
-                
-                
         return dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors
 
-
-    def _initializeUncertaintyPropagation(self, var):
-        if not var.uncertainty.direct_uncertainties_calculated:
-            self._prepareVariableDirectUncertainties(var)
-        if var.uncertainty.is_certain:
-            return [], [], [], [], []
-        if var.uncertainty.total_uncertainty_calculated and var.uncertainty.root_weighted_uncertainties is not None:
-            return (var.uncertainty.root_sources,
-                    var.uncertainty.root_weighted_uncertainties,
-                    var.uncertainty.root_total_upsample_factors,
-                    var.uncertainty.root_local_upsample_factors,
-                    var.uncertainty.root_propagation_paths)
-        return None
-    
     
     def _handleDirectUncertaintyData(self, var):
         #Initialize the length of our timeseries
@@ -112,33 +132,6 @@ class UncertaintyEngine:
             all_local_upsample_factors  += [[1]]
             all_propagation_paths       += [[var]]
         return all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
-
-
-    def _handleDependencyUncertaintyData(self, var, partial_derivatives):
-        all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths = [], [], [], [], []
-        for dep_name in var.dependency_names:
-            #Recursively retrieve uncertainty data from the dependencies
-            dep_sources, dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors, propagation_paths = self.getWeightedRootUncertainties(var.dependencies[dep_name])
-            #If there are no uncertainties for this dependency we skip it immediately
-            if len(dep_sources)==0:
-                continue
-            
-            #Update the sensitivities block-wise by blockwise-multiplying the previous weighted uncertainties with new sensitivities
-            dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors = self._rootWeightedUncertaintyCalculator(var, dep_name, partial_derivatives,
-                                                                                                                                 dep_weighted_uncertainties, total_upsample_factors,
-                                                                                                                                 local_upsample_factors)
-            #Update propagation paths
-            for path in propagation_paths:
-                path += [var]
-            
-            #Append to the relevant containers
-            all_sources                += dep_sources
-            all_weighted_uncertainties += dep_weighted_uncertainties
-            all_total_upsample_factors += total_upsample_factors
-            all_local_upsample_factors += local_upsample_factors
-            all_propagation_paths      += propagation_paths
-        return all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
-
 
     def getWeightedRootUncertainties(self, var):
         """ Get all weighted root uncertainties of a variable. Specifically, for all uncertainty sources downtree,
@@ -201,73 +194,7 @@ class UncertaintyEngine:
         return all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
         
 
-    def getWeightedRootUncertainties_OLD(self, var, store=False):
-        """ Get all weighted root uncertainties of a variable. Specifically, for all uncertainty sources downtree,
-            it returns an array of the weighted uncertainties with respect to the present variable, in the original temporal resolution of the uncertainty.
-            Thus, if the temporal timestep of this variable is 10 times greater than that of a root uncertainty,
-            each 10 consecutive entries in the weighted root uncertainty will be multiplied by the same top-level sensitivity.
-            Returns a list of uncertainty source objects, a list of their corresponding weighted uncertainties, 
-            and the total temporal resolution difference factor between the source and the present variable """
-        if not var.uncertainty.direct_uncertainties_calculated:
-            self._prepareVariableDirectUncertainties(var)
-        
-        if var.uncertainty.is_certain:
-            return [], [], [], [], []
-        
-        if var.uncertainty.total_uncertainty_calculated and var.uncertainty.root_weighted_uncertainties is not None:
-            return var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_total_upsample_factors, var.uncertainty.root_local_upsample_factors, var.uncertainty.root_propagation_paths
-        
-        #Initialize the length of our timeseries
-        n_values = 1 if isinstance(var.values, (float,int)) else len(var.values)
-        
-        #Initialize the relevant objects using the direct uncertainty sources of this variable
-        var.uncertainty.all_uncertainty_sources = var.uncertainty.direct_uncertainty_sources
-        if len(var.uncertainty.direct_uncertainty_sources)>0:
-            all_weighted_uncertainties = [source.values * np.ones(n_values) for source in var.uncertainty.direct_uncertainty_sources]
-        else:
-            all_weighted_uncertainties = []
-        all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths = [], [], []
-        for _ in var.uncertainty.direct_uncertainty_sources:
-            all_total_upsample_factors += [1]
-            all_local_upsample_factors += [[1]]
-            all_propagation_paths += [[var]]
-        
-        #If the variable is not a basic variable, we recursively retrieve all required data from the dependencies
-        if not var.is_basic:
-            new_sensitivities = self._getDependencyPartialsValues(var)
-                        
-            for dep_name in var.dependency_names:
-                #Recursively retrieve uncertainty data from the dependencies
-                dep_sources, dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors, propagation_paths = self.getWeightedRootUncertainties(var.dependencies[dep_name])
-                #If there are no uncertainties for this dependency we skip it immediately
-                if len(dep_sources)==0:
-                    continue
-                
-                #Update the sensitivities block-wise by blockwise-multiplying the previous weighted uncertainties with new sensitivities
-                dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors = self._rootWeightedUncertaintyCalculator(var, dep_name, new_sensitivities,
-                                                                                                                                     dep_weighted_uncertainties, total_upsample_factors,
-                                                                                                                                     local_upsample_factors)
-                #Update propagation paths
-                for path in propagation_paths:
-                    path += [var]
-                
-                #Append to the relevant containers
-                var.uncertainty.all_uncertainty_sources += dep_sources
-                all_weighted_uncertainties += dep_weighted_uncertainties
-                all_total_upsample_factors += total_upsample_factors
-                all_local_upsample_factors += local_upsample_factors
-                all_propagation_paths      += propagation_paths
-        
-            #In case the variable is a timesum we are at a destructive node in our equation tree.
-            #and we must pass the timesummed root uncertainties here.
-            if var.is_timesum:
-                all_weighted_uncertainties = self.timeSumWeightedRootUncertainties(var.uncertainty.all_uncertainty_sources, all_weighted_uncertainties,
-                                                                                   aggregation_rule=var.aggregation_rule)
-                all_total_upsample_factors = [1 for _ in all_total_upsample_factors]
-
-        return var.uncertainty.all_uncertainty_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
-                
-                
+    
     
     def timeSumWeightedRootUncertainties(self, sources, weighted_uncertainties, aggregation_rule):
         new_weighted_uncertainties = []
@@ -339,31 +266,79 @@ class UncertaintyEngine:
     
    
 
+    
+    
+    
+    
+    
+    
+    def getWeightedRootUncertainties_OLD(self, var, store=False):
+        """ Get all weighted root uncertainties of a variable. Specifically, for all uncertainty sources downtree,
+            it returns an array of the weighted uncertainties with respect to the present variable, in the original temporal resolution of the uncertainty.
+            Thus, if the temporal timestep of this variable is 10 times greater than that of a root uncertainty,
+            each 10 consecutive entries in the weighted root uncertainty will be multiplied by the same top-level sensitivity.
+            Returns a list of uncertainty source objects, a list of their corresponding weighted uncertainties, 
+            and the total temporal resolution difference factor between the source and the present variable """
+        if not var.uncertainty.direct_uncertainties_calculated:
+            self._prepareVariableDirectUncertainties(var)
         
-    
-    
-    
+        if var.uncertainty.is_certain:
+            return [], [], [], [], []
+        
+        if var.uncertainty.total_uncertainty_calculated and var.uncertainty.root_weighted_uncertainties is not None:
+            return var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, var.uncertainty.root_total_upsample_factors, var.uncertainty.root_local_upsample_factors, var.uncertainty.root_propagation_paths
+        
+        #Initialize the length of our timeseries
+        n_values = 1 if isinstance(var.values, (float,int)) else len(var.values)
+        
+        #Initialize the relevant objects using the direct uncertainty sources of this variable
+        var.uncertainty.all_uncertainty_sources = var.uncertainty.direct_uncertainty_sources
+        if len(var.uncertainty.direct_uncertainty_sources)>0:
+            all_weighted_uncertainties = [source.values * np.ones(n_values) for source in var.uncertainty.direct_uncertainty_sources]
+        else:
+            all_weighted_uncertainties = []
+        all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths = [], [], []
+        for _ in var.uncertainty.direct_uncertainty_sources:
+            all_total_upsample_factors += [1]
+            all_local_upsample_factors += [[1]]
+            all_propagation_paths += [[var]]
+        
+        #If the variable is not a basic variable, we recursively retrieve all required data from the dependencies
+        if not var.is_basic:
+            new_sensitivities = self._getDependencyPartialsValues(var)
+                        
+            for dep_name in var.dependency_names:
+                #Recursively retrieve uncertainty data from the dependencies
+                dep_sources, dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors, propagation_paths = self.getWeightedRootUncertainties(var.dependencies[dep_name])
+                #If there are no uncertainties for this dependency we skip it immediately
+                if len(dep_sources)==0:
+                    continue
                 
-    def _getDependencyPartialsValues(self, var, equation_engine=None, calculation_engine=None):
-        """ Executes partial derivative executable builder form the equation engine and executes calculation of partial values, 
-            returns dictionary of partial derivative values per dependency """
-        if equation_engine is None:
-            equation_engine = self.equation_engine
-        if calculation_engine is None:
-            calculation_engine = self.calculation_engine
-        #Populate variable partial executables
-        equation_engine.buildPartialDerivativeExecutables(var)
-        partials_dict = calculation_engine.executeAllPartials(var, absolute_values=True, store_results=False, force_recalculation=False)
-        return partials_dict
-    
-    
-    
-    def _convertNestedListTo2DArray(self, lst, forced_length=None):
-        """ Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array """
-        if forced_length is None:
-            forced_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
-        lst = [np.full(forced_length, v) if (np.isscalar(v) or (isinstance(v, np.ndarray) and v.size == 1))  else v for v in lst]
-        return np.vstack(lst).astype(float)
+                #Update the sensitivities block-wise by blockwise-multiplying the previous weighted uncertainties with new sensitivities
+                dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors = self._rootWeightedUncertaintyCalculator(var, dep_name, new_sensitivities,
+                                                                                                                                     dep_weighted_uncertainties, total_upsample_factors,
+                                                                                                                                     local_upsample_factors)
+                #Update propagation paths
+                for path in propagation_paths:
+                    path += [var]
+                
+                #Append to the relevant containers
+                var.uncertainty.all_uncertainty_sources += dep_sources
+                all_weighted_uncertainties += dep_weighted_uncertainties
+                all_total_upsample_factors += total_upsample_factors
+                all_local_upsample_factors += local_upsample_factors
+                all_propagation_paths      += propagation_paths
+        
+            #In case the variable is a timesum we are at a destructive node in our equation tree.
+            #and we must pass the timesummed root uncertainties here.
+            if var.is_timesum:
+                all_weighted_uncertainties = self.timeSumWeightedRootUncertainties(var.uncertainty.all_uncertainty_sources, all_weighted_uncertainties,
+                                                                                   aggregation_rule=var.aggregation_rule)
+                all_total_upsample_factors = [1 for _ in all_total_upsample_factors]
+
+        return var.uncertainty.all_uncertainty_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
+                
+                
       
     
 
