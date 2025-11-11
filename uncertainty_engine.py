@@ -66,6 +66,7 @@ class UncertaintyEngine:
 
 
     def _initializeUncertaintyPropagation(self, var):
+        """ initializer for the getWeightedRootUncertainties function, prepares direct uncertainties and helps to short circuit the main retriever in trivial cases """
         if not var.uncertainty.direct_uncertainties_calculated:
             self._prepareVariableDirectUncertainties(var)
         if var.uncertainty.is_certain:
@@ -120,6 +121,7 @@ class UncertaintyEngine:
 
     
     def _handleDirectUncertaintyData(self, var):
+        """ Handles the direct uncertainty sources for the getWeightedRootUncertainties function. """
         #Initialize the length of our timeseries
         n_values = 1 if isinstance(var.values, (float,int)) else len(var.values)
         
@@ -142,7 +144,9 @@ class UncertaintyEngine:
             and the total temporal resolution difference factor between the source and the present variable """
         
         #Initialization helper checks whether direct uncertainties are already calculated and short-circuits the function in trivial cases (already calculated, no uncertainty)
-        self._initializeUncertaintyPropagation(var)
+        args = self._initializeUncertaintyPropagation(var)
+        if args is not None:
+            return args
         
         #Initialize containers
         all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths = [], [], [], [], []
