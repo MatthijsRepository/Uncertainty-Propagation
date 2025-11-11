@@ -1,5 +1,6 @@
 from my_dataclasses import Variable #, UncertaintySource
 import numpy as np
+from copy import deepcopy
 
 
 class UncertaintyEngine:
@@ -72,11 +73,11 @@ class UncertaintyEngine:
         if var.uncertainty.is_certain:
             return [], [], [], [], []
         if var.uncertainty.total_uncertainty_calculated and var.uncertainty.root_weighted_uncertainties is not None:
-            return (var.uncertainty.root_sources,
-                    var.uncertainty.root_weighted_uncertainties,
-                    var.uncertainty.root_total_upsample_factors,
-                    var.uncertainty.root_local_upsample_factors,
-                    var.uncertainty.root_propagation_paths)
+            return (deepcopy(var.uncertainty.root_sources),
+                    deepcopy(var.uncertainty.root_weighted_uncertainties),
+                    deepcopy(var.uncertainty.root_total_upsample_factors),
+                    deepcopy(var.uncertainty.root_local_upsample_factors),
+                    deepcopy(var.uncertainty.root_propagation_paths))
         return None
 
 
@@ -203,6 +204,9 @@ class UncertaintyEngine:
     def timeSumWeightedRootUncertainties(self, sources, weighted_uncertainties, aggregation_rule):
         new_weighted_uncertainties = []
         for i, source in enumerate(sources):
+            #Calculate the correction factor for the aggregation of intensive variables
+            #Each upsampling by a factor f at the node of an intensive variable will add a factor 1/n to the total
+            
             corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
             result = np.sqrt(np.vecdot(weighted_uncertainties[i], np.matvec(corr_matrix, weighted_uncertainties[i])))
             new_weighted_uncertainties.append(result)
@@ -219,7 +223,7 @@ class UncertaintyEngine:
         new_weighted_uncertainties = []
         for i, source in enumerate(sources):
             factor = total_upsample_factors[i]
-            #We take a shortcut if the total upsample factor is 1, then no rebinning has to take place for thsi source
+            #We take a shortcut if the total upsample factor is 1, then no rebinning has to take place for this source
             if factor == 1:
                 new_weighted_uncertainties.append(weighted_uncertainties[i])
                 continue
