@@ -105,6 +105,8 @@ class UncertaintyEngine:
                 dep_weighted_uncertainties[i] = dep_weighted_uncertainties[i] * shaped_new_sensitivities
         else:
             for i in range(len(dep_weighted_uncertainties)):
+                #If no time harmonization was performed we can append a local upsample factor of 1 to the stacks
+                local_upsample_factors [i] += [1]
                 #Here we extend the new sensitivities by copying each entry 'total_upsample_factors[i]' times
                 shaped_new_sensitivities = np.kron(new_sensitivities[dep_name], np.ones(total_upsample_factors[i]))
                 #now the two arrays are both of the same shape and we can multiply the two arrays directly
