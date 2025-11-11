@@ -121,25 +121,33 @@ class CalculationEngine:
             else:
                 raise ValueError(f"Tried to evaluate partial derivative of variable {var.name} while partial derivative executables have not been built yet.")
         
-        #Get partial executable, arguments
+        #Get partial executable, arguments; calculate values
         partial_executable = var.partial_executables[dep_name]
         args, timedata, harmonized_data = self.time_engine.ensureDependencyTimeHarmony(var, force_recalculation=force_recalculation)
         
         calculated_values = partial_executable(*args)
+            
+        #If the result is an array it may be of dtype 'object', here we cast the array to float
+        if isinstance(calculated_values, np.ndarray):
+            calculated_values = calculated_values.astype(float)
         
         #Here we catch shape mismatches in case of trivial derivatives that evaluate to a constant. 
         #In this case the partial derivatives may not match the shape of the dependency in question. These shapes must match for the uncertainty calculation
         #We must extract the expected length from the inputs. The args list follows the same order as the dependency_names list, so we can use the same index
+        print(f"WARNING: TARGET LENGTH HALVED FOR TESTING")
         if np.isscalar(calculated_values):
             target_length = len(args[var.dependency_names.index(dep_name)])
             if target_length > 1:
+                
+                target_length = int(target_length / 2) ###!!!
+                
                 calculated_values = np.full(target_length, calculated_values, dtype=float)
         
         #In case of a trivial equation, calculated values will be a Variable object. Here we fix that
         if isinstance(calculated_values, Variable):     ###!!! change this to be handled through an equation engine wrapper
             calculated_values = calculated_values.values
         
-        #Take absolute values; in other words: obtain the sensitivities
+        #Take absolute values; i.e. obtain the sensitivities
         if absolute_values:
             calculated_values = np.abs(calculated_values)
         
