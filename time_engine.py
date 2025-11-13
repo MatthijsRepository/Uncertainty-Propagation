@@ -118,11 +118,21 @@ class TimeEngine:
             high_fraction   = high_fraction,
             upsample_factor = factor)
     
-    def decreaseVariableTemporalResolution(self, var, new_timestep, benchmark_time=None, update_var=True, smuggle_limit=0):
+    def decreaseVariableTemporalResolution(self, var, new_timestep, benchmark_time=None, update_var=False, new_var=False, smuggle_limit=0):
         """ Can be used to calculate full TimeHarmonizationData object for a variable - and optionally immediately updates this variable """
         harmonization_data = self.calculateTimeHarmonizationData(var, new_timestep, benchmark_time=benchmark_time, smuggle_limit=smuggle_limit)
         harmonization_data.new_values = self._rebinTimeSeries(var, harmonization_data)
-
+        
+        if new_var and update_var:
+            raise ValueError("Tried to decrease temporal resolution for a variable while simultaneously trying to place it inside a new variable. Please choose one of these options.")
+        if new_var:
+            new_variable = Variable(name=f"upsampled_{var.name}", values = harmonization_data.new_values, is_basic=False, equation=f"'{var.name}'",
+                                    is_rate=var.is_rate, aggregation_rule=var.aggregation_rule, first_time=harmonization_data.getFirstTime(), last_time=harmonization_data.new_last_time)
+            new_variable.dependency_names = [var.name]
+            new_variable.dependencies = {var.name : var}
+            new_variable.harmonization_cache = {var.name : harmonization_data}
+            return new_variable
+            
         #Update the values of the actual variable
         if update_var:
             var.values = harmonization_data.new_values
