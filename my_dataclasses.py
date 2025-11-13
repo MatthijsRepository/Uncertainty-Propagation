@@ -29,7 +29,7 @@ class TimeHarmonizationData:
     target_var_name:    Optional[str]   = None         #Name of the derived variable that required harmonization of dependencies
     prune_offset_start: Optional[int]   = None         #Number of new timesteps that are discarded at start to ensure a common start time
     prune_offset_end:   Optional[int]   = None         #Number of new timesteps that are discarded at end to ensure a common end time
-    #smuggled_time:      Optional[float] = None         #Amount of seconds that  were smuggled during rebinning
+    #smuggled_time:      Optional[float] = None        #Amount of seconds that  were smuggled during rebinning
     new_values:         Optional[Union[np.ndarray, float]] = None   #Can be used to store new values
     aggregated_correlation: Optional[np.ndarray] = None             #Can be used to cache aggregated correlations
         
@@ -451,6 +451,61 @@ class Variable:
             else:
                 calculation_engine = self.calculation_engine
         return calculation_engine.executeVariableEquation(self, store_results=store_results, force_recalculation=force_recalculation)
+    
+    
+    def giveReport(self, k=2, decimals=3):
+        string = f"\nPresenting report of variable: {self.name}\n"
+        if self.equation is not None:
+            string += f"{self.name} = {self.equation}\n"
+        if self.is_basic:
+            string += "Basic Variable\n"
+        else:
+            string += "Derived Variable\n"
+        
+
+        if self.values is None:
+            string += "No values calculated for this variable\nEnd of report\n"
+            print(string)
+            return            
+        else:
+            is_calculated = True
+            report_values = np.round(self.values, decimals=decimals)
+            
+            if np.isscalar(report_values):
+                is_scalar = True
+                if isinstance(report_values, np.ndarray):
+                    report_values = report_values[0]
+            else:
+                is_scalar = False
+        
+        if not self.uncertainty.total_uncertainty_calculated:
+            string += f"Values: {report_values}\nUncertainty not calculated\nEnd of report\n"
+            print(string)
+            return
+        else:
+            if self.uncertainty.is_certain:
+                string += f"Values: {report_values} \nVariable is completely certain\nEnd of report\n"
+                print(string)
+                return
+            report_uncertainties = np.round(self.uncertainty.total_uncertainty * k, decimals=decimals)
+            if is_scalar:
+                if isinstance(report_uncertainties, np.ndarray):
+                    report_uncertainties = report_uncertainties[0]
+                string += f"Value: {report_values} +/- {report_uncertainties}\n"
+            else:
+                string += f"Values:         {report_values} \n"
+                string += f"Uncertainties:  {report_uncertainties}\n"
+            string += f"Coverage factor: k = {k}\n"
+            string += "Uncertainty sources contributing to variable uncertainty:\n"
+            for source in self.uncertainty.root_sources:
+                string += f"-{source.name}\n"
+            string += "End of report\n"
+        print(string)
+        return
+            
+            
+                
+        
     
 
         
