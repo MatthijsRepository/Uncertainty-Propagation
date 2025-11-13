@@ -7,7 +7,7 @@ import numpy as np
 
 class InputHandler:
     def __init__(self):
-        self.csv_data = None    #CSVData dataclass: Holds CSV datasets
+        self.csv_data = []    #CSVData dataclass: Holds CSV datasets
         self.variables = {}     #dict: Holds variables
         
     def parse(self, filepath):
@@ -26,7 +26,7 @@ class InputHandler:
             if line.lower().startswith("csv"):
                 handler = CSVHandler()
                 i = handler.parse(lines, i)
-                self.csv_data = handler.compileCSVData()
+                self.csv_data.append(handler.compileCSVData())
                 del handler
             elif line.lower().startswith("var") or line.lower().startswith("eq"):
                 handler = VariableHandler(csv_data = self.csv_data)
@@ -231,10 +231,16 @@ class VariableHandler:
             if self.csv_data is None:
                 raise ValueError(f"CSV data referenced for variable {self.var_name}, but no CSV dataset was passed. Please input CSV data.")
             data_name = self.value_string.split('.')[1]
-            try:
-                self.var_values = np.asarray(self.csv_data.data[data_name])
-            except:
+            found = False
+            for csv in self.csv_data:
+                if data_name in csv.data.keys():
+                    found = True
+                    self.var_values = np.asarray(csv.data[data_name])
+                    self.csv_data = csv
+                    break
+            if not found:
                 raise ValueError(f"CSV data does not contain data named {data_name}.")
+                
         elif self.value_string.startswith("DETERMINE"):
             self.var_values = None
         elif self.value_string.startswith("NO"):
@@ -255,6 +261,8 @@ class VariableHandler:
             elif self.timestep.lower().startswith("csv"):
                 if self.csv_data is None:
                     raise ValueError(f"CSV data referenced for variable {self.var_name}, but no CSV dataset was passed. Please input CSV data.")
+                elif isinstance(self.csv_data, list):
+                    raise ValueError("Please define values before timesteps")
                 try:
                     self.time_range = self.csv_data.time_range #[self.csv_data.data["Time"][0], self.csv_data.data["Time"][-1]]      ###!!! Not robust: Time, time
                     #self.timestep = self.csv_data.timestep #"auto"
