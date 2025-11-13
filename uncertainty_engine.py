@@ -403,7 +403,8 @@ class UncertaintyEngine:
         # Put a legend to the right of the current axis
         box = ax.get_position()
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(1, 0.5))
         
         plt.xlabel("Time")
         plt.ylabel("Percentage contribution split")
@@ -461,7 +462,8 @@ class UncertaintyEngine:
         # Put a legend to the right of the current axis
         box = ax.get_position()
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(1, 0.5))
         
         plt.xlabel("Time")
         plt.ylabel("Relative contribution split [%]")
