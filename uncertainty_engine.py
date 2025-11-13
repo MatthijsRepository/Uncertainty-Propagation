@@ -366,7 +366,6 @@ class UncertaintyEngine:
         labels = [source.name for source in var.uncertainty.root_sources]
         bottom = 0
         for i, value in enumerate(root_split):
-            print(f"{labels[i]}: {value}")
             ax.bar(0, value, bottom=bottom, label=labels[i])
             bottom += value
         
