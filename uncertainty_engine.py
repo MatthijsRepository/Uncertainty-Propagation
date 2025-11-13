@@ -130,22 +130,29 @@ class UncertaintyEngine:
         return dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors
 
     
-    def _handleDirectUncertaintyData(self, var):
+    def _handleDirectUncertaintyData(self, var, mask):
         """ Handles the direct uncertainty sources for the getWeightedRootUncertainties function. """
         #Initialize the length of our timeseries
         n_values = 1 if isinstance(var.values, (float,int)) else len(var.values)
+        
+        uncertainty_mask = np.ones(n_values)
+        if mask and not np.isscalar(var.values):
+            nz = np.nonzero(var.values)[0]
+            if len(nz)>0:
+                uncertainty_mask[:nz[0]] = 0
+                uncertainty_mask[nz[-1]:] = 0
         
         #Initialize the relevant objects using the direct uncertainty sources of this variable
         all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths = [], [], [], [], []
         for source in var.uncertainty.direct_uncertainty_sources:
             all_sources                 += [source]
-            all_weighted_uncertainties  += [source.values * np.ones(n_values)]
+            all_weighted_uncertainties  += [source.values * uncertainty_mask]
             all_total_upsample_factors  += [1]
             all_local_upsample_factors  += [[1]]
             all_propagation_paths       += [[var]]
         return all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
 
-    def getWeightedRootUncertainties(self, var):
+    def getWeightedRootUncertainties(self, var, mask):
         """ Get all weighted root uncertainties of a variable. Specifically, for all uncertainty sources downtree,
             it returns an array of the weighted uncertainties with respect to the present variable, in the original temporal resolution of the uncertainty.
             Thus, if the temporal timestep of this variable is 10 times greater than that of a root uncertainty,
@@ -167,7 +174,7 @@ class UncertaintyEngine:
             for dep_name in var.dependency_names:
                 #Recursively retrieve uncertainty data from the dependencies
                 dep_sources, dep_weighted_uncertainties, dep_total_upsample_factors, dep_local_upsample_factors, dep_propagation_paths = \
-                    self.getWeightedRootUncertainties(var.dependencies[dep_name])
+                    self.getWeightedRootUncertainties(var.dependencies[dep_name], mask=mask)
                 #If there are no uncertainties for this dependency we skip it immediately
                 if len(dep_sources)==0:
                     continue
@@ -189,7 +196,7 @@ class UncertaintyEngine:
         
         #Now we append the direct uncertainty sources to our containers
         dir_sources, dir_weighted_uncertainties, dir_total_upsample_factors, dir_local_upsample_factors, dir_propagation_paths = \
-            self._handleDirectUncertaintyData(var)
+            self._handleDirectUncertaintyData(var, mask=mask)
         all_sources                += dir_sources
         all_weighted_uncertainties += dir_weighted_uncertainties
         all_total_upsample_factors += dir_total_upsample_factors
@@ -225,7 +232,8 @@ class UncertaintyEngine:
             corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
             result = np.sqrt(np.vecdot(weighted_uncertainties[i], np.matvec(corr_matrix, weighted_uncertainties[i])))
             result *= aggregation_correction_factor
-            new_weighted_uncertainties.append(result)
+            new_weighted_uncertainties.append(result*60)
+        print("WARNING: TESTING VERSION: UNCERTAINTY TIMESUM HARD RETURNS RESULT TIMES 60")
         return new_weighted_uncertainties
                  
     def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors, local_upsample_factors, propagation_paths):
@@ -264,7 +272,7 @@ class UncertaintyEngine:
             
         return new_weighted_uncertainties
 
-    def calculateTotalUncertainty(self, var, recurse=True):
+    def calculateTotalUncertainty(self, var, recurse=True, mask=False):
         """ Calculates the total uncertainty, and uncertainty split per source, for the given variable
             The calculation populates the root uncertainties, propagation paths and upsample factors of all root ucnertainties downtree """
         if var.uncertainty.total_uncertainty_calculated is True:
@@ -275,7 +283,7 @@ class UncertaintyEngine:
         #Retrieve root sources, weighted uncertainties and upsample factors
         var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, \
             var.uncertainty.root_total_upsample_factors, var.uncertainty.root_local_upsample_factors, \
-                var.uncertainty.root_propagation_paths = self.getWeightedRootUncertainties(var)
+                var.uncertainty.root_propagation_paths = self.getWeightedRootUncertainties(var, mask=mask)
             
         #Here we aggregate all uncertainties to the temporal resolution of the called variable
         aggregated_weighted_uncertainties = self.aggregateWeightedRootUncertainties(var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, 
@@ -339,8 +347,39 @@ class UncertaintyEngine:
                 denominator = summed_w_variable_uncertainty * total_sum
                 new_split[i] = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=(denominator != 0))
         return new_split
-        
+    
+    
     def plotRootContributions(self, var):
+        if var.timestep is not None:
+            self._plotTimeSeriesRootContributions(var)
+            return
+        #In case the variable is not a timeseries
+        root_split = self.calculateRootContributions(var)
+        
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+        fig = plt.figure(figsize=(15,6), dpi=100)
+        ax = plt.subplot(111)
+        
+        labels = [source.name for source in var.uncertainty.root_sources]
+        bottom = 0
+        for i, value in enumerate(root_split):
+            print(f"{labels[i]}: {value}")
+            ax.bar(0, value, bottom=bottom, label=labels[i])
+            bottom += value
+        
+        ax.set_xlim(-1.5, 1.5)
+        ax.get_xaxis().set_visible(False)
+        ax.grid(axis='y')
+        
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        
+        plt.ylabel("Percentage contribution split")
+        plt.show()
+        
+    def _plotTimeSeriesRootContributions(self, var):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         
