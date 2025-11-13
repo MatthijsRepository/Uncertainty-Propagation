@@ -216,6 +216,12 @@ class UncertaintyEngine:
         """ This function performs a full timesum of the uncertainty of all root sources while keeping it split by source
             Temporal autocorrelation is included. Cross-correlation between sources is not included - sources are assumed independent """
         new_weighted_uncertainties = []
+        
+        print()
+        for path in propagation_paths:
+            print([var.name for var in path])
+        
+        
         for i, source in enumerate(sources):
             #Calculate the correction factor for the aggregation of intensive variables
             #Each upsampling by a factor f at the node of an intensive variable will add a factor 1/n to the total
@@ -223,10 +229,28 @@ class UncertaintyEngine:
             aggregation_correction_factor = 1
             for j, var in enumerate(reversed(propagation_paths[i])):
                 #Timesums are destructive nodes, stop our propagation here
+                #if var.is_timesum:
+                #    break
+                
+            
                 if var.is_timesum:
+                    if var.is_rate:
+                        aggregation_correction_factor *= var.aggregation_step
+                    if var.aggregation_rule.startswith("ave"):
+                        aggregation_correction_factor *= 1/len(weighted_uncertainties[i])
                     break
+            
                 if var.aggregation_rule.startswith("ave"):
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
+                
+                
+                
+                
+                #if var.is_timesum:
+                #    if var.is_rate:
+                #        aggregation_correction_factor *= var.aggregation_step
+                #    break
+                    
                 
             corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
             result = np.sqrt(np.vecdot(weighted_uncertainties[i], np.matvec(corr_matrix, weighted_uncertainties[i])))
