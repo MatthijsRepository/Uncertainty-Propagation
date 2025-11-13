@@ -275,7 +275,9 @@ class VariableHandler:
         """ Parses uncertainties block and dispatches uncertainty handler """
         while True:
             line = lines[i].strip()
-            if line.startswith("-"):
+            if not line or line.startswith("#"):
+                i += 1 ; continue
+            elif line.startswith("-"):
                 self._handleUncertainty(line)
                 i += 1 ; continue
             elif line.lower().startswith("end un"): #End uncertainties
