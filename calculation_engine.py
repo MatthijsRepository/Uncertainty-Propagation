@@ -134,13 +134,11 @@ class CalculationEngine:
         #Here we catch shape mismatches in case of trivial derivatives that evaluate to a constant. 
         #In this case the partial derivatives may not match the shape of the dependency in question. These shapes must match for the uncertainty calculation
         #We must extract the expected length from the inputs. The args list follows the same order as the dependency_names list, so we can use the same index
-        print(f"WARNING: TARGET LENGTH HALVED FOR TESTING")
+        
         if np.isscalar(calculated_values):
             target_length = len(args[var.dependency_names.index(dep_name)])
+            
             if target_length > 1:
-                
-                target_length = int(target_length / 2) ###!!!
-                
                 calculated_values = np.full(target_length, calculated_values, dtype=float)
         
         #In case of a trivial equation, calculated values will be a Variable object. Here we fix that
