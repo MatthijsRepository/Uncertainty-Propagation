@@ -227,13 +227,13 @@ class UncertaintyEngine:
                     break
                 if var.aggregation_rule.startswith("ave"):
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
-            print(f"Aggregation correction factor: {aggregation_correction_factor}")
                 
             corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
             result = np.sqrt(np.vecdot(weighted_uncertainties[i], np.matvec(corr_matrix, weighted_uncertainties[i])))
             result *= aggregation_correction_factor
-            new_weighted_uncertainties.append(result*60)
-        print("WARNING: TESTING VERSION: UNCERTAINTY TIMESUM HARD RETURNS RESULT TIMES 60")
+            if var.is_rate:
+                result *= var.aggregation_step
+            new_weighted_uncertainties.append(result)
         return new_weighted_uncertainties
                  
     def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors, local_upsample_factors, propagation_paths):
@@ -261,7 +261,6 @@ class UncertaintyEngine:
                     break
                 if var.aggregation_rule.startswith("ave"):
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
-            print(f"Aggregation correction factor: {aggregation_correction_factor}")
 
             corr_matrix = source.getCorrelationMatrix(factor)
             wu = weighted_uncertainties[i].reshape((-1, factor))
@@ -301,7 +300,6 @@ class UncertaintyEngine:
         var.uncertainty.total_uncertainty = np.sqrt(np.sum(aggregated_weighted_uncertainties**2, axis=0))
         var.uncertainty.total_uncertainty_calculated = True
         
-        
         ###!!!
         #for i, source in enumerate(var.uncertainty.root_sources):
         #    path = [a.name for a in var.uncertainty.root_propagation_paths[i]]
@@ -314,7 +312,12 @@ class UncertaintyEngine:
         """ Returns the fractional contribution of the variance of each root source to the total variance in the variable """
         if not var.uncertainty.total_uncertainty_calculated:
             raise ValueError(f"Cannot split uncertainty of variable {var.name} to contributions. Please calculate the total uncertainty first.")
-        return var.uncertainty.aggregated_weighted_uncertainties**2 / (var.uncertainty.total_uncertainty**2)
+        
+        result = np.divide(var.uncertainty.aggregated_weighted_uncertainties**2,
+                           var.uncertainty.total_uncertainty**2,
+                           out=np.zeros_like(var.uncertainty.aggregated_weighted_uncertainties),
+                           where=(var.uncertainty.total_uncertainty != 0))
+        return result
     
     def calculateRootContributions_EXCEL_METHOD(self,var):
         """ Split the total uncertainty between root contributions according to the method used in the ASTM-G213-17 excel spreadsheet.
@@ -341,7 +344,6 @@ class UncertaintyEngine:
             #total_w_variable_uncertainty = np.sqrt(np.sum(var.uncertainty.aggregated_weighted_uncertainties[indices,:]**2, axis=1))[0]
             #Calculate direct sum of weighted uncertainties from this variable
             summed_w_variable_uncertainty = np.sum(var.uncertainty.aggregated_weighted_uncertainties[indices,:], axis=1)[0]
-            print(unique_root)
             for i in indices[0]:
                 numerator = var.uncertainty.aggregated_weighted_uncertainties[i] * total_variable_uncertainties[unique_root]
                 denominator = summed_w_variable_uncertainty * total_sum
@@ -374,7 +376,10 @@ class UncertaintyEngine:
         
         box = ax.get_position()
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(1, 0.5))
+        #ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         
         plt.ylabel("Percentage contribution split")
         plt.show()
