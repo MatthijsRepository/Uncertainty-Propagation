@@ -36,8 +36,8 @@ if __name__=="__main__":
     
     
     import copy
-    variables['time_a'].addUncertaintySource(copy.deepcopy(variables['G'].uncertainty.direct_uncertainty_sources[2]))
-    variables['time_b'].addUncertaintySource(copy.deepcopy(variables['G'].uncertainty.direct_uncertainty_sources[1]))
+    #variables['time_a'].addUncertaintySource(copy.deepcopy(variables['G'].uncertainty.direct_uncertainty_sources[2]))
+    #variables['time_b'].addUncertaintySource(copy.deepcopy(variables['G'].uncertainty.direct_uncertainty_sources[1]))
 
     print("End hardcoding testing variables")
     print()
@@ -73,22 +73,8 @@ if __name__=="__main__":
     
     derived_variables = equation_engine.splitBasicDerived(variables)[1]    
     for var_name in derived_variables:
-        calculation_engine.evaluateVariable(variables[var_name], update_var=True, silent=True)
-    
-    print(f"Calculated performance ratio: {variables['PR'].values}")
-    print(f"Calculated temperature corrected performance ratio: {variables['PR_temp_corr'].values}")
-    
-    print("\n \n \n")
-    print("TESTING AREA")
-    print()
-    print("Calculating uncertainties... - TESTING FROM HERE")
-    
-    
-   
+        calculation_engine.evaluateVariable(variables[var_name], update_var=True, silent=True)  
 
-    #second_harm_dat = time_engine.decreaseVariableTemporalResolution(variables['G'], new_timestep=3600, benchmark_time="12:59:00", update_var=False, smuggle_limit=0)
-    #print("Hourly totals")
-    #print(second_harm_dat.new_values * 60)
     
     uncertainty_engine = UncertaintyEngine(variables, equation_engine = equation_engine, calculation_engine = calculation_engine)
     
@@ -98,67 +84,74 @@ if __name__=="__main__":
     
     uncertainty_engine.prepareAllDirectUncertainties(variables.values())
     
-    
-    #uncertainty_engine.calculateTotalUncertainty(variables['time_c'], recurse=True)
-    
-    #print(variables['time_c'].uncertainty.total_uncertainty)
-    
-    
-    
-    uncertainty_engine.calculateTotalUncertainty(variables['G'], recurse=True)
-    
-    #harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=120, benchmark_time = "12:59:00")
-    
-    
-    #uncertainty_engine.calculateTotalUncertainty(variables["TS_('G')"], recurse=True)
-    #print(variables["TS_('G')"].uncertainty.total_uncertainty)
-    
-    print()
-    uncertainty_engine.calculateTotalUncertainty(variables['my_test'], recurse=True)
-    
-    print()
-    print(variables['my_test'].uncertainty.root_weighted_uncertainties)
-    #hourly_aggregation = uncertainty_engine.partialAggregation(variables['G'], harm_dat)
-    
-    uncertainty_engine.calculateTotalUncertainty(variables["TS_('G')"], recurse=True)
-    print(variables["TS_('G')"].uncertainty.total_uncertainty * 60 * 2 / 1000)
-    
-
-    uncertainty_engine.calculateTotalUncertainty(variables['PR'], recurse=True)
-    #print(variables['PR'].uncertainty.root_sources)
-    #print(variables['PR'].uncertainty.root_weighted_uncertainties)
-    print(variables['PR'].uncertainty.total_uncertainty)
-    
-    #uncertainty_engine.calculateTotalUncertainty(variables['PR_temp_corr'], recurse=True)
-    #print(variables['PR_temp_corr'].uncertainty.root_sources)
-    #print(variables['PR_temp_corr'].uncertainty.root_weighted_uncertainties)
-    #print(variables['PR_temp_corr'].uncertainty.total_uncertainty)
-
-    
-
-    print()
-
-
-    
-    print(variables['G'].uncertainty.total_uncertainty)
-    
-    print(variables['G'].uncertainty.total_uncertainty[800])
-    print(variables['G'].uncertainty.total_uncertainty[750])
-    print(variables['G'].uncertainty.total_uncertainty[700])
-    print(variables['G'].uncertainty.total_uncertainty[650])
-    print(variables['G'].uncertainty.total_uncertainty[600])
-
-
-    print(np.shape(variables['G'].uncertainty.total_uncertainty))
-
+    """ 
+    uncertainty_engine.calculateTotalUncertainty(variables['P_error_test'], recurse=True)
+    rel_error = np.divide(variables["P_error_test"].uncertainty.total_uncertainty,
+                          variables["P_error_test"].values,
+                          out = np.zeros_like(variables["P_error_test"].values),
+                          where=(variables["P_error_test"].values) != 0)
+    print(variables['Pout'].values[500])
+    print(variables['Pout'].uncertainty.direct_uncertainty_sources[0].values[500])
+    print(variables["P_error_test"].uncertainty.total_uncertainty[500])
+    print(variables["P_error_test"].values[500])
+    print(rel_error[500])
     
     
-
+    uncertainty_engine.calculateTotalUncertainty(variables['P_error_agg_test'], recurse=True)
+    print(variables['P_error_agg_test'].uncertainty.total_uncertainty*60 / variables['P_error_agg_test'].values)
+    print(variables['P_error_agg_test'].uncertainty.total_uncertainty)
+    print(variables['P_error_agg_test'].values * 60)
+    
+    uncertainty_engine.calculateTotalUncertainty(variables["TS_('Pout' / 'P0')"], recurse=True)
+    print(variables["TS_('Pout' / 'P0')"].values)
+    print(variables["TS_('Pout' / 'P0')"].uncertainty.total_uncertainty)
+    print(variables["TS_('Pout' / 'P0')"].uncertainty.total_uncertainty*60 / variables["TS_('Pout' / 'P0')"].values)
+    import sys
+    sys.exit()
+    """ 
+    
+    uncertainty_engine.calculateTotalUncertainty(variables['G'], recurse=True, mask=True)
+    uncertainty_engine.calculateTotalUncertainty(variables['PR'], recurse=True, mask=True)
+    uncertainty_engine.calculateTotalUncertainty(variables['PR_temp_corr'], recurse=True, mask=True)
     
     
-
+    uncertainty_engine.plotRootContributions(variables['PR'])
+    uncertainty_engine.plotRootContributions(variables['G'])
+    uncertainty_engine.plotAbsoluteRootContributions(variables['G'], k=2)
+    uncertainty_engine.plotRelativeRootContributions(variables['G'], k=2)
+    
+    print("PRINTING OUTPUTS")
+    
+    print(f"Calculated performance ratio: {variables['PR'].values} +/- {2*variables['PR'].uncertainty.total_uncertainty[0]} (k=2)")
+    print(f"Calculated temperature corrected performance ratio: {variables['PR_temp_corr'].values}  +/- {2*variables['PR_temp_corr'].uncertainty.total_uncertainty[0]} (k=2)")
     
     
+    variables['G'].giveReport()
+    variables['PR'].giveReport(decimals=5)
+    variables['PR_temp_corr'].giveReport(decimals=5)
+    
+    
+    
+    uncertainty_engine.calculateTotalUncertainty(variables['Pout'], recurse=True)
+    rel_error = np.divide(variables['Pout'].uncertainty.total_uncertainty,
+                      variables['Pout'].values,
+                      out = np.zeros_like(variables['Pout'].values),
+                      where=(variables['Pout'].values != 0))
+    print(f"Relative Pout error: {rel_error[500]}")
+    
+    uncertainty_engine.calculateTotalUncertainty(variables["TS_('Pout' / 'P0')"], recurse=True)
+    uncertainty_engine.calculateTotalUncertainty(variables["TS_('G' / 'G_STC')"], recurse=True)
+    
+    
+    variables["TS_('Pout' / 'P0')"].giveReport(short_report=True)
+    variables["TS_('G' / 'G_STC')"].giveReport(short_report=True)
+    #print(variables["TS_('Pout' / 'P0')"].values)
+    #print(variables["TS_('G' / 'G_STC')"].values)
+    
+    
+    
+    
+    print(variables['PR'].uncertainty.getSource("directional response"))
     
     
     
