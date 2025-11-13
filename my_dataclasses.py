@@ -89,15 +89,15 @@ class UncertaintySource:
         #Check if correlation is either 0 or 1 - the only currently supported values
         if self.correlation not in (0,1):
             raise ValueError(f"Correlation for uncertainty source {self.name} is given as {self.correlation}. Currently only correlations 0 or 1 are supported.")
-        
-        #If the uncertainty is relative: apply factor 100 correction to change percentage value to fraction
-        if self.is_relative:
-            factor *= 100
-        
+               
         #Populate the missing sigma if a bound is given
         if self.sigma is None:
             self.sigma = self.bound / factor
             self.bound = None
+        
+        #If the uncertainty is relative: apply factor 100 correction to change percentage value to fraction
+        if self.is_relative:
+            self.sigma /= 100
 
         #Correct for one-sidedness
         if not self.is_symmetric:
@@ -154,12 +154,24 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
                 np.fill_diagonal(m_corr, 1)
                 source.sigma = u_vec.T @ m_corr @ u_vec
         
-            
-    
     
     def getSourceNames(self):
         """ Returns list of names of all direct uncertainty sources """
         return [u.name for u in self.direct_uncertainty_sources]
+    
+    def getSource(self, source_name):
+        """ Tries to retrieve the uncertainty source with the given name from direct or root sources """
+        source_dict = {source.name : source for source in self.direct_uncertainty_sources}
+        if source_name in source_dict.keys():
+            return source_dict[source_name]
+        elif self.root_sources is not None:
+            source_dict = {source.name : source for source in self.root_sources}
+            if source_name in source_dict.keys():
+                return source_dict[source_name]
+        else:
+            print(f"Was not able to retrieve uncertainty source of name: {source_name} from variable {self.var_name}")
+            return None
+        
     
     def getAbsoluteRootSplit(self, k):
         """ Gets absolute uncertainty split by root source, multiplied by a coverage factor k """
@@ -453,7 +465,7 @@ class Variable:
         return calculation_engine.executeVariableEquation(self, store_results=store_results, force_recalculation=force_recalculation)
     
     
-    def giveReport(self, k=2, decimals=3):
+    def giveReport(self, k=2, decimals=3, short_report=False):
         string = f"\nPresenting report of variable: {self.name}\n"
         if self.equation is not None:
             string += f"{self.name} = {self.equation}\n"
@@ -496,9 +508,10 @@ class Variable:
                 string += f"Values:         {report_values} \n"
                 string += f"Uncertainties:  {report_uncertainties}\n"
             string += f"Coverage factor: k = {k}\n"
-            string += "Uncertainty sources contributing to variable uncertainty:\n"
-            for source in self.uncertainty.root_sources:
-                string += f"-{source.name}\n"
+            if not short_report:
+                string += "Uncertainty sources contributing to variable uncertainty:\n"
+                for source in self.uncertainty.root_sources:
+                    string += f"-{source.name}\n"
             string += "End of report\n"
         print(string)
         return
