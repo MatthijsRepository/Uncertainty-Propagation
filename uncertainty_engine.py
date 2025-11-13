@@ -10,8 +10,32 @@ class UncertaintyEngine:
         self.calculation_engine = calculation_engine
         self.time_engine = time_engine
     
-    
+    def _calculateUncertaintySourceValues(self, var, source):
+        """ Calculates the uncertainty values for a given uncertainty source """
+        if source.is_relative:
+            source.values = source.sigma * var.values
+        else:
+            source.values = source.sigma
+            
+        if source.multiplier is not None:
+            if self.equation_engine is None:
+                raise ValueError(f"Cannot calculate the uncertainty values of uncertainty source {source.name} of variable {var.name}. Please provide the calculation engine with an uncertainty engine to interpret the source equation.")
+            #Preparing source dependencies
+            source.equation = source.multiplier
+            source.dependencies = {}
+            self.equation_engine.populateVariableDependencyNames(source)
+            self.equation_engine.populateVariableDependencies(source)
+            
+            #Preparing and executing equation
+            self.equation_engine.buildVariableExecutable(source)
+            args = source.dependencies.values()
+            rescale_values = source.executable(*args)
+            
+            #Rescaling the values by the multiplier values
+            source.values *= rescale_values
+        
     def _prepareVariableDirectUncertainties(self, var):
+        """ Prepares all direct uncertainties acting on variable var. """
         if var.values is None:
             raise ValueError(f"Cannot prepare uncertainty for variable {var.name}, please evaluate the variable itself first!")
         if var.uncertainty.direct_uncertainties_calculated is True:
@@ -24,25 +48,21 @@ class UncertaintyEngine:
         else:
             for source in var.uncertainty.direct_uncertainty_sources:
                 source.parent_variable = var
-                if source.is_relative:
-                    source.values = source.sigma * var.values
-                else:
-                    source.values = source.sigma
-        
+                self._calculateUncertaintySourceValues(var, source)
             
     def prepareAllDirectUncertainties(self, variables):
+        """ Prepares the direct uncertainties for all variables in the given variable set """
         for var in variables:
             self._prepareVariableDirectUncertainties(var)
     
     def prepareDownTreeDirectUncertainties(self, var):
+        """ Prepares the direct uncertainties acting on var, and all variables downtree from var """
         self._prepareVariableDirectUncertainties(var)
         if var.is_basic:
             return
         else:
             for dep in var.dependencies.values():
                 self.prepareDownTreeDirectUncertainties(dep)
-
-
 
     def _getDependencyPartialsValues(self, var, equation_engine=None, calculation_engine=None):
         """ Executes partial derivative executable builder form the equation engine and executes calculation of partial values, 
@@ -56,15 +76,12 @@ class UncertaintyEngine:
         partials_dict = calculation_engine.executeAllPartials(var, absolute_values=True, store_results=False, force_recalculation=False)
         return partials_dict
     
-    
-    
     def _convertNestedListTo2DArray(self, lst, forced_length=None):
         """ Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array """
         if forced_length is None:
             forced_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
         lst = [np.full(forced_length, v) if (np.isscalar(v) or (isinstance(v, np.ndarray) and v.size == 1))  else v for v in lst]
         return np.vstack(lst).astype(float)
-
 
     def _initializeUncertaintyPropagation(self, var):
         """ initializer for the getWeightedRootUncertainties function, prepares direct uncertainties and helps to short circuit the main retriever in trivial cases """
@@ -79,7 +96,6 @@ class UncertaintyEngine:
                     deepcopy(var.uncertainty.root_local_upsample_factors),
                     deepcopy(var.uncertainty.root_propagation_paths))
         return None
-
 
     def _rootWeightedUncertaintyCalculator(self, var, dep_name, new_sensitivities, dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors):
         """ For a given variable and dependency, this function will prune the weighted uncertainties to the right length, and multiply sections
@@ -110,16 +126,7 @@ class UncertaintyEngine:
                 #Here we extend the new sensitivities by copying each entry 'total_upsample_factors[i]' times
                 shaped_new_sensitivities = np.kron(new_sensitivities[dep_name], np.ones(total_upsample_factors[i]))
                 #now the two arrays are both of the same shape and we can multiply the two arrays directly
-                
-                
-                #print()
-                #Current problem: the sensitivities are of length 1 when we are dealing with timesums, but we want the partials from the expression inside the timesum
-                #print(f"SHape new sensitivities {new_sensitivities[dep_name]}")
-                #print(f"Variable {var.name}, dependency {dep_name}, total factor {total_upsample_factors[i]}")
-                #print(f"Shape current: {np.shape(dep_weighted_uncertainties[i])}, shape sensitivities {np.shape(shaped_new_sensitivities)}")
                 dep_weighted_uncertainties[i] = dep_weighted_uncertainties[i] * shaped_new_sensitivities
-                #if var.name == 'my_test':
-                #    print(dep_weighted_uncertainties)
         return dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors
 
     
@@ -173,7 +180,6 @@ class UncertaintyEngine:
                 #Update propagation paths
                 for path in dep_propagation_paths:
                     path += [var]
-                
                 #Append to the relevant containers
                 all_sources                += dep_sources
                 all_weighted_uncertainties += dep_weighted_uncertainties
@@ -191,32 +197,38 @@ class UncertaintyEngine:
         all_propagation_paths      += dir_propagation_paths
         
         #In case the variable is a timesum we are at a destructive node in our equation tree.
-        #and we must pass the timesummed root uncertainties here.
+        #Therefore we must pass the timesummed root uncertainties here and reset the upsample factors
         if var.is_timesum:
             all_weighted_uncertainties = self.timeSumWeightedRootUncertainties(all_sources, all_weighted_uncertainties,
-                                                                               aggregation_rule=var.aggregation_rule)
+                                                                               all_local_upsample_factors, all_propagation_paths)
             all_total_upsample_factors = [1 for _ in all_total_upsample_factors]
-        
         #Pass on the package
         return all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
         
-
-    
-    
-    def timeSumWeightedRootUncertainties(self, sources, weighted_uncertainties, aggregation_rule):
+    def timeSumWeightedRootUncertainties(self, sources, weighted_uncertainties, local_upsample_factors, propagation_paths):
+        """ This function performs a full timesum of the uncertainty of all root sources while keeping it split by source
+            Temporal autocorrelation is included. Cross-correlation between sources is not included - sources are assumed independent """
         new_weighted_uncertainties = []
         for i, source in enumerate(sources):
             #Calculate the correction factor for the aggregation of intensive variables
             #Each upsampling by a factor f at the node of an intensive variable will add a factor 1/n to the total
-            
+            #Thus, we loop back through the stack:
+            aggregation_correction_factor = 1
+            for j, var in enumerate(reversed(propagation_paths[i])):
+                #Timesums are destructive nodes, stop our propagation here
+                if var.is_timesum:
+                    break
+                if var.aggregation_rule.startswith("ave"):
+                    aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
+            print(f"Aggregation correction factor: {aggregation_correction_factor}")
+                
             corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
             result = np.sqrt(np.vecdot(weighted_uncertainties[i], np.matvec(corr_matrix, weighted_uncertainties[i])))
+            result *= aggregation_correction_factor
             new_weighted_uncertainties.append(result)
         return new_weighted_uncertainties
-
-
                  
-    def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors, aggregation_rule):
+    def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors, local_upsample_factors, propagation_paths):
         """ Performs a time-aggregation on a retrieved set of root sources, weighted root uncertainties and upsample factors
             In other words, this function brings the weighted root uncertainties for a variable retrieved by the getWeightedRootUncertainties function
             and aggregates all uncertainty arrays to the timestep of the variable.
@@ -230,16 +242,31 @@ class UncertaintyEngine:
                 new_weighted_uncertainties.append(weighted_uncertainties[i])
                 continue
             #Else: we rebin using the correlation matrix
+            
+            #Calculate the correction factor for the aggregation of intensive variables
+            #Each upsampling by a factor f at the node of an intensive variable will add a factor 1/n to the total
+            #Thus, we loop back through the stack:
+            aggregation_correction_factor = 1
+            for j, var in enumerate(reversed(propagation_paths[i])):
+                #Timesums are destructive nodes, stop our propagation here
+                if var.is_timesum:
+                    break
+                if var.aggregation_rule.startswith("ave"):
+                    aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
+            print(f"Aggregation correction factor: {aggregation_correction_factor}")
+
             corr_matrix = source.getCorrelationMatrix(factor)
             wu = weighted_uncertainties[i].reshape((-1, factor))
             #Calculate new uncertainties, append to list
             result = np.sqrt(np.vecdot(wu, np.matvec(corr_matrix, wu)))
+            result *= aggregation_correction_factor
             new_weighted_uncertainties.append(result)
             
         return new_weighted_uncertainties
 
-    
     def calculateTotalUncertainty(self, var, recurse=True):
+        """ Calculates the total uncertainty, and uncertainty split per source, for the given variable
+            The calculation populates the root uncertainties, propagation paths and upsample factors of all root ucnertainties downtree """
         if var.uncertainty.total_uncertainty_calculated is True:
             return
         if not var.uncertainty.direct_uncertainties_calculated:
@@ -252,7 +279,8 @@ class UncertaintyEngine:
             
         #Here we aggregate all uncertainties to the temporal resolution of the called variable
         aggregated_weighted_uncertainties = self.aggregateWeightedRootUncertainties(var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, 
-                                                                                    var.uncertainty.root_total_upsample_factors, aggregation_rule=var.aggregation_rule)
+                                                                                    var.uncertainty.root_total_upsample_factors, var.uncertainty.root_local_upsample_factors,
+                                                                                    var.uncertainty.root_propagation_paths)
         aggregated_weighted_uncertainties = np.array(aggregated_weighted_uncertainties, dtype=float)
         
         #If there are no root sources we can break our calculation here
@@ -266,13 +294,134 @@ class UncertaintyEngine:
         var.uncertainty.total_uncertainty_calculated = True
         
         
-        for i, source in enumerate(var.uncertainty.root_sources):
-            path = [a.name for a in var.uncertainty.root_propagation_paths[i]]
-            print(f"{source.name} : {path}")
-            print(var.uncertainty.root_local_upsample_factors[i])
-            print(var.uncertainty.root_total_upsample_factors[i])
+        ###!!!
+        #for i, source in enumerate(var.uncertainty.root_sources):
+        #    path = [a.name for a in var.uncertainty.root_propagation_paths[i]]
+        #    print(f"{source.name} : {path}")
+        #    print(var.uncertainty.root_local_upsample_factors[i])
+        #    print(var.uncertainty.root_total_upsample_factors[i])
         return var.uncertainty.total_uncertainty
     
+    def calculateRootContributions(self, var):
+        """ Returns the fractional contribution of the variance of each root source to the total variance in the variable """
+        if not var.uncertainty.total_uncertainty_calculated:
+            raise ValueError(f"Cannot split uncertainty of variable {var.name} to contributions. Please calculate the total uncertainty first.")
+        return var.uncertainty.aggregated_weighted_uncertainties**2 / (var.uncertainty.total_uncertainty**2)
+    
+    def calculateRootContributions_EXCEL_METHOD(self,var):
+        """ Split the total uncertainty between root contributions according to the method used in the ASTM-G213-17 excel spreadsheet.
+            This method split the contribution of a source first between all other uncertainty sources acting on the source's parent variable
+            this is subsequently multiplied by the contribution of the uncertainty in this parent variable to the total uncertainty in 'var' """
+        root_variables = np.array([path[0].name for path in var.uncertainty.root_propagation_paths])
+        unique_root_variables = list(set(root_variables))
+        
+        new_split = np.zeros(np.shape(var.uncertainty.aggregated_weighted_uncertainties), dtype=float)
+        total_variable_uncertainties = {}
+        
+        
+        total_sum = 0
+        for unique_root in unique_root_variables:
+            indices = np.where(root_variables == unique_root)
+            #Calculate the total uncertainty times the sensitivity of all sources on this variable
+            total_variable_uncertainties[unique_root] = np.sqrt(np.sum(var.uncertainty.aggregated_weighted_uncertainties[indices,:]**2, axis=1))[0]
+            total_sum += total_variable_uncertainties[unique_root]
+        
+        for unique_root in unique_root_variables:
+            #Get all indices in aggregated_weighted_uncertainty corresponding to this variable
+            indices = np.where(root_variables == unique_root)
+            #Calculate the total uncertainty times the sensitivity of all sources on this variable
+            #total_w_variable_uncertainty = np.sqrt(np.sum(var.uncertainty.aggregated_weighted_uncertainties[indices,:]**2, axis=1))[0]
+            #Calculate direct sum of weighted uncertainties from this variable
+            summed_w_variable_uncertainty = np.sum(var.uncertainty.aggregated_weighted_uncertainties[indices,:], axis=1)[0]
+            print(unique_root)
+            for i in indices[0]:
+                numerator = var.uncertainty.aggregated_weighted_uncertainties[i] * total_variable_uncertainties[unique_root]
+                denominator = summed_w_variable_uncertainty * total_sum
+                new_split[i] = np.divide(numerator, denominator, out=np.zeros_like(numerator), where=(denominator != 0))
+        return new_split
+        
+    def plotRootContributions(self, var):
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+        
+        root_split = self.calculateRootContributions(var)
+        
+        
+        time_axis = var.getTimeAxis()
+        
+        fig = plt.figure(figsize=(15,6), dpi=100)
+        ax = plt.subplot(111)
+        ax.stackplot(time_axis, *root_split, labels=[source.name for source in var.uncertainty.root_sources])
+        
+        ax.grid()
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            
+        # Put a legend to the right of the current axis
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        
+        plt.xlabel("Time")
+        plt.ylabel("Percentage contribution split")
+        plt.show()
+        
+    def plotAbsoluteRootContributions(self, var, k=1):
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+        
+        root_split = self.calculateRootContributions(var) * var.uncertainty.total_uncertainty * k
+        
+        time_axis = var.getTimeAxis()
+        
+        fig = plt.figure(figsize=(15,6), dpi=100)
+        ax = plt.subplot(111)
+        ax.stackplot(time_axis, *root_split, labels=[source.name for source in var.uncertainty.root_sources])
+        
+        ax.grid()
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            
+        # Put a legend to the right of the current axis
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        
+        plt.xlabel("Time")
+        plt.ylabel("Absolute contribution split")
+        plt.show()
+        
+    def plotRelativeRootContributions(self, var, k=2):
+        import matplotlib.pyplot as plt
+        import matplotlib.dates as mdates
+        
+        absolute_split = self.calculateRootContributions(var) * var.uncertainty.total_uncertainty * k
+        root_split = np.divide(absolute_split,
+                               var.values,
+                               out=np.zeros_like(absolute_split),
+                               where=(var.values != 0))
+        root_split *= 100
+        root_split[np.where(root_split>20)] = 20
+        
+        #root_split = self.calculateRootContributions(var) * var.uncertainty.total_uncertainty * k / var.values
+        
+        
+        time_axis = var.getTimeAxis()
+        
+        fig = plt.figure(figsize=(15,6), dpi=100)
+        ax = plt.subplot(111)
+        ax.stackplot(time_axis, *root_split, labels=[source.name for source in var.uncertainty.root_sources])
+        
+        ax.set_ylim(0,10)
+        ax.grid()
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            
+        # Put a legend to the right of the current axis
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        
+        plt.xlabel("Time")
+        plt.ylabel("Relative contribution split [%]")
+        plt.show()    
     
    
 
