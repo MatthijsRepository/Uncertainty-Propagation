@@ -206,13 +206,13 @@ class UncertaintyEngine:
         #In case the variable is a timesum we are at a destructive node in our equation tree.
         #Therefore we must pass the timesummed root uncertainties here and reset the upsample factors
         if var.is_timesum:
-            all_weighted_uncertainties = self.timeSumWeightedRootUncertainties(all_sources, all_weighted_uncertainties,
+            all_weighted_uncertainties = self.timeSumWeightedRootUncertainties(var, all_sources, all_weighted_uncertainties,
                                                                                all_local_upsample_factors, all_propagation_paths)
             all_total_upsample_factors = [1 for _ in all_total_upsample_factors]
         #Pass on the package
         return all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
         
-    def timeSumWeightedRootUncertainties(self, sources, weighted_uncertainties, local_upsample_factors, propagation_paths):
+    def timeSumWeightedRootUncertainties(self, calling_var, sources, weighted_uncertainties, local_upsample_factors, propagation_paths):
         """ This function performs a full timesum of the uncertainty of all root sources while keeping it split by source
             Temporal autocorrelation is included. Cross-correlation between sources is not included - sources are assumed independent """
         new_weighted_uncertainties = []
@@ -220,24 +220,35 @@ class UncertaintyEngine:
         for i, source in enumerate(sources):
             #Calculate the correction factor for the aggregation of intensive variables
             #Each upsampling by a factor f at the node of an intensive variable will add a factor 1/n to the total
-            #Thus, we loop back through the stack:
+            #Thus, we loop back through the stack (i.e. move downwards):
             aggregation_correction_factor = 1
-            for j, var in enumerate(reversed(propagation_paths[i])):
+            
+            #We start our traversal one level below the calling variable
+            for j, var in enumerate(reversed(propagation_paths[i][:-1])):
                 #Timesums are destructive nodes, stop our propagation here
                 if var.is_timesum:
-                    if var.aggregation_rule.startswith("ave"):
-                        aggregation_correction_factor *= 1/len(weighted_uncertainties[i])
+                    #if var.aggregation_rule.startswith("ave"):
+                    #    aggregation_correction_factor *= 1/len(weighted_uncertainties[i])
                     break
             
                 if var.aggregation_rule.startswith("ave"):
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
-
+                    #print(f"Ha: {var.name} : {1/local_upsample_factors[i][-j]}")
+            
+            #Perform the time aggregation
             corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
             result = np.sqrt(np.vecdot(weighted_uncertainties[i], np.matvec(corr_matrix, weighted_uncertainties[i])))
+            
+            #Handle rules for the calling timesum
+            if calling_var.aggregation_rule.startswith("ave"):
+                aggregation_correction_factor *= 1/len(calling_var.non_aggregated_values)
+            if calling_var.is_rate:
+                aggregation_correction_factor *= calling_var.aggregation_step
+
+            #Apply correction factor                
             result *= aggregation_correction_factor
-            if var.is_rate:
-                result *= var.aggregation_step
             new_weighted_uncertainties.append(result)
+            
         return new_weighted_uncertainties
                  
     def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors, local_upsample_factors, propagation_paths):
