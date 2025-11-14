@@ -455,6 +455,7 @@ class Variable:
             raise ValueError(f"Timestep {self.timestep} is not integer, please ensure timesteps are an integer amount of seconds!")
         self.timestep = int(self.timestep)
     
+        
     def executeEquation(self, store_results=True, force_recalculation=False, calculation_engine=None):
         """ Tries to call given or internal equation engine to execute variable equation """
         if calculation_engine is None:

@@ -227,13 +227,10 @@ class UncertaintyEngine:
             for j, var in enumerate(reversed(propagation_paths[i][:-1])):
                 #Timesums are destructive nodes, stop our propagation here
                 if var.is_timesum:
-                    #if var.aggregation_rule.startswith("ave"):
-                    #    aggregation_correction_factor *= 1/len(weighted_uncertainties[i])
                     break
             
                 if var.aggregation_rule.startswith("ave"):
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
-                    #print(f"Ha: {var.name} : {1/local_upsample_factors[i][-j]}")
             
             #Perform the time aggregation
             corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
@@ -315,12 +312,6 @@ class UncertaintyEngine:
         var.uncertainty.total_uncertainty = np.sqrt(np.sum(aggregated_weighted_uncertainties**2, axis=0))
         var.uncertainty.total_uncertainty_calculated = True
         
-        ###!!!
-        #for i, source in enumerate(var.uncertainty.root_sources):
-        #    path = [a.name for a in var.uncertainty.root_propagation_paths[i]]
-        #    print(f"{source.name} : {path}")
-        #    print(var.uncertainty.root_local_upsample_factors[i])
-        #    print(var.uncertainty.root_total_upsample_factors[i])
         return var.uncertainty.total_uncertainty
     
     def calculateRootContributions(self, var):
