@@ -12,7 +12,22 @@ class CSVData:
     data: dict
     timestep: Optional[float] = None
     time_range: Optional[list] = None
-       
+
+    
+@dataclass
+class ParsedVariableData:
+    def __post_init__(self):
+        self.csv_pointer = None         #str: tells job handler which CSV column this variable should take its values from
+        self.is_hardcoded = False       #bool: tells job handler whether variable value is hardcoded. This means this variable is skipped during resets
+        self.var_values = None          #[int, float, array]: variable values
+        self.timestep = None            #[float, str]: timestep of variable, or setting ###!!!
+        self.description = None         #str: variable description
+        self.is_basic_variable = None   #bool: flags if variable is basic or derived
+        self.is_rate = None             #bool: flags whether variable is a rate (quantity over time) or a quantity
+        self.aggregation_rule = None    #str: aggregation rule of the quantity
+        self.equation = None            #str: equation of the variable
+        self.uncertainties = []         #list: contains all uncertainty sources
+        
 
 @dataclass
 class TimeHarmonizationData:
