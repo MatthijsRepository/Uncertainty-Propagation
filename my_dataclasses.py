@@ -8,7 +8,6 @@ import matplotlib.dates as mdates
 
 @dataclass 
 class CSVData:
-    name: str
     data: dict
     timestep: Optional[float] = None
     time_range: Optional[list] = None
@@ -400,7 +399,6 @@ class Variable:
             raise ValueError(f"Error, taking power {power} of variable {self.name} is not supported, integer powers only.")
         return self.values**power
      
-    
     def reset(self):
         self.values                 = None
         self.partial_values         = {}
