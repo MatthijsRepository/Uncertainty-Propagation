@@ -516,6 +516,36 @@ class Variable:
             string += "End of report\n"
         print(string)
         return
+    
+    
+    
+    def plotValuesAndUncertainty(self, k):
+        if self.values is None or self.uncertainty.total_uncertainty_calculated is False:
+            raise ValueError(f"Cannot plot values and uncertainties of variable {self.name} since they are not calculated yet.")
+        if np.isscalar(self.values):
+            print("Cannot plot values of variable {self.name} because it is a scalar.")
+        
+        time_axis = self.getTimeAxis()
+        
+        fig = plt.figure(figsize=(15,6), dpi=100)
+        ax = plt.subplot(111)
+        
+        ax.plot(time_axis, self.values)
+        ax.fill_between(time_axis, self.values - self.uncertainty.total_uncertainty*k, self.values + self.uncertainty.total_uncertainty*k, 
+                        color='red', alpha=0.5)
+        
+        ax.grid()
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            
+        # Put a legend to the right of the current axis
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+
+        plt.xlabel("Time")
+        plt.ylabel(self.name + " [$W/m^2$]")
+        plt.title("$G_{POA}$ " + f"Assumed values and uncertainty, k={k}")
+        plt.show()
+        
             
             
                 
