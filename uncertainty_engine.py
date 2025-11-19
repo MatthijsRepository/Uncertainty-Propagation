@@ -33,6 +33,7 @@ class UncertaintyEngine:
             
             #Rescaling the values by the multiplier values
             source.values *= rescale_values
+        source.values = abs(source.values)
         
     def _prepareVariableDirectUncertainties(self, var):
         """ Prepares all direct uncertainties acting on variable var. """
@@ -386,6 +387,7 @@ class UncertaintyEngine:
         ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(1, 0.5))
         #ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
         
+        plt.title(f"Contribution split between uncertainty sources of variable {var.name}")
         plt.ylabel("Percentage contribution split")
         plt.show()
         
@@ -411,6 +413,7 @@ class UncertaintyEngine:
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(1, 0.5))
         
+        plt.title(f"Contribution split between uncertainty sources of variable {var.name}")
         plt.xlabel("Time")
         plt.ylabel("Percentage contribution split")
         plt.show()
@@ -433,10 +436,12 @@ class UncertaintyEngine:
         # Put a legend to the right of the current axis
         box = ax.get_position()
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
+        handles, labels = ax.get_legend_handles_labels()
+        ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(0.848, 0.5))
         
+        plt.title(f"Total uncertainty of variable {var.name}, k={k}")
         plt.xlabel("Time")
-        plt.ylabel("Absolute contribution split")
+        plt.ylabel("Total uncertainty")
         plt.show()
         
     def plotRelativeRootContributions(self, var, k=2):
@@ -470,6 +475,7 @@ class UncertaintyEngine:
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(1, 0.5))
         
+        plt.title(f"Uncertainty relative to total signal, k={k}")
         plt.xlabel("Time")
         plt.ylabel("Relative contribution split [%]")
         plt.show()    
