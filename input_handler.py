@@ -49,6 +49,7 @@ class CSVHandler:
         self.file_path = None           #str: path to csv file
         
     def _postParseCheck(self):
+        """ Checks whether the CSV field contained required inputs such as delimiter, csv structure, file path """
         if self.delimiter is None:
             raise ValueError("Did not receive delimiter in input.")
         if self.structure_list is None:

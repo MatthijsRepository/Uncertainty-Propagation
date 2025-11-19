@@ -12,8 +12,10 @@ class CalculationEngine:
         self.equation_engine = equation_engine
         return
     
-    def validateBasicVariables(self, equation_engine, variables=None):
+    def validateBasicVariables(self, equation_engine=None, variables=None):
         """ Validates whether all basic variables are well-defined, and if not, uses an equation engine to try to calculate the values using the provided equation """
+        if equation_engine is None:
+            equation_engine = self.equation_engine
         if variables is None:
             variables = self.variables
         

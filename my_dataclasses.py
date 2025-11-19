@@ -12,7 +12,7 @@ class CSVData:
     data: dict
     timestep: Optional[float] = None
     time_range: Optional[list] = None
-    
+       
 
 @dataclass
 class TimeHarmonizationData:
@@ -135,7 +135,10 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
         """ Handle initialization of non-inputs here! """
     
     def reset(self):
-        self.all_uncertainty_sensitivities          = None
+        for source in self.direct_uncertainty_sources:
+            source.values = None
+        self.root_weighted_uncertainties            = None
+        self.root_upsample_factors                  = None
         self.total_uncertainty                      = None
         self.direct_uncertainties_calculated        = False
         self.total_uncertainty_calculated           = False
@@ -240,12 +243,13 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
 
         
 class Variable:
-    def __init__(self, name, description=None, values=None, is_basic=True, is_rate=None, aggregation_rule=None, \
-                 equation=None, dependency_names=None, first_time=None, last_time=None, \
+    def __init__(self, name, description=None, values=None, is_basic=True, is_hardcoded=False, is_rate=None, aggregation_rule=None, \
+                 equation=None, first_time=None, last_time=None, \
                      is_timesum=False, timesum_settings=None):
         self.name               = name              #str: variable name
         self.description        = description       #str: variable description
         self.is_basic           = is_basic          #bool: defines whether variable is basic or derived
+        self.is_hardcoded       = is_hardcoded      #bool: defines whether the value is hard-coded in the input scripts (done for universal constants)
         self.is_rate            = is_rate           #bool: defines whether the quantity is a rate (quantity per unit time) or a quantity
         self.aggregation_rule   = aggregation_rule  #str: defines the quantity aggregation rule - depends on whether variable is extensive or intensive
         if self.is_rate and self.aggregation_rule=="average":
@@ -259,7 +263,7 @@ class Variable:
             if equation is None:
                 raise ValueError(f"{self.name} is defined as a derived variable, please include equation")
         self.equation           = equation          #str: defines variable equation
-        self.dependency_names   = dependency_names  #list: lists variables in equation
+        self.dependency_names   = None              #list: lists variables in equation
         self.dependencies       = {}                #dict: dict of variables that are the direct dependencies
         self.is_root_consistent = False             #bool: whether the variable traces consistently to basic variables
         
@@ -286,8 +290,7 @@ class Variable:
         
         self.harmonization_cache = None            #Dictionary of TimeHarmonizationData objects, stores how each dependency is time-harmonized to calculate this variable
         
-    
-    
+        
     def __str__(self):
         if self.is_basic:
             return (f"Basic variable: {self.name} \nDescription: {self.description}")
@@ -381,7 +384,20 @@ class Variable:
         if not power.is_integer():
             raise ValueError(f"Error, taking power {power} of variable {self.name} is not supported, integer powers only.")
         return self.values**power
-        
+     
+    
+    def reset(self):
+        self.values                 = None
+        self.partial_values         = {}
+        self.aggregation_step       = None
+        self.non_aggregated_values  = None
+        self.start_time             = None
+        self.first_time             = None
+        self.last_time              = None
+        self.timestep               = None
+        self.harmonization_cache    = None
+        self.uncertainty.reset()
+    
     def defineValues(self, values):
         self.values = values
     

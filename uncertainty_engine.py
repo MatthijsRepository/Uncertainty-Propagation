@@ -18,16 +18,19 @@ class UncertaintyEngine:
             source.values = source.sigma
             
         if source.multiplier is not None:
-            if self.equation_engine is None:
-                raise ValueError(f"Cannot calculate the uncertainty values of uncertainty source {source.name} of variable {var.name}. Please provide the calculation engine with an uncertainty engine to interpret the source equation.")
-            #Preparing source dependencies
-            source.equation = source.multiplier
-            source.dependencies = {}
-            self.equation_engine.populateVariableDependencyNames(source)
-            self.equation_engine.populateVariableDependencies(source)
-            
-            #Preparing and executing equation
-            self.equation_engine.buildVariableExecutable(source)
+            #Check if there is already an executable in place. If not: we create it now
+            if source.executable is None:
+                if self.equation_engine is None:
+                    raise ValueError(f"Cannot calculate the uncertainty values of uncertainty source {source.name} of variable {var.name}. Please provide the calculation engine with an uncertainty engine to interpret the source equation.")
+                #Preparing source dependencies
+                source.equation = source.multiplier
+                source.dependencies = {}
+                self.equation_engine.populateVariableDependencyNames(source)
+                self.equation_engine.populateVariableDependencies(source)
+                
+                #Preparing and executing equation
+                self.equation_engine.buildVariableExecutable(source)
+            #Execute executable
             args = source.dependencies.values()
             rescale_values = source.executable(*args)
             
