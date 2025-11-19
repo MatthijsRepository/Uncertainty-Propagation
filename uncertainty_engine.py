@@ -470,7 +470,12 @@ class UncertaintyEngine:
         new_uncertainties = np.vecdot(uncertainty_segments, new_uncertainties)      #v^T (Mv)
         new_uncertainties = np.sqrt(new_uncertainties)
        
-        new_correlations = np.average(var.uncertainty.correlation[harmonization_data.low_index:harmonization_data.high_index].reshape((new_length, harmonization_data.upsample_factor)), axis=1)
+        #new_correlations = np.average(var.uncertainty.correlation[harmonization_data.low_index:harmonization_data.high_index].reshape((new_length, harmonization_data.upsample_factor)), axis=1)
+        new_correlations = var.uncertainty.correlation[harmonization_data.low_index:harmonization_data.high_index].reshape((new_length, harmonization_data.upsample_factor))
+        new_correlations = np.multiply(new_correlations, uncertainty_segments)
+        new_correlations = np.sum(new_correlations, axis=1) / np.sum(uncertainty_segments, axis=1)
+        
+        
         ###!!! should maybe be a weighted average
         print('WARNING: at the moment we do incorrect aggregation of correlation')
         
@@ -479,12 +484,7 @@ class UncertaintyEngine:
         
         return new_uncertainties, new_correlations
     
-    
-    
-    def timeAggregateTotalUncertainty_NEW(self, var):
-        self.calculateCorrelation()
-        return
-    
+
     def timeAggregateTotalUncertainty(self, var, auto_calculate=False):
         if not var.uncertainty.is_calculated:
             if auto_calculate:

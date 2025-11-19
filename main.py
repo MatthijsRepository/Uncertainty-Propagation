@@ -34,8 +34,8 @@ if __name__=="__main__":
     variables["time_b"] = Variable("time_b", values=np.array([3,2,3,4]), is_basic=True, aggregation_rule="sum", first_time=first_time_b, last_time=last_time_b)
     variables["time_c"] = Variable("time_c", values=None, is_basic=False, aggregation_rule="sum", equation="'time_a' * 'time_b'")
     
-    variables['time_a'].addUncertaintySource(variables['G'].uncertainty.direct_uncertainty_sources[2])
-    variables['time_b'].addUncertaintySource(variables['G'].uncertainty.direct_uncertainty_sources[1])
+    #variables['time_a'].addUncertaintySource(variables['G'].uncertainty.direct_uncertainty_sources[2])
+    #variables['time_b'].addUncertaintySource(variables['G'].uncertainty.direct_uncertainty_sources[1])
 
     print("End hardcoding testing variables")
     print()
@@ -89,8 +89,8 @@ if __name__=="__main__":
     
 
     
-    uncertainty_engine.calculateUncertainty(variables['time_c'], recurse=True)
-    uncertainty_engine.calculateCorrelation(variables['time_c'], auto_calculate=True, recurse=True, force_recalculation=False)
+    #uncertainty_engine.calculateUncertainty(variables['time_c'], recurse=True)
+    #uncertainty_engine.calculateCorrelation(variables['time_c'], auto_calculate=True, recurse=True, force_recalculation=False)
     
     
     
@@ -99,6 +99,18 @@ if __name__=="__main__":
     uncertainty_engine.splitTotalUncertaintyContributions(variables['G'])
     uncertainty_engine.splitToSourceContributions(variables['G'])
     uncertainty_engine.calculateCorrelation(variables['G'], auto_calculate=True, recurse=True, force_recalculation=False)
+    
+    
+    two_minute_harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=120, benchmark_time = "12:59:00")
+    u_new, c_new = uncertainty_engine.partialAggregation(variables['G'], two_minute_harm_dat)
+    print(u_new[300])
+    import sys
+    sys.exit()
+    
+    
+    
+    second_harm_dat = time_engine.decreaseVariableTemporalResolution(variables['G'], new_timestep=3600, benchmark_time="12:00:00", update_var=False, smuggle_limit=0)
+    print(second_harm_dat.new_values * 60)
     
     #Aggregation test
     harm_dat = time_engine.calculateTimeHarmonizationData(variables['G'], new_timestep=3600, benchmark_time = "12:59:00")
@@ -163,11 +175,15 @@ if __name__=="__main__":
     #print(u / variables['PR'].values)
     print(variables['G'].uncertainty.total_uncertainty[800])
     print(variables['G'].uncertainty.correlation[800])
-    print(variables["TS_('G')"].uncertainty.total_uncertainty / 1000)
+    print(variables["TS_('G')"].uncertainty.total_uncertainty * 60 * 2 / 1000)
     print(variables["TS_('Pout')"].uncertainty.total_uncertainty / 1000)
     print(variables['PR'].uncertainty.total_uncertainty)
     print()
     
+    
+    uncertainty_engine.calculateUncertainty(variables['PR_temp_corr'], recurse=True)
+    uncertainty_engine.calculateCorrelation(variables['PR_temp_corr'], auto_calculate=True)
+    print(variables['PR_temp_corr'].uncertainty.total_uncertainty)
     
     
     
