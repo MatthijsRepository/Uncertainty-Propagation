@@ -11,6 +11,18 @@ class CSVData:
     data: dict
     timestep: Optional[float] = None
     time_range: Optional[list] = None
+    
+    def cleanNaN(self, nan_string="NaN", new_value=0):
+        """ Cleans NaN strings and replaces them by a new value. String format and replacement can be manually specified """
+        for name, column in self.data.items():
+            #NOTE: we should skip time data
+            #if type(column[0]) is datetime:
+            if name.lower() == "time":
+                continue
+            column = np.array(column, dtype=object)
+            column[column == nan_string] = new_value
+            column = column.astype(float)
+            self.data[name] = column
 
     
 @dataclass
@@ -136,6 +148,8 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     direct_uncertainty_sources:             Optional[list] = None
     
     root_sources:                           Optional[list] = None
+    root_total_upsample_factors:            Optional[list] = None
+    root_local_upsample_factors:            Optional[list] = None
     root_weighted_uncertainties:            Optional[dict] = None
     root_upsample_factors:                  Optional[list] = None
     
@@ -159,7 +173,8 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
         for source in self.direct_uncertainty_sources:
             source.values = None
         self.root_weighted_uncertainties            = None
-        self.root_upsample_factors                  = None
+        self.root_total_upsample_factors            = None
+        self.root_local_upsample_factors            = None
         self.total_uncertainty                      = None
         self.direct_uncertainties_calculated        = False
         self.total_uncertainty_calculated           = False
@@ -343,6 +358,9 @@ class Variable:
         else:
             raise ValueError(f"Summing variables {self.name} and {other.name} failed. {self.name} has length {len(self.values)}, {other.name} has length {len(other.values)}")
     
+    def __radd__(self, other):
+        return self.__add__(other)
+    
     def __sub__(self, other):
         #If floats or ints are involved the logic is simple
         if isinstance(other, (int, float)):
@@ -356,7 +374,10 @@ class Variable:
             return self.values - other.values
         else:
             raise ValueError("Subtracting variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
-         
+     
+    def __rsub__(self, other):
+        return self.__sub__(other)
+     
     def __mul__(self, other):
         #If floats or ints are involved the logic is simple
         if isinstance(other, (int, float)):
