@@ -116,6 +116,11 @@ class UncertaintySource:
         #Correct for one-sidedness
         if not self.is_symmetric:
             self.sigma = self.sigma / 2
+        
+        #If a multiplier is present: initialize an executable field
+        if self.multiplier is not None:
+            self.executable = None
+        
     
     def getCorrelationMatrix(self, size):
         M = np.ones((size, size)) * self.correlation
@@ -133,6 +138,8 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     root_sources:                           Optional[list] = None
     root_weighted_uncertainties:            Optional[dict] = None
     root_upsample_factors:                  Optional[list] = None
+    
+    aggregated_weighted_uncertainties:      Optional[np.ndarray] = None
 
     total_uncertainty:                      Optional[Union[np.ndarray, float]] = None
     correlation:                            Optional[Union[np.ndarray, float]] = None
