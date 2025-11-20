@@ -3,8 +3,57 @@ import numpy as np
 import csv
 from datetime import datetime
 
-class CSVHandler:
 
+import pandas as pd
+class PandasCSVHandler:
+    def __init__(self):
+        return
+    
+    def readCSVData(self, filepath, delimiter, structure_list, timeformat=None, select_days=None):
+        df = pd.read_csv(filepath, sep=delimiter)
+        
+        column_names = list(df.columns)
+        rename_map = dict(zip(column_names, structure_list))
+        
+        df = df.rename(columns=rename_map)
+        df.pop("-")
+        
+        
+        
+        # Parse datetime
+        if timeformat is None:
+            # Let pandas infer format
+            df["Time"] = pd.to_datetime(df["Time"], errors='coerce')  ###!!! Not robust
+        else:
+            df["Time"] = pd.to_datetime(df["Time"], format=timeformat)
+
+        df.set_index("Time")
+        # Filter for selected days
+        if select_days is not None:
+            days = pd.to_datetime(select_days).normalize()
+            df = df[df.index.normalize().isin(days)]
+        return df
+    
+    
+    def compileCSVData(self, df):
+        time_range = [df["Time"].iloc[0].to_pydatetime(), df["Time"].iloc[-1].to_pydatetime()]
+        timestep = (df["Time"].iloc[1].to_pydatetime() - df["Time"].iloc[0].to_pydatetime())
+        timestep = timestep.total_seconds()
+        
+        df = df.fillna(value=0)
+        
+        column_names = list(df.columns)
+        data = {name: df[name].to_numpy() for name in df.columns}
+        
+        return CSVData(data, timestep, time_range)
+        #return CSVData(df, timestep, time_range)
+
+
+
+
+
+
+class CSVHandler:
     def _readCSV(self, filepath, delimiter, has_header, structure_list, timeformat=None):
         """ Reads a CSV and populates the object data block """
         with open(filepath, 'r', newline='') as csvfile:
@@ -26,7 +75,6 @@ class CSVHandler:
                                 #In case of value errors, paste data as string
                                 value = row[idx]
                         self.data[name].append(value)
-            
     
     def compileCSVData(self, filepath, delimiter, has_header, structure_list, timeformat=None):
         """ Read CSV and populate self.data block """
