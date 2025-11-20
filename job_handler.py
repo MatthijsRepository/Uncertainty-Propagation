@@ -1,4 +1,4 @@
-from input_handler_modules import EquationTreeReader, CSVHandler
+from input_handler_modules import EquationTreeReader, CSVHandler, PandasCSVHandler
 from equation_engine import EquationEngine
 from calculation_engine import CalculationEngine
 from uncertainty_engine import UncertaintyEngine
@@ -71,7 +71,7 @@ class JobHandler:
         self.csv_variables_populated   = False
         return
     
-    def LoadEquationTree(self, filepath):
+    def loadEquationTree(self, filepath):
         self.equation_tree_reader = EquationTreeReader()
         self.variables, self.var_csv_pointers = self.equation_tree_reader.parse(filepath)
         del self.equation_tree_reader
@@ -112,18 +112,8 @@ class JobHandler:
         if len(self.var_csv_pointers) != 0:
             self.csv_variables_populated   = False
     
-    def readFromCSV(self, filepaths, metadata, reset_registry=True):
-        if reset_registry:
-            self.resetVariableRegistry()
-        
-        CSV_data = []
-        #First we read out all CSV data and store it as CSVData objects
-        for i, filepath in enumerate(filepaths):
-            args = metadata[i]
-            temp_csv_data = self.CSV_handler.compileCSVData(filepath, *args)
-            CSV_data.append(temp_csv_data)
-        
-        #Then for each variable in the csv_pointers dictionary we attempt to couple the referenced column name to a column name of our processed csv's
+    def populateVariablesFromCSV(self, CSV_data):
+        """ For each variable in the csv_pointers dictionary this function attempts to couple the referenced column name to a column name of our processed CSVs """
         for var_name, column_name in self.var_csv_pointers.items():
             #Column name is of the form "CSV.name", we strip the first 4 characters
             column_name = column_name[4:]
@@ -139,8 +129,29 @@ class JobHandler:
             if not found:
                 raise ValueError(f"CSV data does not contain data named {column_name}.")
         self.csv_variables_populated = True
+
+    
+    def readFromCSV(self, filepaths, metadata, clean_nan=True, reset_registry=True):
+        """ Populate variables from given csv's using the functions in the CSVHandler function
+            Note: this function does not use pandas """
+        if reset_registry:
+            self.resetVariableRegistry()
+        
+        CSV_data = []
+        #First we read out all CSV data and store it as CSVData objects
+        for i, filepath in enumerate(filepaths):
+            args = metadata[i]
+            temp_csv_data = self.CSV_handler.compileCSVData(filepath, *args)
+            #Optional cleaning of NaN
+            if clean_nan:
+                temp_csv_data.cleanNaN()
+            CSV_data.append(temp_csv_data)
+        
+        #populate variables, set flag to True
+        self.populateVariablesFromCSV(CSV_data)
     
     def validateBasicVariables(self):
+        """ Wrapper for calculation engine function of the same name, also updates the relevant flag """
         if self.variables is None:
             raise ValueError("Validation of basic variables failed: no existing variable registry found.")
         if not self.csv_variables_populated:
@@ -161,14 +172,17 @@ class JobHandler:
         return
     
     def executeJob(self):
+        """ Executes staged job """
         self.preJobInitialization()
         for task in self.job:
             task.execute()
     
     def resetJob(self):
+        """ Resets the job list to an empty list """
         self.job = []
         
     def _resolve_arg(self, arg):
+        """ Replaces function argument string referring to function attribute by the value of this attribute at time of calling """
         if isinstance(arg, str) and arg.startswith("var."):
             parts = arg.split(".")
             obj = self.variables[parts[1]]
@@ -183,41 +197,37 @@ class JobHandler:
     #    return tuple(self._resolve_arg(arg) for arg in args)
     
     def resolve_args(self, args):
+        """ Resolves all function arguments such that strings are replaced by attributes they refer to """
         if not isinstance(args, tuple):
             return self._resolve_arg(args)
         return tuple(self._resolve_arg(arg) for arg in args)
     
     
     def addTask(self, func, *args):
-        #if callable(func) and not hasattr(func, "__self__"):
-        #    try:
-        #        #Try to bind the passed function to JobHandler
-        #        func = func.__get__(self, self.__class__)
-        #    except:
-        #        #We simply append the function to our job as-is
-        #        pass
-        #print(args)
-        #args = self._resolve_args(args)
-        #print(args)
+        """ Adds task to job list """
         self.job.append(Task(self, func, args))
     
+    
+    def getResult(self, name):
+        """ get result of name 'name' from the result storage """
+        return self.results.get(name)
+    
+    def printResult(self, name):
+        """ print result of name 'name' from the result storage """
+        print(self.results.get(name))
     
     #################################################################
     
     def store(self, name, arg):
+        """ job task to store attribute 'arg' under name 'name' each job call """
         self.results.add(name, arg)
     
     def storeAsAverage(self, name, arg):
+        """ job task to store the average of 'arg' under name 'name' over all job calls """
         self.results.addAsAverage(name, arg)
-        
-    def getResult(self, name):
-        return self.results.get(name)
-    
-    def printResult(self, name):
-        print(self.results.get(name))
-        
     
     def evaluateVariable(self, var):
+        """ Wrapper for the calculation engine function of the same name """
         #if not self.basic_variables_validated:
         #    self.validateBasicVariables()
         
@@ -228,15 +238,18 @@ class JobHandler:
         self.calculation_engine.evaluateVariable(var)
         
     def evaluateAllVariables(self):
+        """ Wrapper for the calculation engine function of the same name """
         #if not self.basic_variables_validated:
         #    self.validateBasicVariables()
         for var_name in self.derived_variables_names:
             self.calculation_engine.evaluateVariable(self.variables[var_name])
             
     def prepareAllDirectUncertainties(self):
+        """ Wrapper for the uncertainty engine function of the same name """
         self.uncertainty_engine.prepareAllDirectUncertainties()
     
     def prepareDownTreeDirectUncertainties(self, var):
+        """ Wrapper for the uncertainty engine function of the same name """
         if isinstance(var, str):
             var = self.variables.get(var)
             if var is None:
@@ -244,6 +257,7 @@ class JobHandler:
         self.uncertainty_engine.prepareDownTreeDirectUncertainties(var)
     
     def calculateTotalUncertainty(self, var):
+        """ Wrapper for the uncertainty engine function of the same name """
         if isinstance(var, str):
             var = self.variables.get(var)
             if var is None:
@@ -257,7 +271,7 @@ class JobHandler:
     
 
 
-
+"""
 
 
 if __name__=="__main__":
@@ -269,10 +283,10 @@ if __name__=="__main__":
     filepaths = ["C:\\Users\\mate\\Desktop\\python\\Experimental\\testdata.csv", "C:\\Users\\mate\\Desktop\\python\\Experimental\\testdata.csv"]
     
     
-    
     job = JobHandler()
-    job.LoadEquationTree(inputfile)
-
+    job.loadEquationTree(inputfile)
+    
+    job.variables
     
     
     job.addTask(job.evaluateVariable, "var.PR")
@@ -292,6 +306,7 @@ if __name__=="__main__":
     
     
     
+    
     for _ in range(3):
         job.readFromCSV(filepaths, metadata)
         job.executeJob()
@@ -306,57 +321,9 @@ if __name__=="__main__":
     print()
     print("PR uncertainty split average")
     job.printResult("PR uncertainty split average")
-    
-    
-    
-    """ 
-    
-    
-    
-    
-    
-    
-    CSV_1_metadata = (delimiter, has_header, structure_list, timeformat)
-    CSV_2_metadata = (delimiter, has_header, structure_list, timeformat)
-    
-    CSV_metadata = [CSV_1_metadata, CSV_2_metadata]
-    
-
-    CSV_1_characteristic = ...
-    CSV_2_chara...
-    
-    CSV_characteristics = [...]
-    
-    identifier_list = [....]
-    
-    for identifier in identifier_list:        
-        clean job_handler variables
-        
-        for i, characteristic in enumerate(CSV_characteristics):
-            
-        
-        
-    
-    
-    ###########
-    
-    jobhandler.executeJob(self, clean_data = True):
-        #if clean_data: self.clean_data()
-        
-        load csvdata to variables
-        
-        execute jobscript
-        
-        store results (part of jobscript?)
-        
-        if clean_data: self.clean_data()
-        return
-    
-    ########
-    
-    
     """
     
+
     
     
     
