@@ -12,12 +12,54 @@ class CSVData:
     timestep: Optional[float] = None
     time_range: Optional[list] = None
     
+    
+    def checkForValidValues(self, column_name, nan_string="NaN"):
+        mask = (self.data[column_name] != nan_string) & (self.data[column_name] != 0)
+        if np.argmax(mask) == 0:
+            return False
+        else:
+            return True
+    
+    def checkNegatives(self, column_name):
+        
+        return
+    
+    def checkOutliers(self, max_value):
+        return
+    
+    def compareToZenith(self, column_name, nan_string="NaN", zenith_limit=85):        
+        # vectorized mask: keep elements that are not equal to the string AND not zero
+        #mask = (self.data[column_name] != nan_string) & (self.data[column_name] != 0)
+        
+        # get first and last True
+        #first_idx = np.argmax(mask)
+        #last_idx = len(mask) - 1 - np.argmax(mask[::-1])
+        
+        #If first_idx == 0, then all elements in our mask are False: i.e. there are no nonzero or non-nan values in the array
+        #if first_idx == 0:
+        #    return False
+        #if data["zenith"][first_idx] < zenith_limit or data["zenith"][last_idx] < zenith_limit:
+        #    return False
+        
+        #mask = not mask
+        
+        mask = (self.data[column_name] == nan_string) | (self.data[column_name] == 0)
+        
+        indices = np.where((self.data["zenith"] < zenith_limit) & mask)[0]
+        if len(indices)>0:
+            return False
+        else:
+            return True
+    
+    def compareCompatibility(self):
+        return
+    
     def cleanNaN(self, nan_string="NaN", new_value=0):
         """ Cleans NaN strings and replaces them by a new value. String format and replacement can be manually specified """
         for name, column in self.data.items():
-            #NOTE: we should skip time data
+            #NOTE: we should skip time and date data
             #if type(column[0]) is datetime:
-            if name.lower() == "time":
+            if name.lower() in ["time", "date"]:   ###!!!
                 continue
             column = np.array(column, dtype=object)
             column[column == nan_string] = new_value
@@ -376,7 +418,7 @@ class Variable:
             raise ValueError("Subtracting variables {self.name} and {other.name} failed. {self.name} has length {len(self.values}, {other.name} has length {len(other.values)}")
      
     def __rsub__(self, other):
-        return self.__sub__(other)
+        return -1*self.__sub__(other)
      
     def __mul__(self, other):
         #If floats or ints are involved the logic is simple
