@@ -12,22 +12,19 @@ class PandasCSVHandler:
     def readCSVData(self, filepath, delimiter, structure_list, timeformat=None, select_days=None):
         df = pd.read_csv(filepath, sep=delimiter)
         
-        column_names = list(df.columns)
-        rename_map = dict(zip(column_names, structure_list))
+        rename_map = dict(zip(list(df.columns), structure_list))
         
         df = df.rename(columns=rename_map)
         df.pop("-")
-        
-        
         
         # Parse datetime
         if timeformat is None:
             # Let pandas infer format
             df["Time"] = pd.to_datetime(df["Time"], errors='coerce')  ###!!! Not robust
         else:
-            df["Time"] = pd.to_datetime(df["Time"], format=timeformat)
+            df["Time"] = pd.to_datetime(df["Time"], format=timeformat) ###!!!
 
-        df.set_index("Time")
+        df.set_index("Time") ###!!!
         # Filter for selected days
         if select_days is not None:
             days = pd.to_datetime(select_days).normalize()
@@ -35,18 +32,41 @@ class PandasCSVHandler:
         return df
     
     
+    def addDateColumn(self, df):
+        df["Date"] = pd.to_datetime(df["Time"]).dt.date ###!!!
+    
+    
+    def addZenithColumn(self, df, coordinates, UTC_offset):
+        from solar_module import calculateZenithAngles
+        solar_data = calculateZenithAngles(coordinates, df["Time"], UTC_offset)
+        df["zenith"] = np.array(solar_data["zenith"])
+        
+        
+    def compileOneDayCSVData(self, df, date):
+        subset = df[df["Date"] == date]
+        return self.compileCSVData(subset)
+        
+    
     def compileCSVData(self, df):
-        time_range = [df["Time"].iloc[0].to_pydatetime(), df["Time"].iloc[-1].to_pydatetime()]
-        timestep = (df["Time"].iloc[1].to_pydatetime() - df["Time"].iloc[0].to_pydatetime())
+        time_range = [df["Time"].iloc[0].to_pydatetime(), df["Time"].iloc[-1].to_pydatetime()] ###!!!
+        timestep = (df["Time"].iloc[1].to_pydatetime() - df["Time"].iloc[0].to_pydatetime()) ###!!!
         timestep = timestep.total_seconds()
         
         df = df.fillna(value=0)
         
         column_names = list(df.columns)
-        data = {name: df[name].to_numpy() for name in df.columns}
+        data = {name: (df[name] if name in ["Time", "Date"] else df[name].to_numpy() ) for name in df.columns} ###!!!
         
-        return CSVData(data, timestep, time_range)
+        
+        #data = {name: df[name].to_numpy() for name in df.columns if name not in ["Time", "Date"] else name: df[name]}   ###!!!
+        #data["Time"] = df["Time"] ###!!!
+        #data["Date"] = pd.to_datetime(df["Time"]) ###!!!
+        #data["Date"] = data["Date"].dt.date
+        
+        
         #return CSVData(df, timestep, time_range)
+        return CSVData(data, timestep, time_range)
+        
 
 
 
