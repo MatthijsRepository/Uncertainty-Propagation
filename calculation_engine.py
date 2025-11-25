@@ -72,7 +72,6 @@ class CalculationEngine:
         aggregation_step      = None #Aggregation step is the timestep of the timesummed data. This value is required for uncertainty calculation and therefore passed to the variable
         non_aggregated_values = None #Calculated values before aggregation - required for uncertainty calculation
         if var.is_timesum:
-            print(var.sympy_equation)
             non_aggregated_values = copy.deepcopy(calculated_values)
             calculated_values     = self.timeSum(var, calculated_values, timedata, integrate=integrate) ###!!!
             aggregation_step      = timedata[-1]
