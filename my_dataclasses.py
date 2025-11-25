@@ -14,57 +14,84 @@ class CSVData:
     time_range: Optional[list] = None
     
     
-    def checkForValidValues(self, column_name, nan_string="NaN"):
-        mask = (self.data[column_name] != nan_string) & (self.data[column_name] != 0)
+    def checkForValidValues(self, column_name):
+        """ Checks if the column contains any defined value except for 0 """
+        mask = np.invert(np.isnan(self.data[column_name])) & (self.data[column_name] != 0)
         if np.argmax(mask) == 0:
             return False
         else:
             return True
     
-    def checkNegatives(self, column_name):
-        return
-    
-    def checkOutliers(self, max_value):
-        return
-    
-    def compareToZenith(self, column_name, nan_string="NaN", zenith_limit=85):        
-        # vectorized mask: keep elements that are not equal to the string AND not zero
-        #mask = (self.data[column_name] != nan_string) & (self.data[column_name] != 0)
+    def compareNaNToZenith(self, column_name, zenith_limit=85): 
+        """ Checks if there are any nan's or zeroes in a column after the solar zenith angle is above a certain height
+            Used to check whether a dataset contains undefined values during the day """
+        if not "zenith" in self.data.keys():
+            raise ValueError(f"Tried to compare {column_name} to solar zenith angle, while no zenith angle is defined for this csv.")
+        column = self.data[column_name]
+        #True if the element is nan or 0
+        mask = np.isnan(column) | (column == 0)
         
-        # get first and last True
-        #first_idx = np.argmax(mask)
-        #last_idx = len(mask) - 1 - np.argmax(mask[::-1])
-        
-        #If first_idx == 0, then all elements in our mask are False: i.e. there are no nonzero or non-nan values in the array
-        #if first_idx == 0:
-        #    return False
-        #if data["zenith"][first_idx] < zenith_limit or data["zenith"][last_idx] < zenith_limit:
-        #    return False
-        
-        #mask = not mask
-        
-        mask = (self.data[column_name] == nan_string) | (self.data[column_name] == 0)
-        
+        #Indices where zenith angle is under the limit and the data is 0 or NaN
         indices = np.where((self.data["zenith"] < zenith_limit) & mask)[0]
         if len(indices)>0:
             return False
         else:
             return True
+        
+    def compareNonZeroToZenith(self, column_name, zenith_limit=100):
+        """ Checks if the column is nonzero after the solar zenith angle is below a certain heigh
+            Used to check whether a column is nonzero during the night. """
+        if not "zenith" in self.data.keys():
+            raise ValueError(f"Tried to compare {column_name} to solar zenith angle, while no zenith angle is defined for this csv.")
+        column = self.data[column_name]
+        mask = np.invert(np.isnan(column)) & (self.data["zenith"] > zenith_limit)
+        
+        indices = np.where(column[mask] > 0)
+        if len(indices)>0:
+            return False
+        else:
+            return True
+        
     
-    def compareCompatibility(self):
-        return
     
-    def cleanNaN(self, nan_string="NaN", new_value=0):
+    def interpolateNaN(self, column_name, min_value=0, else_value=np.nan):
+        """ Interpolates isolated nan's, that are neighboured by two defined values, as the average of their neighbours.
+            In case the average is less than min_value, the nan is instead replaced by else_value.
+            This is to allow nan's near the beginning and end of the day to be set to 0 instead of to the interpolated value. """
+        #Obtain nan's that is neighboured by two defined values
+        column = self.data[column_name]
+        isnan = np.isnan(column)
+        isolated_nans = isnan & np.invert(np.roll(isnan, 1)) & np.invert(np.roll(isnan, -1))
+        indices = np.where(isolated_nans)[0]
+        
+        for idx in indices:
+            if idx in [0, len(self.data[column_name])-1]: 
+                continue
+            interpolation = (column[idx-1] + column[idx+1]) / 2
+            if interpolation>min_value:
+                column[idx] = interpolation
+            else:
+                column[idx] = else_value
+            
+
+    def cleanExtremeValues(self, column_name, value_limit=10000, new_value=np.nan):
+        """ Replaces extreme values by new value """
+        column = self.data[column_name]
+        column[np.where(np.abs(column)>value_limit)] = new_value
+    
+    def cleanNegatives(self, column_name, new_value=0):
+        """ Replaces negative values by specified value """
+        column = self.data[column_name]
+        column[np.where(column<0)] = new_value
+    
+    def cleanAllNaN(self, new_value=0):
         """ Cleans NaN strings and replaces them by a new value. String format and replacement can be manually specified """
         for name, column in self.data.items():
             #NOTE: we should skip time and date data
             #if type(column[0]) is datetime:
             if name.lower() in ["time", "date"]:   ###!!!
                 continue
-            column = np.array(column, dtype=object)
-            column[column == nan_string] = new_value
-            column = column.astype(float)
-            self.data[name] = column
+            column[np.isnan(column)] = new_value
 
     
 @dataclass
