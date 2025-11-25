@@ -304,11 +304,11 @@ class EquationEngine:
         #Instead we want to return the input variable's values, the wrapper handles this
         #If the function is not trivial, we perform regular executable creation
         if isinstance(var.sympy_equation, sp.Symbol):
-            def wrapper(var):
-                if isinstance(var, Variable):
-                    return var.values
+            def wrapper(temp_var):
+                if isinstance(temp_var, Variable):
+                    return temp_var.values
                 else:
-                    return var #If we have numerical input, we simply return it back
+                    return temp_var #If we have numerical input, we simply return it back
             var.executable = wrapper
         else:
             var.executable = sp.lambdify(symbols, var.sympy_equation)
