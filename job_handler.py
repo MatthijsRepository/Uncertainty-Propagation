@@ -4,6 +4,7 @@ from calculation_engine import CalculationEngine
 from uncertainty_engine import UncertaintyEngine
 from time_engine import TimeEngine
 import numpy as np
+import pandas as pd
 from dataclasses import dataclass
 
 
@@ -13,6 +14,9 @@ class Task:
     job_handler: object
     func: callable
     args: tuple = ()
+    
+    def __str__(self):
+        return (f"Task: {self.func.__name__}{self.args}")
     
     def execute(self):
         args = self.job_handler.resolve_args(self.args)
@@ -60,13 +64,16 @@ class JobHandler:
         self.variables = None
         self.derived_variables_names = None
         self.var_csv_pointers = None
+        self.csv_data = []
     
+        self.data_init_job = [] ###!!!
         self.job = []
         self.results = Results()
         
         ##computational control flow booleans
         self.initialized_eq_tree       = False
         self.initialized_engines       = False
+        self.has_csv_data              = False
         self.basic_variables_validated = False
         self.csv_variables_populated   = False
         return
@@ -104,6 +111,7 @@ class JobHandler:
     
     
     def resetVariableRegistry(self):
+        """ Resets all variables that are not explicitly hard-coded in the equation tree input """
         for var in self.variables.values():
             if not var.is_hardcoded:
                 var.reset()
@@ -112,8 +120,40 @@ class JobHandler:
         if len(self.var_csv_pointers) != 0:
             self.csv_variables_populated   = False
     
-    def populateVariablesFromCSV(self, CSV_data):
+    
+    def populateVariablesFromCSV(self, reset_registry=True):
         """ For each variable in the csv_pointers dictionary this function attempts to couple the referenced column name to a column name of our processed CSVs """
+        if reset_registry:
+            self.resetVariableRegistry()
+            
+        for var_name, column_name in self.var_csv_pointers.items():
+            #Column name is of the form "CSV.name", we strip the first 4 characters
+            column_name = column_name[4:]
+            
+            found = False
+            for csv in self.csv_data:
+                if column_name in csv.data.keys():
+                    found = True
+                    self.variables[var_name].values = np.asarray(csv.data[column_name])
+                    if csv.time_range is not None:
+                        self.variables[var_name].addTimeStep(csv.time_range)
+                    break
+            if not found:
+                if not self.has_csv_data:
+                    raise ValueError(f"Failed to populate variable {var_name}: no csv data loaded to jobhandler.")
+                else:
+                    raise ValueError(f"CSV data does not contain data named {column_name}.")
+        self.csv_variables_populated = True
+            
+
+    def populateVariablesFromCSV_OLD(self, CSV_data, reset_registry=True):
+        """ For each variable in the csv_pointers dictionary this function attempts to couple the referenced column name to a column name of our processed CSVs """
+        if reset_registry:
+            self.resetVariableRegistry()
+        
+        if not isinstance(CSV_data, (list, np.ndarray)):
+            CSV_data = [CSV_data]
+        
         for var_name, column_name in self.var_csv_pointers.items():
             #Column name is of the form "CSV.name", we strip the first 4 characters
             column_name = column_name[4:]
@@ -144,38 +184,53 @@ class JobHandler:
             temp_csv_data = self.CSV_handler.compileCSVData(filepath, *args)
             #Optional cleaning of NaN
             if clean_nan:
-                temp_csv_data.cleanNaN()
+                temp_csv_data.cleanAllNaN()
             CSV_data.append(temp_csv_data)
         
         #populate variables, set flag to True
-        self.populateVariablesFromCSV(CSV_data)
+        self.populateVariablesFromCSV_OLD(CSV_data)
     
     def validateBasicVariables(self):
         """ Wrapper for calculation engine function of the same name, also updates the relevant flag """
-        if self.variables is None:
-            raise ValueError("Validation of basic variables failed: no existing variable registry found.")
-        if not self.csv_variables_populated:
-            print("WARNING: trying to perform calculations while no CSV data appears to be loaded. Crash may occur.")
+        #if self.variables is None:
+        #    raise ValueError("Validation of basic variables failed: no existing variable registry found.")
+        #if not self.csv_variables_populated:
+        #    print("WARNING: trying to perform calculations while no CSV data appears to be loaded. Crash may occur.")
             
         self.calculation_engine.validateBasicVariables(equation_engine=self.equation_engine, variables=self.variables)
         self.basic_variables_validated = True
         return
     
-    def preJobInitialization(self):
+    def executeJob(self):
+        """ Executes staged preprocessing and job for loaded csv data """
         if not self.initialized_engines:
             self.prepareEngines()
+        
+        if not self.has_csv_data:
+            print("WARNING: trying to perform calculations while no CSV data appears to be loaded. Crash may occur.")
+        
+        #Perform the data preprocessing
+        for task in self.data_init_job:
+            out = task.execute()
+            #out is None for data cleaning tasks, and a boolean for data consistency checks
+            #if out is False, then the data consistency check failed and we break off our job execution
+            if out is False:
+                print(f"Preprocessing {task} failed, breaking off execution.")
+                return
+            
+        
+        #Populate variables using loaded CSV data, and subsequently dump the csv data
+        self.populateVariablesFromCSV()
+        self.csv_data = []
+        self.has_csv_data = False
+        
+        #Validate basic variables
         self.validateBasicVariables()
-        #IDEA:
-        #replace NaN, do datacleaning, etc.
-        #ValidateBasicVariables
-        #... other things
-        return
-    
-    def executeJob(self):
-        """ Executes staged job """
-        self.preJobInitialization()
+        
+        #Execute job
         for task in self.job:
             task.execute()
+        return True
     
     def resetJob(self):
         """ Resets the job list to an empty list """
@@ -203,6 +258,15 @@ class JobHandler:
         return tuple(self._resolve_arg(arg) for arg in args)
     
     
+    def addCSVData(self, csv):
+        """ Adds CSVData object or list of CSVData objects to internal registry """
+        self.csv_data.append(csv)
+        self.has_csv_data = True
+    
+    def addPreprocessingTask(self, func, *args):
+        """ Adds task to preprocessing job list """
+        self.data_init_job.append(Task(self, func, args))
+    
     def addTask(self, func, *args):
         """ Adds task to job list """
         self.job.append(Task(self, func, args))
@@ -215,6 +279,55 @@ class JobHandler:
     def printResult(self, name):
         """ print result of name 'name' from the result storage """
         print(self.results.get(name))
+    
+    #################################################################
+    
+    def compareNaNToZenith(self, column_name, *args):
+        """ Wrapper for CSVData.compareNaNToZenith function for preprocessing job """
+        found = False
+        for csv in self.csv_data:
+            if column_name in csv.data.keys():
+                found = True
+                return csv.compareNaNToZenith(column_name, *args)
+        if not found:
+            raise ValueError(f"Tried to perform NaN to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
+    
+    def compareNonZeroToZenith(self, column_name, *args):
+        """ Wrapper for CSVData.compareNonZeroToZenith function for preprocessing job """
+        found = False
+        for csv in self.csv_data:
+            if column_name in csv.data.keys():
+                found = True
+                return csv.compareNonZeroToZenith(column_name, *args)
+        if not found:
+            raise ValueError(f"Tried to perform nonzero to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
+    
+    def interpolateNaN(self, column_name, *args):
+        """ Wrapper for CSVData.interpolateNaN function for preprocessing job """
+        found = False
+        for csv in self.csv_data:
+            if column_name in csv.data.keys():
+                found = True
+                csv.interpolateNaN(column_name, *args)
+                break
+        if not found:
+            raise ValueError(f"Tried to perform NaN interpolation for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
+
+    def cleanNegatives(self, column_name, *args):
+        """ Wrapper for CSVData.cleanNegatives function for preprocessing job """
+        found = False
+        for csv in self.csv_data:
+            if column_name in csv.data.keys():
+                found = True
+                csv.cleanNegatives(column_name, *args)
+                break
+        if not found:
+            raise ValueError(f"Tried to perform negative cleaning for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
+    
+    def cleanAllNaN(self, *args):
+        """ Executes nan cleaning for all loaded csv's """
+        for csv in self.csv_data:
+            csv.cleanAllNaN(*args)
     
     #################################################################
     
