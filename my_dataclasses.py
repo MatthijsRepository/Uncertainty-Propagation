@@ -8,6 +8,7 @@ import matplotlib.dates as mdates
 
 @dataclass 
 class CSVData:
+    #name: str
     data: dict
     timestep: Optional[float] = None
     time_range: Optional[list] = None
@@ -21,7 +22,6 @@ class CSVData:
             return True
     
     def checkNegatives(self, column_name):
-        
         return
     
     def checkOutliers(self, max_value):
@@ -388,7 +388,7 @@ class Variable:
     
     def __add__(self, other):
         #If floats or ints are involved the logic is simple
-        if isinstance(other, (int, float)):
+        if isinstance(other, (int, float, np.ndarray)):
             return self.values + other
         if isinstance(self.values, (int, float)) or isinstance(other.values, (int, float)):
             return self.values + other
@@ -405,7 +405,7 @@ class Variable:
     
     def __sub__(self, other):
         #If floats or ints are involved the logic is simple
-        if isinstance(other, (int, float)):
+        if isinstance(other, (int, float, np.ndarray)):
             return self.values - other
         if isinstance(self.values, (int, float)) or isinstance(other.values, (int, float)):
             return self.values - other
@@ -422,7 +422,7 @@ class Variable:
      
     def __mul__(self, other):
         #If floats or ints are involved the logic is simple
-        if isinstance(other, (int, float)):
+        if isinstance(other, (int, float, np.ndarray)):
             return self.values * other
         if isinstance(self.values, (int, float)) or isinstance(other.values, (int, float)):
             return self.values * other
@@ -439,7 +439,7 @@ class Variable:
     
     def __truediv__(self, denominator):
         #If floats or ints are involved the logic is simple
-        if isinstance(denominator, (int, float)):
+        if isinstance(denominator, (int, float, np.ndarray)):
             return self.values / denominator
         if isinstance(self.values, (int, float)) or isinstance(denominator.values, (int, float)):
             return self.values / denominator
@@ -453,7 +453,7 @@ class Variable:
     
     def __rtruediv__(self, numerator):
         #If floats or ints are involved the logic is simple
-        if isinstance(numerator, (int, float)):
+        if isinstance(numerator, (int, float, np.ndarray)):
             return numerator / self.values
         if isinstance(self.values, (int, float)) or isinstance(numerator.values, (int, float)):
             return numerator / self.values
@@ -468,7 +468,61 @@ class Variable:
         if not power.is_integer():
             raise ValueError(f"Error, taking power {power} of variable {self.name} is not supported, integer powers only.")
         return self.values**power
-     
+    
+    def __rpower__(self, base):
+        if hasattr(base, "values"):
+            base = base.values
+        if isinstance(base, (int, float)) or isinstance(self.values, (int, float)):
+            return base ** self.values
+        else:
+            if len(self.values) == len(base):
+                return base ** self.values
+            else:
+                raise ValueError(f"Error: taking power with variable {self.name} failed, trying to take power with arrays of shape {len(base)} and {len(self.values)}.")
+    
+    def exp(self):
+        return np.exp(self.values)
+    
+    
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """ Numpy ufunc overrider - required for  """
+        if ufunc in (np.add, np.subtract, np.multiply, np.divide, np.power):
+            if ufunc == np.add:
+                return inputs[1].__radd__(inputs[0])
+            if ufunc == np.subtract:
+                return inputs[1].__rsub__(inputs[0])
+            if ufunc == np.multiply:
+                return inputs[1].__rmul__(inputs[0])
+            if ufunc == np.divide:
+                return inputs[1].__rtruediv__(inputs[0])
+            if ufunc == np.power:
+                return inputs[1].__rpow__(inputs[0])
+            """
+            args = []
+            print(self.name)
+            for arg in inputs:
+                print(arg)
+                if isinstance(arg, Variable):
+                    args.append(arg.values)
+                else:
+                    args.append(arg)
+            print(args)
+            # Call your internal operator handler
+            if ufunc == np.add:
+                return args[0] + args[1]
+            if ufunc == np.subtract:
+                return args[0] - args[1]
+            if ufunc == np.multiply:
+                return args[0] * args[1]
+            if ufunc == np.divide:
+                return args[0] / args[1]
+            if ufunc == np.power:
+                return args[0] ** args[1]
+            """
+        # Let other ufuncs fall back to normal
+        return NotImplemented
+    
+    
     def reset(self):
         self.values                 = None
         self.partial_values         = {}
