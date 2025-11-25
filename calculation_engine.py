@@ -2,6 +2,7 @@ from my_dataclasses import Variable, TimeHarmonizationData
 from time_engine import TimeEngine
 import datetime
 import numpy as np
+import copy
 
 
     
@@ -71,7 +72,8 @@ class CalculationEngine:
         aggregation_step      = None #Aggregation step is the timestep of the timesummed data. This value is required for uncertainty calculation and therefore passed to the variable
         non_aggregated_values = None #Calculated values before aggregation - required for uncertainty calculation
         if var.is_timesum:
-            non_aggregated_values = calculated_values
+            print(var.sympy_equation)
+            non_aggregated_values = copy.deepcopy(calculated_values)
             calculated_values     = self.timeSum(var, calculated_values, timedata, integrate=integrate) ###!!!
             aggregation_step      = timedata[-1]
             timedata              = None
@@ -91,6 +93,7 @@ class CalculationEngine:
         """ Handles the timesum calculation for a variable
             timesums are dependent on the variable aggregation rules, which can be passed directly at definition or are inferred from dependencies
             aggregation rules work with simple seniority: presence of integrate > add > average """
+        
         if calculated_values is None:
             calculated_values = var.values
         if var.aggregation_rule == "sum":
