@@ -52,7 +52,7 @@ class PandasCSVHandler:
         timestep = (df["Time"].iloc[1].to_pydatetime() - df["Time"].iloc[0].to_pydatetime()) ###!!!
         timestep = timestep.total_seconds()
         
-        df = df.fillna(value=0)
+        #df = df.fillna(value=0)
         
         column_names = list(df.columns)
         data = {name: (df[name] if name in ["Time", "Date"] else df[name].to_numpy() ) for name in df.columns} ###!!!
