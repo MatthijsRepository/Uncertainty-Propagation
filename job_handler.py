@@ -263,10 +263,10 @@ class JobHandler:
         
         #Perform the data preprocessing
         if self.preprocessing is not None:
-            success, failcode = self.preprocessing(self)
+            success, fail_code = self.preprocessing(self)
             #If preprocessing failed, we log this in the results, we also clear the loaded csv data
             if not success:
-                self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=failcode)
+                self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
                 self.csv_data = []
                 self.has_csv_data = False
                 return
@@ -280,7 +280,12 @@ class JobHandler:
         self.validateBasicVariables()
         
         #Execute job
-        self.main(self)
+        success, fail_code = self.main(self)
+        if not success:
+            self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
+            self.csv_data = []
+            self.has_csv_data = False
+            return
         
         #Create run result
         self.results.createRunResult(succeeded=True, identifier=identifier)
@@ -323,8 +328,18 @@ class JobHandler:
     
     #################################################################
     
+    def checkForExtremeValues(self, column_name, *args, **kwargs):
+        """ Wrapper for CSVData.compareNaNToZenith function, used for data consistency checking """
+        found = False
+        for csv in self.csv_data:
+            if column_name in csv.data.keys():
+                found = True
+                return csv.checkForExtremeValues(column_name, *args, **kwargs)
+        if not found:
+            raise ValueError(f"Tried to perform NaN to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
+    
     def compareNaNToZenith(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.compareNaNToZenith function for preprocessing job """
+        """ Wrapper for CSVData.compareNaNToZenith function, used for data consistency checking """
         found = False
         for csv in self.csv_data:
             if column_name in csv.data.keys():
@@ -334,7 +349,7 @@ class JobHandler:
             raise ValueError(f"Tried to perform NaN to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
     
     def compareNonZeroToZenith(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.compareNonZeroToZenith function for preprocessing job """
+        """ Wrapper for CSVData.compareNonZeroToZenith function, used for data consistency checkingb """
         found = False
         for csv in self.csv_data:
             if column_name in csv.data.keys():
@@ -344,7 +359,7 @@ class JobHandler:
             raise ValueError(f"Tried to perform nonzero to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
     
     def interpolateNaN(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.interpolateNaN function for preprocessing job """
+        """ Wrapper for CSVData.interpolateNaN function for data preprocessing """
         found = False
         for csv in self.csv_data:
             if column_name in csv.data.keys():
@@ -353,9 +368,20 @@ class JobHandler:
                 break
         if not found:
             raise ValueError(f"Tried to perform NaN interpolation for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
+            
+    def interpolateExtremeValues(self, column_name, *args, **kwargs):
+        """ Wrapper for CSVData.interpolateExtremeValues function for data preprocessing """
+        found = False
+        for csv in self.csv_data:
+            if column_name in csv.data.keys():
+                found = True
+                csv.interpolateExtremeValues(column_name, *args, **kwargs)
+                break
+        if not found:
+            raise ValueError(f"Tried to perform extreme value interpolation for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
 
     def cleanNegatives(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.cleanNegatives function for preprocessing job """
+        """ Wrapper for CSVData.cleanNegatives function for data preprocessing """
         found = False
         for csv in self.csv_data:
             if column_name in csv.data.keys():
@@ -366,7 +392,7 @@ class JobHandler:
             raise ValueError(f"Tried to perform negative cleaning for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
     
     def cleanNaN(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.cleanNaN function for preprocessing job """
+        """ Wrapper for CSVData.cleanNaN function for data preprocessing """
         found = False
         for csv in self.csv_data:
             if column_name in csv.data.keys():
