@@ -172,10 +172,17 @@ class EquationTreeReader:
             elif line.startswith("description"):
                 variable_data.description = line.split(":", maxsplit=1)[1].strip()
                 i += 1 ; continue
+            elif line.startswith("maskable"):
+                variable_data.is_maskable = line.split(":", maxsplit=1)[1].strip()
+                if variable_data.is_maskable.lower() == "false":
+                    variable_data.is_maskable = False
+                else: variable_data.is_maskable = True
+                i += 1 ; continue
             elif line.startswith("rate"):
                 variable_data.is_rate = line.split(":", maxsplit=1)[1].strip()
                 if variable_data.is_rate.lower() == "true":
                     variable_data.is_rate = True
+                else: variable_data.is_rate = False
                 i += 1 ; continue
             elif line.startswith("aggregation"):
                 variable_data.aggregation_rule = line.split(":", maxsplit=1)[1].strip()
@@ -206,6 +213,7 @@ class EquationTreeReader:
                                 values           = variable_data.var_values, 
                                 is_basic         = variable_data.is_basic_variable,
                                 is_hardcoded     = variable_data.is_hardcoded,
+                                is_maskable      = variable_data.is_maskable,
                                 is_rate          = variable_data.is_rate, 
                                 aggregation_rule = variable_data.aggregation_rule,
                                 equation         = variable_data.equation)

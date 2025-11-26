@@ -140,7 +140,7 @@ class UncertaintyEngine:
         n_values = 1 if isinstance(var.values, (float,int)) else len(var.values)
         
         uncertainty_mask = np.ones(n_values)
-        if mask and not np.isscalar(var.values):
+        if mask and var.is_maskable and not np.isscalar(var.values):
             nz = np.nonzero(var.values)[0]
             if len(nz)>0:
                 uncertainty_mask[:nz[0]] = 0
