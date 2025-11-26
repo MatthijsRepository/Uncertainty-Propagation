@@ -6,50 +6,91 @@ from time_engine import TimeEngine
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass
-
+from typing import Union, Optional
 
 
 @dataclass
-class Task:
-    job_handler: object
-    func: callable
-    args: tuple = ()
+class RunResult:
+    identifier: Union(str, int)  #String which stores the identifier of the run
+    succeeded: bool              #Stores whether the run succeeded or not
+    data: dict                   #Stores results of the run
+    fail_code: Optional(str)    #Stores which datacheck caused preprocessing to fail
     
-    def __str__(self):
-        return (f"Task: {self.func.__name__}{self.args}")
     
-    def execute(self):
-        args = self.job_handler.resolve_args(self.args)
-        return self.func(*args)
-
 class Results:
     def __init__(self):
-        self.data = {}
-        self.averages_effective_lengths = {}
-
+        self.num_runs           = 0             #Stores the number of runs this result object contains
+        self.run_identifiers    = []            #For each run, can be used to an identifier (such as the date)
+        self.run_results        = []            #Stores RunResult object for each run
+        #self.averages_effective_lengts = {}     #Stores effective lengths N for data that is stored as average: A -> (A*(N-1) + value)/N for the N'th result
+        self.staged_data        = {}           #Staged data dictionary to be populated in the present run
+        
     def add(self, key: str, value):
         """ Append a new result for a given key, automatically creates a field for the key if it does not exist yet """
-        if key not in self.data:
-            self.data[key] = [value]
-        else:
-            self.data[key].append(value)   
+        if key not in self.staged_data:
+            self.staged_data[key] = value
+            return
         
-    def addAsAverage(self, key: str, value):
-        """ Append a new result to an average over all results in this field,   A -> (A*(N-1) + value)/N   for the N'th result"""
-        if key not in self.data:
-            self.data[key] = value
-            self.averages_effective_lengths[key] = 1
-        else:
-            total = (self.data[key] * self.averages_effective_lengths[key] + value)
-            self.averages_effective_lengths[key] += 1
-            self.data[key] = total / (self.averages_effective_lengths[key])
+        column = self.staged_data[key]
+        if not isinstance(column, list):
+            column = list(column)
+        column.append(value)
+                
+    
+    def createRunResult(self, succeeded=True, identifier=None, fail_code=None):
+        if identifier is None:
+            identifier = self.num_runs
         
-    def get(self, key: str):
-        """ Get result as itself or as an array if it is list-like """
-        if np.isscalar(self.data[key]):
-            return self.data[key]
-        else:
-            return np.array(self.data[key], dtype=float)
+        result = RunResult(identifier   = identifier,
+                           succeeded    = succeeded,
+                           data         = self.staged_data,
+                           fail_code    = fail_code)
+        self.run_results.append(result)
+        
+        self.run_identifiers.append(identifier)
+        self.staged_data = {}
+        self.num_runs    += 1
+        
+    def getResultSeries(self, name):
+        series, identifiers = [], []
+        for result in self.run_results:
+            datapoint = result.data.get(name)
+            if datapoint is None:
+                continue
+            series.append(datapoint)
+            identifiers.append(result.identifier)
+        return series, identifiers
+    
+    def getResultArray(self, name):
+        series, identifiers = self.getResultSeries(name)
+        return np.asarray(series), identifiers
+    
+    def getFails(self, failcode=None):
+        fails, identifiers = [], []
+        for result in self.run_results:
+            if result.succeeded:
+                continue
+            if failcode is None:
+                fails.append(result.fail_code)
+                identifiers.append(result.identifier)
+                continue
+            elif result.failcode == failcode:
+                fails.append(result.fail_code)
+                identifiers.append(result.identifier)
+        return fails, identifiers
+    
+    def summariseFails(self):
+        fails, identifiers = self.getFails()
+        successful_executions = self.num_runs - len(fails)
+        
+        unique_fails = list(set(fails))
+        print("Summarising calculation failures:")
+        print(f"Successful executions: {successful_executions} out of {self.num_runs} total executions")
+        for fail in unique_fails:
+            print(f"Error code {fail} occurred {fails.count(fail)} times")
+        print()
+            
+            
 
 
 class JobHandler:
@@ -61,13 +102,14 @@ class JobHandler:
         self.uncertainty_engine = None
         self.time_engine = None
         
+        self.preprocessing = None
+        self.main = None
+        
         self.variables = None
         self.derived_variables_names = None
         self.var_csv_pointers = None
         self.csv_data = []
     
-        self.data_init_job = [] ###!!!
-        self.job = []
         self.results = Results()
         
         ##computational control flow booleans
@@ -120,6 +162,14 @@ class JobHandler:
         if len(self.var_csv_pointers) != 0:
             self.csv_variables_populated   = False
     
+    
+    def getCSVColumn(self, name):
+        if not self.has_csv_data:
+            raise ValueError(f"Tried to extract column {name} from job handler CSV data, but no CSV data is loaded in handler.")
+        for csv in self.csv_data:
+            if name in csv.data.keys():
+                return csv.data[name]
+            raise ValueError(f"Tried to extract column {name} from job handler CSV data, but loaded csv's do not contain {name}.")
     
     def populateVariablesFromCSV(self, reset_registry=True):
         """ For each variable in the csv_pointers dictionary this function attempts to couple the referenced column name to a column name of our processed CSVs """
@@ -201,8 +251,10 @@ class JobHandler:
         self.basic_variables_validated = True
         return
     
-    def executeJob(self):
-        """ Executes staged preprocessing and job for loaded csv data """
+    
+    def execute(self, identifier=None):
+        if self.main is None:
+            raise ValueError("No main jobscript is provided to the job handler. Please provide a main function under JobHandler.main")
         if not self.initialized_engines:
             self.prepareEngines()
         
@@ -210,14 +262,14 @@ class JobHandler:
             print("WARNING: trying to perform calculations while no CSV data appears to be loaded. Crash may occur.")
         
         #Perform the data preprocessing
-        for task in self.data_init_job:
-            out = task.execute()
-            #out is None for data cleaning tasks, and a boolean for data consistency checks
-            #if out is False, then the data consistency check failed and we break off our job execution
-            if out is False:
-                print(f"Preprocessing {task} failed, breaking off execution.")
+        if self.preprocessing is not None:
+            success, failcode = self.preprocessing(self)
+            #If preprocessing failed, we log this in the results, we also clear the loaded csv data
+            if not success:
+                self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=failcode)
+                self.csv_data = []
+                self.has_csv_data = False
                 return
-            
         
         #Populate variables using loaded CSV data, and subsequently dump the csv data
         self.populateVariablesFromCSV()
@@ -228,13 +280,11 @@ class JobHandler:
         self.validateBasicVariables()
         
         #Execute job
-        for task in self.job:
-            task.execute()
-        return True
-    
-    def resetJob(self):
-        """ Resets the job list to an empty list """
-        self.job = []
+        self.main(self)
+        
+        #Create run result
+        self.results.createRunResult(succeeded=True, identifier=identifier)
+        return
         
     def _resolve_arg(self, arg):
         """ Replaces function argument string referring to function attribute by the value of this attribute at time of calling """
@@ -263,15 +313,6 @@ class JobHandler:
         self.csv_data.append(csv)
         self.has_csv_data = True
     
-    def addPreprocessingTask(self, func, *args):
-        """ Adds task to preprocessing job list """
-        self.data_init_job.append(Task(self, func, args))
-    
-    def addTask(self, func, *args):
-        """ Adds task to job list """
-        self.job.append(Task(self, func, args))
-    
-    
     def getResult(self, name):
         """ get result of name 'name' from the result storage """
         return self.results.get(name)
@@ -282,64 +323,72 @@ class JobHandler:
     
     #################################################################
     
-    def compareNaNToZenith(self, column_name, *args):
+    def compareNaNToZenith(self, column_name, *args, **kwargs):
         """ Wrapper for CSVData.compareNaNToZenith function for preprocessing job """
         found = False
         for csv in self.csv_data:
             if column_name in csv.data.keys():
                 found = True
-                return csv.compareNaNToZenith(column_name, *args)
+                return csv.compareNaNToZenith(column_name, *args, **kwargs)
         if not found:
             raise ValueError(f"Tried to perform NaN to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
     
-    def compareNonZeroToZenith(self, column_name, *args):
+    def compareNonZeroToZenith(self, column_name, *args, **kwargs):
         """ Wrapper for CSVData.compareNonZeroToZenith function for preprocessing job """
         found = False
         for csv in self.csv_data:
             if column_name in csv.data.keys():
                 found = True
-                return csv.compareNonZeroToZenith(column_name, *args)
+                return csv.compareNonZeroToZenith(column_name, *args, **kwargs)
         if not found:
             raise ValueError(f"Tried to perform nonzero to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
     
-    def interpolateNaN(self, column_name, *args):
+    def interpolateNaN(self, column_name, *args, **kwargs):
         """ Wrapper for CSVData.interpolateNaN function for preprocessing job """
         found = False
         for csv in self.csv_data:
             if column_name in csv.data.keys():
                 found = True
-                csv.interpolateNaN(column_name, *args)
+                csv.interpolateNaN(column_name, *args, **kwargs)
                 break
         if not found:
             raise ValueError(f"Tried to perform NaN interpolation for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
 
-    def cleanNegatives(self, column_name, *args):
+    def cleanNegatives(self, column_name, *args, **kwargs):
         """ Wrapper for CSVData.cleanNegatives function for preprocessing job """
         found = False
         for csv in self.csv_data:
             if column_name in csv.data.keys():
                 found = True
-                csv.cleanNegatives(column_name, *args)
+                csv.cleanNegatives(column_name, *args, **kwargs)
                 break
         if not found:
             raise ValueError(f"Tried to perform negative cleaning for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
     
-    def cleanAllNaN(self, *args):
+    def cleanNaN(self, column_name, *args, **kwargs):
+        """ Wrapper for CSVData.cleanNaN function for preprocessing job """
+        found = False
+        for csv in self.csv_data:
+            if column_name in csv.data.keys():
+                found = True
+                csv.cleanNaN(column_name, *args, **kwargs)
+                break
+        if not found:
+            raise ValueError(f"Tried to perform negative cleaning for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
+    
+    def cleanAllNaN(self, *args, **kwargs):
         """ Executes nan cleaning for all loaded csv's """
         for csv in self.csv_data:
-            csv.cleanAllNaN(*args)
+            csv.cleanAllNaN(*args, **kwargs)
     
     #################################################################
     
     def store(self, name, arg):
         """ job task to store attribute 'arg' under name 'name' each job call """
+        arg = self._resolve_arg(arg)
         self.results.add(name, arg)
     
-    def storeAsAverage(self, name, arg):
-        """ job task to store the average of 'arg' under name 'name' over all job calls """
-        self.results.addAsAverage(name, arg)
-    
-    def evaluateVariable(self, var):
+    def evaluateVariable(self, var, *args, **kwargs):
         """ Wrapper for the calculation engine function of the same name """
         #if not self.basic_variables_validated:
         #    self.validateBasicVariables()
@@ -348,7 +397,7 @@ class JobHandler:
             var = self.variables.get(var)
             if var is None:
                 raise ValueError(f"Tried to evaluate non-existing variable '{var}'.")
-        self.calculation_engine.evaluateVariable(var)
+        self.calculation_engine.evaluateVariable(var, *args, **kwargs)
         
     def evaluateAllVariables(self):
         """ Wrapper for the calculation engine function of the same name """
@@ -369,13 +418,13 @@ class JobHandler:
                 raise ValueError(f"Tried to evaluate uncertainty for non-existing variable '{var}'.")
         self.uncertainty_engine.prepareDownTreeDirectUncertainties(var)
     
-    def calculateTotalUncertainty(self, var):
+    def calculateTotalUncertainty(self, var, *args, **kwargs):
         """ Wrapper for the uncertainty engine function of the same name """
         if isinstance(var, str):
             var = self.variables.get(var)
             if var is None:
                 raise ValueError(f"Tried to evaluate uncertainty for non-existing variable '{var}'.")
-        self.uncertainty_engine.calculateTotalUncertainty(var)
+        self.uncertainty_engine.calculateTotalUncertainty(var, *args, **kwargs)
     
 
         
