@@ -14,7 +14,7 @@ class CSVData:
     time_range: Optional[list] = None
     
     
-    def checkForValidValues(self, column_name):
+    def checkForValidValues(self, column_name): ###!!! needs revision
         """ Checks if the column contains any defined value except for 0 """
         mask = np.invert(np.isnan(self.data[column_name])) & (self.data[column_name] != 0)
         if np.argmax(mask) == 0:
@@ -30,7 +30,6 @@ class CSVData:
         column = self.data[column_name]
         #True if the element is nan or 0
         mask = np.isnan(column) | (column == 0)
-        
         #Indices where zenith angle is under the limit and the data is 0 or NaN
         indices = np.where((self.data["zenith"] < zenith_limit) & mask)[0]
         if len(indices)>0:
@@ -46,7 +45,7 @@ class CSVData:
         column = self.data[column_name]
         mask = np.invert(np.isnan(column)) & (self.data["zenith"] > zenith_limit)
         
-        indices = np.where(column[mask] > 0)
+        indices = np.where(column[mask]>0)[0]
         if len(indices)>0:
             return False
         else:
@@ -83,9 +82,14 @@ class CSVData:
         """ Replaces negative values by specified value """
         column = self.data[column_name]
         column[np.where(column<0)] = new_value
+        
+    def cleanNaN(self, column_name, new_value):
+        """ Cleans NaN instances and replaces them by a new value. Replacement value can be manually specified """
+        column = self.data[column_name]
+        column[np.isnan(column)] = new_value
     
     def cleanAllNaN(self, new_value=0):
-        """ Cleans NaN strings and replaces them by a new value. String format and replacement can be manually specified """
+        """ Cleans all NaN instances and replaces them by a new value. Replacement value can be manually specified """
         for name, column in self.data.items():
             #NOTE: we should skip time and date data
             #if type(column[0]) is datetime:
