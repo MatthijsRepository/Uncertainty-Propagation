@@ -21,6 +21,10 @@ class CSVData:
             return False
         else:
             return True
+        
+    def checkForExtremeValues(self, column_name, value_limit):
+        """ Checks if there is any case where the data assumes a value (in absolute terms) greater than the value limit """
+        return not np.any(np.abs(self.data[column_name]) > value_limit)
     
     def compareNaNToZenith(self, column_name, zenith_limit=85): 
         """ Checks if there are any nan's or zeroes in a column after the solar zenith angle is above a certain height
@@ -30,12 +34,15 @@ class CSVData:
         column = self.data[column_name]
         #True if the element is nan or 0
         mask = np.isnan(column) | (column == 0)
+        
         #Indices where zenith angle is under the limit and the data is 0 or NaN
-        indices = np.where((self.data["zenith"] < zenith_limit) & mask)[0]
-        if len(indices)>0:
-            return False
-        else:
-            return True
+        #indices = np.where((self.data["zenith"] < zenith_limit) & mask)[0]
+        #if len(indices)>0:
+        #    return False
+        #else:
+        #    return True
+        return not np.any((self.data["zenith"] < zenith_limit) & mask)
+        
         
     def compareNonZeroToZenith(self, column_name, zenith_limit=100):
         """ Checks if the column is nonzero after the solar zenith angle is below a certain heigh
@@ -45,14 +52,13 @@ class CSVData:
         column = self.data[column_name]
         mask = np.invert(np.isnan(column)) & (self.data["zenith"] > zenith_limit)
         
-        indices = np.where(column[mask]>0)[0]
-        if len(indices)>0:
-            return False
-        else:
-            return True
+        #indices = np.where(column[mask]>0)[0]
+        #if len(indices)>0:
+        #    return False
+        #else:
+        #    return True
+        return not np.any(column[mask]>0)
         
-    
-    
     def interpolateNaN(self, column_name, min_value=0, else_value=np.nan):
         """ Interpolates isolated nan's, that are neighboured by two defined values, as the average of their neighbours.
             In case the average is less than min_value, the nan is instead replaced by else_value.
@@ -71,8 +77,19 @@ class CSVData:
                 column[idx] = interpolation
             else:
                 column[idx] = else_value
+    
+    def interpolateExtremeValues(self, column_name, value_limit):
+        """ Interpolates isolated values that exceed (in absolute terms) the extreme_limit. Used to remove unphysical values from dataset """
+        column = self.data[column_name]
+        extremes = np.where(np.abs(column)>value_limit)
+        isolated_extremes = extremes & np.invert(np.roll(extremes, 1)) & np.invert(np.roll(extremes, -1))
+        indices = np.where(isolated_extremes)[0]
+        
+        for idx in indices:
+            if idx in [0, len(self.data[column_name])-1]: 
+                continue
+            column[idx] = (column[idx-1] + column[idx+1]) / 2
             
-
     def cleanExtremeValues(self, column_name, value_limit=10000, new_value=np.nan):
         """ Replaces extreme values by new value """
         column = self.data[column_name]
@@ -107,6 +124,7 @@ class ParsedVariableData:
         self.timestep = None            #[float, str]: timestep of variable, or setting ###!!!
         self.description = None         #str: variable description
         self.is_basic_variable = None   #bool: flags if variable is basic or derived
+        self.is_maskable = True         #bool: flags if masking uncertainty of the variable is valued 0 is allowed for this variable, allowed by default
         self.is_rate = None             #bool: flags whether variable is a rate (quantity over time) or a quantity
         self.aggregation_rule = None    #str: aggregation rule of the quantity
         self.equation = None            #str: equation of the variable
@@ -352,13 +370,14 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
 
         
 class Variable:
-    def __init__(self, name, description=None, values=None, is_basic=True, is_hardcoded=False, is_rate=None, aggregation_rule=None, \
+    def __init__(self, name, description=None, values=None, is_basic=True, is_hardcoded=False, is_maskable=True, is_rate=None, aggregation_rule=None, \
                  equation=None, first_time=None, last_time=None, \
                      is_timesum=False, timesum_settings=None):
         self.name               = name              #str: variable name
         self.description        = description       #str: variable description
         self.is_basic           = is_basic          #bool: defines whether variable is basic or derived
         self.is_hardcoded       = is_hardcoded      #bool: defines whether the value is hard-coded in the input scripts (done for universal constants)
+        self.is_maskable        = is_maskable       #bool: defines whether the variable uncertainty is allowed to be ignored if it's value at that time is 0 (e.g. True for G or Pout, False for Temperature)             
         self.is_rate            = is_rate           #bool: defines whether the quantity is a rate (quantity per unit time) or a quantity
         self.aggregation_rule   = aggregation_rule  #str: defines the quantity aggregation rule - depends on whether variable is extensive or intensive
         if self.is_rate and self.aggregation_rule=="average":
