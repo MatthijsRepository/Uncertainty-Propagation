@@ -316,6 +316,10 @@ class UncertaintyEngine:
         var.uncertainty.total_uncertainty = np.sqrt(np.sum(aggregated_weighted_uncertainties**2, axis=0))
         var.uncertainty.total_uncertainty_calculated = True
         
+        #If the uncertainty is just a single value, we replace the length-1 array by the numeric value
+        if len(var.uncertainty.total_uncertainty)==1:
+            var.uncertainty.total_uncertainty = var.uncertainty.total_uncertainty[0]
+        
         return var.uncertainty.total_uncertainty
     
     def calculateRootContributions(self, var):
