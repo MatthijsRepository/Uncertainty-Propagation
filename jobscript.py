@@ -19,12 +19,14 @@ inputfile = "C:\\Users\\mate\\Desktop\\python\\Experimental\\test_tree.txt"
 
 
 def preprocessing(handler):
+    #Initial missing value interpolation
     handler.interpolateNaN("Pout")
     handler.interpolateNaN("G")
-    
-    if not handler.compareNaNToZenith("Pout", zenith_limit=80):
-        
-        #Convert nan of Pout to a specific value
+    handler.interpolateExtremeValues("T", value_limit=100)
+
+    #Consistency checks    
+    success, error_code = handler.compareNaNToZenith("Pout", zenith_limit=80)
+    if not success:
         #handler.cleanNaN("Pout", new_value=245)
         #data = handler.getCSVColumn("Pout")
         #zenith = handler.getCSVColumn("zenith") ###!!!
@@ -35,40 +37,80 @@ def preprocessing(handler):
         #plt.grid()
         #plt.ylim(-0.8, 1.2)
         #plt.show()
-        
-        return False, "Pout_NaNToZenith"
-    if not handler.compareNaNToZenith("G"):
-        return False, "G_NaNToZenith"
-    if not handler.compareNonZeroToZenith("Pout"):
-        return False, "Pout_NonZeroToZenith"
-    if not handler.compareNonZeroToZenith("G"):
-        return False, "G_NonZeroToZenith"
+        return success, error_code
     
+    success, error_code = handler.compareNaNToZenith("G")
+    if not success:
+        return success, error_code
+    
+    success, error_code = handler.compareNonZeroToZenith("Pout")
+    if not success:
+        return success, error_code
+    
+    success, error_code = handler.compareNonZeroToZenith("G")
+    if not success:
+        return success, error_code
+    
+    success, error_code = handler.checkForExtremeValues("T", 100)
+    if not success:
+        return success, error_code    
+        
+    #Final data cleaning    
     handler.cleanAllNaN()
     handler.cleanNegatives("Pout")
     handler.cleanNegatives("G")
-        
     return True, None
 
 def main(handler):
     handler.evaluateVariable("PR")
     handler.evaluateVariable("PR_temp_corr")
     
-    handler.calculateTotalUncertainty("PR")
-    handler.calculateTotalUncertainty("PR_temp_corr")
+    handler.calculateTotalUncertainty("PR", mask=True)
+    handler.calculateTotalUncertainty("PR_temp_corr", mask=True)
     
-    #if handler.variables["PR"].uncertainty.total_uncertainty>0.15:
-    #    print(f"Detected PR uncertainty of {handler.variables['PR'].uncertainty.total_uncertainty} (k=2)")
-    #    uncertainty_split = handler.uncertainty_engine.calculateRootContributions(handler.variables["PR"])
-    #    print("Uncertainty split: ")
-    #    for i,source in enumerate(handler.variables["PR"].uncertainty.root_sources):
-    #        print(f"{source.name}  :  {uncertainty_split[i]}")
+    
+    if handler.variables["PR"].values < 0.6:
+        return False, "Unreliable_PR"
+        #plt.plot(handler.variables["G"].values / 1000)
+        #plt.plot(handler.variables["Pout"].values / 245)
+        #plt.grid()
+        #plt.show()
+    if handler.variables["PR"].uncertainty.total_uncertainty>0.20:
+        return False, "Unreliable_PR_uncertainty"
+        #handler.calculateTotalUncertainty("G", mask=True)
+        #plt.plot(handler.variables["G"].values)
+        #plt.show()
+        #handler.uncertainty_engine.plotAbsoluteRootContributions(handler.variables["G"])
+        
+    if handler.variables["PR_temp_corr"].values < 0.6:
+        #plt.plot(handler.variables["G"].values / 1000)
+        #plt.plot(handler.variables["Pout"].values / 245)
+        #plt.grid()
+        #plt.show()
+        #plt.plot(handler.variables["T"].values)
+        #plt.title("T")
+        #plt.show()
+        #plt.plot(handler.variables["T_mod"].values)
+        #plt.title("T_mod")
+        #plt.show()
+        return False, "Unreliable_PR_T"
+    if handler.variables["PR"].uncertainty.total_uncertainty>0.20:
+        #handler.calculateTotalUncertainty("G", mask=True)
+        #plt.plot(handler.variables["G"].values)
+        #plt.title("G")
+        #plt.show()
+        #plt.plot(handler.variables["T"].values)
+        #plt.title("T")
+        #plt.show()
+        handler.uncertainty_engine.plotAbsoluteRootContributions(handler.variables["G"])
+        return False, "Unreliable_PR_T_uncertainty"
     
     
     handler.store("PR values", "var.PR.values")
     handler.store("PR T values", "var.PR_temp_corr.values")
     handler.store("PR uncertainty", "var.PR.uncertainty.total_uncertainty")
     handler.store("PR T uncertainty", "var.PR_temp_corr.uncertainty.total_uncertainty")
+    return True, None
     
 
 
@@ -77,7 +119,6 @@ job.loadEquationTree(inputfile)
 
 job.preprocessing = preprocessing
 job.main          = main
-
 
 data_handler = PandasCSVHandler()
 df = data_handler.readCSVData(filepath, ";", structure_list, timeformat=timeformat, select_days=None)
@@ -93,39 +134,40 @@ data_handler.addZenithColumn(df, coordinates, UTC_offset)
 unique_days = df["Date"].unique()[:-1]
 i=0
 for day in unique_days:
-    #i+=1
+    i+=1
     #if i>80: break
-    print(day)
+    #print(day)
     job.addCSVData(data_handler.compileOneDayCSVData(df, day))
     job.execute(identifier=day)
 print()
     
-
-    
-
 
 
 
 PR_array, PR_identifiers = job.results.getResultArray("PR values")
 PR_u_array, PR_u_identifiers = job.results.getResultArray("PR uncertainty")
 
-
 PR_T_array, PR_T_identifiers = job.results.getResultArray("PR T values")
 PR_T_u_array, PR_T_u_identifiers = job.results.getResultArray("PR T uncertainty")
 
-
 job.results.summariseFails()
 
-print(PR_array)
-print(PR_u_array)
+#print(PR_array)
+#print(PR_u_array)
 
-plt.errorbar(x=np.arange(len(PR_array))*3, y=PR_array, yerr=2*PR_u_array, linestyle="", marker=".")
-plt.errorbar(x=np.arange(len(PR_T_array))*3+1, y=PR_T_array, yerr=2*PR_T_u_array, linestyle="", marker=".")
-plt.ylim(0.7,1.15)
+print(PR_T_array)
+print(PR_T_u_array)
+
+print(np.average(PR_array))
+print(np.average(PR_u_array)*2)
+print(np.average(PR_T_array))
+print(np.average(PR_T_u_array)*2)
+
+
+plt.errorbar(x=np.arange(len(PR_array)), y=PR_array, yerr=2*PR_u_array, linestyle="", marker=".")
+plt.errorbar(x=np.arange(len(PR_T_array))+1/3, y=PR_T_array, yerr=2*PR_T_u_array, linestyle="", marker=".")
+plt.ylim(0.6,1.2)
 plt.grid()
 plt.show()
-
-
-
 
 

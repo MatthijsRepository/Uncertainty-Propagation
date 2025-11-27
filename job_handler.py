@@ -334,7 +334,7 @@ class JobHandler:
         for csv in self.csv_data:
             if column_name in csv.data.keys():
                 found = True
-                return csv.checkForExtremeValues(column_name, *args, **kwargs)
+                return csv.checkForExtremeValues(column_name, *args, **kwargs), f"{column_name}_Extreme_Values"
         if not found:
             raise ValueError(f"Tried to perform NaN to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
     
@@ -344,7 +344,7 @@ class JobHandler:
         for csv in self.csv_data:
             if column_name in csv.data.keys():
                 found = True
-                return csv.compareNaNToZenith(column_name, *args, **kwargs)
+                return csv.compareNaNToZenith(column_name, *args, **kwargs), f"{column_name}_NaN_to_Zenith"
         if not found:
             raise ValueError(f"Tried to perform NaN to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
     
@@ -354,7 +354,7 @@ class JobHandler:
         for csv in self.csv_data:
             if column_name in csv.data.keys():
                 found = True
-                return csv.compareNonZeroToZenith(column_name, *args, **kwargs)
+                return csv.compareNonZeroToZenith(column_name, *args, **kwargs), f"{column_name}_Nonzero_to_Zenith"
         if not found:
             raise ValueError(f"Tried to perform nonzero to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
     
