@@ -61,7 +61,7 @@ The code is purely python-based and makes use mostly of standard python librarie
 #### Time series matching
 When combining data from datasets with different temporal granularity, the code will try to perform a time harmonization. This means that the code will aggregate both timeseries to a timestep equal to the lowest common multiple of the involved timesteps in a calculation. Additionally, it will ensure that computations are performed with datapoints spanning the same time interval (i.e. a datapoint spanning 8:00-8:10 is not combined with data spanning 9:00-9:10).   
  
-If a derived variable required a harmonization of its dependencies, information about this will be stored in this variable’s `harmonizationcache`, which contains a `TimeHarmonizationData` object for each of the variable’s dependencies. This object contains information on how to transform the dependency to the temporal granularity of the derived variable (the timestep increase factor, pruned edges, etc.).  
+If a derived variable required a harmonization of its dependencies, information about this will be stored in this variable’s `harmonization_cache`, which contains a `TimeHarmonizationData` object for each of the variable’s dependencies. This object contains information on how to transform the dependency to the temporal granularity of the derived variable (the timestep increase factor, pruned edges, etc.).  
 
 ![Alt text](https://github.com/user-attachments/assets/6ad239fb-51ca-40a1-87e1-6db590520468)
  
@@ -92,10 +92,10 @@ The code makes use of 4 main engines. Engines act on a registry of variables and
 
 #### The Equation engine
 The equation engine takes an uninitialized set of variables and is converts it to a working equation tree. After input parsing, the variables only contain their equation in the form of a string. 
--The equation engine can read the equation string, extract dependencies from it, match these with the variables in the given (or an internal) variable registry and populate the variables with pointers to the variables they depend on, creating a recursive tree.
--The equation engine can check whether the equation tree is well-defined, in the sense that there are no missing dependencies and no circular definitions.
--The equation engine can read the equation string, converts it to a format sympy can work with and subsequently convert it to a sympy equation format. Sympy is a python library for symbolic mathematics, and can be used to create executables from equations and take partial derivatives.
--The equation engine handles the creation of executables and partial derivative executables from the equation for the user.
+- The equation engine can read the equation string, extract dependencies from it, match these with the variables in the given (or an internal) variable registry and populate the variables with pointers to the variables they depend on, creating a recursive tree.
+- The equation engine can check whether the equation tree is well-defined, in the sense that there are no missing dependencies and no circular definitions.
+- The equation engine can read the equation string, converts it to a format sympy can work with and subsequently convert it to a sympy equation format. Sympy is a python library for symbolic mathematics, and can be used to create executables from equations and take partial derivatives.
+- The equation engine handles the creation of executables and partial derivative executables from the equation for the user.
 
 #### The Calculation engine
 The calculation engine handles execution of equations, partial derivative equations and time aggregations. In short: it calculates values, but not uncertainties.   
@@ -104,9 +104,9 @@ The calculation engine can be told to calculate the values of a variable, and it
 #### The Time engine
 The time engine’s main functionality is to ensure dependencies are time-harmonized before executables are called. The variable’s executables simply take numeric or array-valued input to perform arithmetic, the time engine’s responsibility is to ensure that values that are given in these equation span the same time intervals.  
 This means it has functionality to:
--check whether dependencies are time harmonious,
--rebin timeseries and prune ends if this is not the case,
--build TimeHarmonizationData objects for future reference, in case the harmonization must be repeated.  
+- check whether dependencies are time harmonious,
+- rebin timeseries and prune ends if this is not the case,
+- build TimeHarmonizationData objects for future reference, in case the harmonization must be repeated.  
 Additionally, the time engine can be used to perform a hard temporal resolution decrease for a variable to irreversibly bring it to a coarser temporal granularity. Be aware that this procedure is irreversible and destructive: information will be lost. For relative uncertainty: calculating uncertainty and aggregating to a new granularity is different from aggregating a variable and calculating the aggregate’s uncertainty! The former procedure is always more precise.
 
 #### The Uncertainty engine
