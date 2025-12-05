@@ -1,6 +1,6 @@
-from my_dataclasses import Variable, TimeHarmonizationData
-from time_engine import TimeEngine
-import datetime
+from my_dataclasses import Variable #, TimeHarmonizationData
+#from time_engine import TimeEngine
+#import datetime
 import numpy as np
 import copy
 
@@ -36,6 +36,14 @@ class CalculationEngine:
         """ Checks if the values of all dependencies are calculated, optionally calculates dependencies, and then calculates values of specified variable """
         if not silent:
             print(f"{indent}Calculating values of variable {var.name} with dependencies {var.dependency_names}")
+        
+        #Check if the variable equation and executable are in place
+        if var.equation is None:
+            raise ValueError(f"Tried to execute the equation of variable {var.name}, for which no equation is defined.")
+        elif var.executable is None:
+            raise ValueError(f"Tried to execute the equation of variable {var.name} = {var.equation}, but no equation executable has been built for this variable.")
+        
+        #Check if the dependencies have been calculated, and optionally recursively calculate these
         for dep in var.dependencies.values():
             if dep.values is not None:
                 continue
@@ -43,7 +51,7 @@ class CalculationEngine:
                 raise ValueError(f"Calculation of variable {var.name} failed: dependency {dep.name} has no values defined and automatic dependency calculation is turned off.")
             else:
                 self.evaluateVariable(dep, update_var=update_var, silent=silent, indent=f"   {indent}")
-                
+        
         #values = var.executeEquation(store_results=update_var, calculation_engine=self)
         values = self.executeVariableEquation(var, store_results=update_var, force_recalculation=force_recalculation)
 
@@ -52,11 +60,7 @@ class CalculationEngine:
         return values   
     
     def executeVariableEquation(self, var, store_results=True, force_recalculation=False, integrate=True):
-        if var.equation is None:
-            raise ValueError(f"Tried to execute the equation of variable {var.name}, for which no equation is defined.")
-        elif var.executable is None:
-            raise ValueError(f"Tried to execute the equation of variable {var.name} = {var.equation}, but no equation executable has been built for this variable.")
-        
+        """ Executes the executable of a variable """
         #If values already defined: do nothing unless forced recalculation is desired
         if var.values is not None:
             if force_recalculation is True:

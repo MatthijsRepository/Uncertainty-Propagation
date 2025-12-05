@@ -1,6 +1,7 @@
 import pvlib
 
 def calculateZenithAngles(coordinates, timedata, UTC_offset):
+    """ For given latitude, longitude, and set of datetimes, calculates the solar zenith angle. """
     latitude, longitude = coordinates
     
     if UTC_offset is not None:
@@ -10,6 +11,8 @@ def calculateZenithAngles(coordinates, timedata, UTC_offset):
     
     
 def calculateProjectedZenithAngles(coordinates, timedata, UTC_offset, zenith_offset, azimuth_offset):
+    """ Should transpose the zenith angle to be relative to the plane of array
+        WARNING: Does not appear to work correctly """
     solar_positions = calculateZenithAngles(coordinates, timedata, UTC_offset)
     return pvlib.shading.projected_solar_zenith_angle(solar_positions["zenith"], solar_positions["azimuth"], zenith_offset, azimuth_offset)
 

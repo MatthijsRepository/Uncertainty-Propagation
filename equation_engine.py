@@ -138,7 +138,7 @@ class EquationEngine:
         return rule, is_rate
         
     def populateEquationTreeTimeSumSettings(self, variables=None):
-        """ This function checks whether all timesums have defined settings, and tries to extract these from the variable dependencies otherwise """
+        """ This function checks whether all timesums have defined settings such as aggregation rules, and tries to extract these from the variable dependencies otherwise """
         if variables is None:
             variables = self.variables
         

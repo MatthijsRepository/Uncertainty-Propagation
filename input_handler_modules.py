@@ -10,6 +10,7 @@ class PandasCSVHandler:
         return
     
     def readCSVData(self, filepath, delimiter, structure_list, timeformat=None, select_days=None):
+        """ Reads CSV data into a pandas dataframe """
         df = pd.read_csv(filepath, sep=delimiter)
         
         rename_map = dict(zip(list(df.columns), structure_list))
@@ -31,49 +32,38 @@ class PandasCSVHandler:
             df = df[df.index.normalize().isin(days)]
         return df
     
-    
     def addDateColumn(self, df):
+        """ Adds a date column, extracted from the datetime column. For easier subsetting by date. """
         df["Date"] = pd.to_datetime(df["Time"]).dt.date ###!!!
     
     
     def addZenithColumn(self, df, coordinates, UTC_offset):
+        """ Adds the solar zenith angle for each timestep with the given coordinates. 
+        User needs to provide the UTC offset of the local time, since PVLib always works in UTC """
         from solar_module import calculateZenithAngles
         solar_data = calculateZenithAngles(coordinates, df["Time"], UTC_offset)
         df["zenith"] = np.array(solar_data["zenith"])
         
         
     def compileOneDayCSVData(self, df, date):
+        """ Calls the compileCSVData function on the subset of the dataframe corresponding to the given date """
         subset = df[df["Date"] == date]
         return self.compileCSVData(subset)
         
     
     def compileCSVData(self, df):
+        """ Compile a CSVdata object from the given (subset of a) dataframe """
         time_range = [df["Time"].iloc[0].to_pydatetime(), df["Time"].iloc[-1].to_pydatetime()] ###!!!
         timestep = (df["Time"].iloc[1].to_pydatetime() - df["Time"].iloc[0].to_pydatetime()) ###!!!
         timestep = timestep.total_seconds()
         
-        #df = df.fillna(value=0)
-        
-        column_names = list(df.columns)
         data = {name: (df[name] if name in ["Time", "Date"] else df[name].to_numpy() ) for name in df.columns} ###!!!
-        
-        
-        #data = {name: df[name].to_numpy() for name in df.columns if name not in ["Time", "Date"] else name: df[name]}   ###!!!
-        #data["Time"] = df["Time"] ###!!!
-        #data["Date"] = pd.to_datetime(df["Time"]) ###!!!
-        #data["Date"] = data["Date"].dt.date
-        
-        
-        #return CSVData(df, timestep, time_range)
         return CSVData(data, timestep, time_range)
         
 
 
-
-
-
-
 class CSVHandler:
+    """ Deprecated CSV handler, recommended to use the PandasCSVHandler """
     def _readCSV(self, filepath, delimiter, has_header, structure_list, timeformat=None):
         """ Reads a CSV and populates the object data block """
         with open(filepath, 'r', newline='') as csvfile:
@@ -125,6 +115,7 @@ class EquationTreeReader:
         return
     
     def parse(self, filepath):
+        """ Main parses of the file """
         with open(filepath, "r") as f:
             lines = f.readlines()
         
@@ -135,9 +126,13 @@ class EquationTreeReader:
                 i += 1
                 continue
             if line.lower().startswith("var") or line.lower().startswith("eq"):
+                #Parse the variable section and populate the ParsedVariableData object
                 i, variable_data = self._parseVariable(lines, i)
+                #Create a new variable using the parsed data
                 new_var = self.createVariable(variable_data)
+                #Add new variable to variable registry
                 self.variables[new_var.name] = new_var
+                #Add pointer to csv column to the csv pointer registry
                 if variable_data.csv_pointer is not None:
                     self.csv_pointers[new_var.name] = variable_data.csv_pointer
             i += 1  # Move to next after handler finishes

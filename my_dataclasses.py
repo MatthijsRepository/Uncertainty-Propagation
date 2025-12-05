@@ -117,6 +117,7 @@ class CSVData:
     
 @dataclass
 class ParsedVariableData:
+    """ Used by the input parser to store parsed settings before creating a variable """
     def __post_init__(self):
         self.csv_pointer = None         #str: tells job handler which CSV column this variable should take its values from
         self.is_hardcoded = False       #bool: tells job handler whether variable value is hardcoded. This means this variable is skipped during resets
@@ -133,6 +134,7 @@ class ParsedVariableData:
 
 @dataclass
 class TimeHarmonizationData:
+    """ Stores information on how to bring a dependency dep_var to the exact temporal dimensions (time range, time step) of a the target_var. """
     dep_var_name:       str         #Name of the affected variable
     base_timestep:      float       #Original timestep of the variable
     new_timestep:       float       #New timestep of the variable
@@ -148,13 +150,12 @@ class TimeHarmonizationData:
     prune_offset_end:   Optional[int]   = None         #Number of new timesteps that are discarded at end to ensure a common end time
     #smuggled_time:      Optional[float] = None        #Amount of seconds that  were smuggled during rebinning
     new_values:         Optional[Union[np.ndarray, float]] = None   #Can be used to store new values
-    aggregated_correlation: Optional[np.ndarray] = None             #Can be used to cache aggregated correlations
-        
         
     def getFirstTime(self):
         return self.new_start_time + timedelta(seconds=self.new_timestep)
     
     def getTotalOffsetSteps(self):
+        """ Returns how many datapoints to discard at the lower and higher ends of the original timeseries to match the start and end times of the target variable """
         if self.prune_offset_start is None:
             low_index_total = self.low_index
         else:
@@ -285,9 +286,13 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
                 source.sigma = u_vec.T @ m_corr @ u_vec
         
     
-    def getSourceNames(self):
+    def getDirectSourceNames(self):
         """ Returns list of names of all direct uncertainty sources """
         return [u.name for u in self.direct_uncertainty_sources]
+    
+    def getSourceNames(self):
+        """ Returns list of names of all uncertainty sources """
+        return [u.name for u in self.root_sources]
     
     def getSource(self, source_name):
         """ Tries to retrieve the uncertainty source with the given name from direct or root sources """
@@ -535,7 +540,7 @@ class Variable:
     
     
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-        """ Numpy ufunc overrider - required for  """
+        """ Numpy ufunc overrider """
         if ufunc in (np.add, np.subtract, np.multiply, np.divide, np.power):
             if ufunc == np.add:
                 return inputs[1].__radd__(inputs[0])
@@ -547,29 +552,6 @@ class Variable:
                 return inputs[1].__rtruediv__(inputs[0])
             if ufunc == np.power:
                 return inputs[1].__rpow__(inputs[0])
-            """
-            args = []
-            print(self.name)
-            for arg in inputs:
-                print(arg)
-                if isinstance(arg, Variable):
-                    args.append(arg.values)
-                else:
-                    args.append(arg)
-            print(args)
-            # Call your internal operator handler
-            if ufunc == np.add:
-                return args[0] + args[1]
-            if ufunc == np.subtract:
-                return args[0] - args[1]
-            if ufunc == np.multiply:
-                return args[0] * args[1]
-            if ufunc == np.divide:
-                return args[0] / args[1]
-            if ufunc == np.power:
-                return args[0] ** args[1]
-            """
-        # Let other ufuncs fall back to normal
         return NotImplemented
     
     
