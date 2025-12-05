@@ -30,12 +30,14 @@ The tool can be used for ‘normal’ equations: regular arithmetic, mathematica
 ## Assumptions, calculation errors and other limitations
 - Importantly, the tool works under the assumption that separate uncertainty sources are independent (not cross-correlated).
 - Additionally, at present no smart-matching feature is implemented in case the same uncertainty source acts on a variable multiple times. For instance, when two variables in an equation are both dependent on the same temperature measurement, the uncertainty in the temperature measurement will appear twice in the total uncertainty equation. The code will treat these as separate sources with their own sensitivities, while in practice the sensitivities should be combined, leading to an error.  
-In mathematical terms: $u_T^2 * (s_1^2 + s_2^2) =/= u_T^2 (s_1 + s_2)^2$.  
+In mathematical terms: $u_T^2 * (s_1^2 + s_2^2) \neq u_T^2 (s_1 + s_2)^2$.  
 This means that in such cases there will be a slight under-estimation of the uncertainty.  
 To fix this issue, one can scan the var.uncertainty.root_sources list for duplicates to detect such cases, and implement exception handling in case duplicate sources are detected. This should be done when calculating the total uncertainty and when retrieving the root source contribution split. 
 - A final limitation of the code is the amount of data that can be processed at a time. Because of the nature of correlated uncertainties, the computational complexity of aggregating uncertainty over time scales quadratically with the included timeframe. It is therefore recommended to split calculations for large datasets into a set of smaller computations. 
 
-It is recommended to expand the code to be able to include exponentially decaying autocorrelation, with an inclusion cutoff if the correlation is below a specified limit, resulting in a band correlation matrix. Correlated uncertainty aggregation over arbitrarily long timescales can then be performed iteratively and potentially parallelized for performance. Moreover, a short-circuit in case of zero correlation could be implemented to avoid redundant matrix multiplication with a diagonal matrix.
+It is recommended to expand the code to be able to include exponentially decaying autocorrelation, with an inclusion cutoff if the correlation is below a specified limit, resulting in a band correlation matrix. Correlated uncertainty aggregation over arbitrarily long timescales can then be performed iteratively and potentially parallelized for performance. Moreover, a short-circuit in case of zero correlation could be implemented to avoid redundant matrix multiplication with a diagonal matrix.  
+
+Plotting functionality was designed with orientation to variables in mind. However, after implementation of looping through datasets it became apparent that plots are mostly based on data stored inside the `Results` object. No integrated plotting functionality is included for this object. TThus, plotting results from multiple job calls must be done manually.
 
 ## How the code works – general
 The tool is developed in an object-oriented way. All variables are objects that store information on their own values, uncertainties, dependencies and properties such as calculation rules and state indicators.  
@@ -45,6 +47,9 @@ The operations on the variables, or on the equation tree as a whole, are perform
 The JobHandler object is the main interface between the user and the internal functionality. The user can load equation trees and `CSVData` dataclass objects to this handler and specify which tasks should be executed. The job handler will then perform pre-execution checks, variable initialization, job execution and post-job result storing and data cleaning. The user needs to specify the preprocessing and main job routine to the jobhandler by defining a preprocessing and main function. The `JobHandler` object has wrapper functions for many of the main functionalities of the code that can be used inside these functions. Additionally, the JobHandler also has internal copies of all engines, so the user can also directly access the full engine functionality inside the preprocessing and main functions with the right syntax. The jobscript.py file contains an illustration on how this works.   
 To load CSV data to variables, the code makes use of a `CSVData` dataclass. This is a small dataclass that contains the values, the start and end time and the timestep of the data. The `PandasCSVHandler` object can read a CSV to a Pandas dataframe, and can compile it to `CSVData` objects. It can also do this for a specific day. For convenience, data cleaning methods are owned by this dataclass.  
 The usage of this dataclass is because of earlier architectural decisions. It is recommended to deprecate usage of this dataclass and move to a purely-pandas based method.
+
+#### Dependencies
+The code is purely python-based and makes use mostly of standard python libraries: `numpy`, `matplotlib`, `pandas`. The code also uses `pvlib` to perform solar zenith angle calculations. In case you don't want to use this functionality, simply do not use functionality related to solar zenith angles and comment out the lines in `solar_module.py` related to it.
 
 ## Overall workflow
 - The user creates instances of the `JobHandler` and `PandasCSVHandler` classes.
@@ -56,7 +61,7 @@ The usage of this dataclass is because of earlier architectural decisions. It is
 #### Time series matching
 When combining data from datasets with different temporal granularity, the code will try to perform a time harmonization. This means that the code will aggregate both timeseries to a timestep equal to the lowest common multiple of the involved timesteps in a calculation. Additionally, it will ensure that computations are performed with datapoints spanning the same time interval (i.e. a datapoint spanning 8:00-8:10 is not combined with data spanning 9:00-9:10).   
  
-If a derived variable required a harmonization of its dependencies, information about this will be stored in this variable’s `harmonization_cache`, which contains a `TimeHarmonizationData` object for each of the variable’s dependencies. This object contains information on how to transform the dependency to the temporal granularity of the derived variable (the timestep increase factor, pruned edges, etc.).  
+If a derived variable required a harmonization of its dependencies, information about this will be stored in this variable’s `harmonizationcache`, which contains a `TimeHarmonizationData` object for each of the variable’s dependencies. This object contains information on how to transform the dependency to the temporal granularity of the derived variable (the timestep increase factor, pruned edges, etc.).  
 
 ![Alt text](https://github.com/user-attachments/assets/6ad239fb-51ca-40a1-87e1-6db590520468)
  
