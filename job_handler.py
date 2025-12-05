@@ -11,6 +11,7 @@ from typing import Union, Optional
 
 @dataclass
 class RunResult:
+    """ Stores the results, either calculation outputs or the error code, for a single run """
     identifier: Union(str, int)  #String which stores the identifier of the run
     succeeded: bool              #Stores whether the run succeeded or not
     data: dict                   #Stores results of the run
@@ -18,15 +19,17 @@ class RunResult:
     
     
 class Results:
+    """ Stores all run results, as well as the staged data to be turned into the next run result """
     def __init__(self):
         self.num_runs           = 0             #Stores the number of runs this result object contains
         self.run_identifiers    = []            #For each run, can be used to an identifier (such as the date)
         self.run_results        = []            #Stores RunResult object for each run
+        self.unique_results     = {}            #Stores results that only need to be stored once
         #self.averages_effective_lengts = {}     #Stores effective lengths N for data that is stored as average: A -> (A*(N-1) + value)/N for the N'th result
         self.staged_data        = {}           #Staged data dictionary to be populated in the present run
         
     def add(self, key: str, value):
-        """ Append a new result for a given key, automatically creates a field for the key if it does not exist yet """
+        """ Append a new result to the staged data for a given key, automatically creates a field for the key if it does not exist yet """
         if key not in self.staged_data:
             self.staged_data[key] = value
             return
@@ -36,8 +39,8 @@ class Results:
             column = list(column)
         column.append(value)
                 
-    
     def createRunResult(self, succeeded=True, identifier=None, fail_code=None):
+        """ Compiles a RunResult object for the given run, resets the staged data dictionary """
         if identifier is None:
             identifier = self.num_runs
         
@@ -50,8 +53,13 @@ class Results:
         self.run_identifiers.append(identifier)
         self.staged_data = {}
         self.num_runs    += 1
-        
-    def getResultSeries(self, name):
+    
+    def getUniqueResult(self, name):
+        """ Retrieve results from the unique result dictionary """
+        return self.unique_results[name]
+    
+    def getResultSeries(self, name, give_identifiers=False):
+        """ Creates a list with all results corresponding to the given name from the list of runresult objects, also returns the identifiers. """
         series, identifiers = [], []
         for result in self.run_results:
             datapoint = result.data.get(name)
@@ -59,13 +67,42 @@ class Results:
                 continue
             series.append(datapoint)
             identifiers.append(result.identifier)
-        return series, identifiers
+        
+        if len(series) == 0:
+            print(f"WARNING: No result with name {name} were found")
+        
+        if give_identifiers:
+            return series, identifiers
+        return series
     
-    def getResultArray(self, name):
-        series, identifiers = self.getResultSeries(name)
-        return np.asarray(series), identifiers
+    def getResultArray(self, name, decimals=5, give_identifiers=False):
+        """ Same as the getResultSeries function, but returns the results as a numpy array """
+        series, identifiers = self.getResultSeries(name, give_identifiers=True)
+        series = np.asarray(series)
+        if not series.dtype is np.object_:
+            series = np.round(series, decimals=decimals)
+        
+        if give_identifiers:
+            return series, identifiers
+        return series
     
-    def getFails(self, failcode=None):
+    def getAverageResult(self, name, decimals=5, give_identifiers=False):
+        """ Gets the average result over all runs """
+        series, identifiers = self.getResultArray(name, decimals=decimals, give_identifiers=True)
+        
+        if np.ndim(series) > 1:
+            series = np.average(series, axis=0)
+        else:
+            series = np.average(series)
+            
+        series = np.round(series, decimals=decimals)
+
+        if give_identifiers:
+            return series, identifiers
+        return series
+    
+    def getFails(self, failcode=None, give_identifiers=True):
+        """ Gets a list of failcodes and identifiers of all failed runs """
         fails, identifiers = [], []
         for result in self.run_results:
             if result.succeeded:
@@ -77,9 +114,13 @@ class Results:
             elif result.failcode == failcode:
                 fails.append(result.fail_code)
                 identifiers.append(result.identifier)
-        return fails, identifiers
+        
+        if give_identifiers:
+            return fails, identifiers
+        return fails
     
     def summariseFails(self):
+        """ Lists the number of times a failcode occurs, the number of times the job succeeded, and the total number of job calls """
         fails, identifiers = self.getFails()
         successful_executions = self.num_runs - len(fails)
         
@@ -95,7 +136,7 @@ class Results:
 
 class JobHandler:
     def __init__(self):
-        self.CSV_handler = CSVHandler()
+        self.CSV_handler = CSVHandler() ###!!! DEPRECATED
         
         self.equation_engine = None
         self.calculation_engine = None
@@ -121,10 +162,13 @@ class JobHandler:
         return
     
     def loadEquationTree(self, filepath):
+        """ Load an equation tree from a text file into the job handler. 
+        Compiles the variable registry, populates dependencies, builds executables and checks equation tree consistency """
         self.equation_tree_reader = EquationTreeReader()
         self.variables, self.var_csv_pointers = self.equation_tree_reader.parse(filepath)
         del self.equation_tree_reader
         
+        #If no variables need to be populated from csv's: set csv_variables_populated flag to True
         if len(self.var_csv_pointers) == 0:
             self.csv_variables_populated = True
         
@@ -139,6 +183,7 @@ class JobHandler:
         self.initialized_eq_tree = True
         
     def prepareEngines(self):
+        """ Prepares the calculation, uncertainty, and time engine using the loaded variable registry """
         if not self.initialized_eq_tree:
             raise ValueError("Cannot initialize engines, since no equation tree appears to be loaded to the job handler. Please check your operations.")
         self.time_engine = TimeEngine()
@@ -164,6 +209,7 @@ class JobHandler:
     
     
     def getCSVColumn(self, name):
+        """ Get a CSV of name 'name' from any of the CSVData registries """
         if not self.has_csv_data:
             raise ValueError(f"Tried to extract column {name} from job handler CSV data, but no CSV data is loaded in handler.")
         for csv in self.csv_data:
@@ -221,7 +267,7 @@ class JobHandler:
         self.csv_variables_populated = True
 
     
-    def readFromCSV(self, filepaths, metadata, clean_nan=True, reset_registry=True):
+    def readFromCSV_DEPRECATED(self, filepaths, metadata, clean_nan=True, reset_registry=True):
         """ Populate variables from given csv's using the functions in the CSVHandler function
             Note: this function does not use pandas """
         if reset_registry:
@@ -253,6 +299,7 @@ class JobHandler:
     
     
     def execute(self, identifier=None):
+        """ Main job execution function, handles correct order of operations for preprocessing, storage of results and reinitializing the variable registry after completion """
         if self.main is None:
             raise ValueError("No main jobscript is provided to the job handler. Please provide a main function under JobHandler.main")
         if not self.initialized_engines:
@@ -414,6 +461,13 @@ class JobHandler:
         arg = self._resolve_arg(arg)
         self.results.add(name, arg)
     
+    def storeUniqueResult(self, name, arg, replace=False):
+        """ Store a single unique result instead of a full timeseries of the result """
+        if name in self.results.unique_results.keys() and not replace:
+            return
+        arg = self._resolve_arg(arg)
+        self.results.unique_results[name] = arg
+    
     def evaluateVariable(self, var, *args, **kwargs):
         """ Wrapper for the calculation engine function of the same name """
         #if not self.basic_variables_validated:
@@ -453,71 +507,7 @@ class JobHandler:
         self.uncertainty_engine.calculateTotalUncertainty(var, *args, **kwargs)
     
 
-        
-        
 
-    
-
-
-"""
-
-
-if __name__=="__main__":
-    inputfile = "C:\\Users\\mate\\Desktop\\python\\Experimental\\equation_tree.txt"
-    
-    CSV_metadata_1 = (";", True, ["Time", "zenith", "G", "-", "Pout", "-"], "%H:%M:%S")
-    CSV_metadata_2 = (";", True, ["Time", "-", "-", "T", "-", "-"], "%H:%M:%S")
-    metadata = [CSV_metadata_1, CSV_metadata_2]
-    filepaths = ["C:\\Users\\mate\\Desktop\\python\\Experimental\\testdata.csv", "C:\\Users\\mate\\Desktop\\python\\Experimental\\testdata.csv"]
-    
-    
-    job = JobHandler()
-    job.loadEquationTree(inputfile)
-    
-    job.variables
-    
-    
-    job.addTask(job.evaluateVariable, "var.PR")
-    job.addTask(job.evaluateVariable, "var.PR_temp_corr")
-    
-    job.addTask(job.calculateTotalUncertainty, "var.PR")
-    job.addTask(job.calculateTotalUncertainty, "var.PR_temp_corr")
-    
-    job.addTask(job.store, "PR values", "var.PR.values")
-    job.addTask(job.storeAsAverage, "PR temp corr values", "var.PR_temp_corr.values")
-    
-    job.addTask(job.store, "PR uncertainty split", "var.PR.uncertainty.aggregated_weighted_uncertainties")
-    job.addTask(job.store, "PR temp corr uncertainty split", "var.PR_temp_corr.uncertainty.aggregated_weighted_uncertainties")
-    
-    job.addTask(job.storeAsAverage, "PR uncertainty split average", "var.PR.uncertainty.aggregated_weighted_uncertainties")
-    
-    
-    
-    
-    
-    for _ in range(3):
-        job.readFromCSV(filepaths, metadata)
-        job.executeJob()
-        
-    print("PR values")
-    job.printResult("PR values")
-    
-    #print()
-    #print("PR uncertainty split")
-    #job.printResult("PR uncertainty split")
-    
-    print()
-    print("PR uncertainty split average")
-    job.printResult("PR uncertainty split average")
-    """
-    
-
-    
-    
-    
-    
-    
-    
     
     
     
