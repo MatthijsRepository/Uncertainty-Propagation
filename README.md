@@ -66,7 +66,7 @@ If a derived variable required a harmonization of its dependencies, information 
 ![Alt text](https://github.com/user-attachments/assets/6ad239fb-51ca-40a1-87e1-6db590520468)
 
 #### Retroactive definition of basic variables
-Some datasets only include the measured plane of array irradiance and not the pyranometer voltages and sensitivities. However, sometimes one wants to incorporate uncertainties in the voltages, sensitivities and POA irradiance separately. Users can leave basic variables empty as long as an equation is provide with which their values can be retroactively calculated from other variables, such as $V = G*S$ with $G$ and $S$ defined. Before execution, the code will populate the basic variable $V$ and then execute as if variable $V$ was defined regularly.
+Some datasets only include the measured plane of array irradiance and not the pyranometer voltages and sensitivities. However, sometimes one wants to incorporate uncertainties in the voltages, sensitivities and POA irradiance separately. Users can leave basic variables empty as long as an equation is provided with which their values can be retroactively calculated from other variables, such as $V = G*S$ with $G$ and $S$ defined. Before execution, the code will populate the basic variable $V$ and then execute as if variable $V$ was defined regularly.
  
 ## Main classes and dataclasses – except engines
 Most dataclasses are stored in the my_dataclasses.py file. The attributes of classes and dataclasses, including descriptions of what the attributes are, are all listed in the `__init__` and `__post_init__` functions of these classes.
