@@ -144,10 +144,10 @@ job.main          = main
 
 #Create Pandas datahander instance, read a CSV, add a date column, add a solar zenith column
 data_handler = PandasCSVHandler()
-df = data_handler.readCSVData(CSV_filepath, ";", structure_list, timeformat=timeformat, select_days=None)
+df = data_handler.readCSVData(CSV_filepath, ";", structure_list=structure_list, timeformat=timeformat, select_days=None)
 
 data_handler.addDateColumn(df)
-data_handler.addZenithColumn(df, coordinates, UTC_offset)
+data_handler.addZenithColumn(df, coordinates, UTC_offset=UTC_offset)
 
 
 #Loop through the data day-by-day and execute the job
