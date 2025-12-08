@@ -1,9 +1,14 @@
 import pvlib
 
-def calculateZenithAngles(coordinates, timedata, UTC_offset):
+def calculateZenithAngles(coordinates, timedata, time_zone=None, UTC_offset=None):
     """ For given latitude, longitude, and set of datetimes, calculates the solar zenith angle. """
     latitude, longitude = coordinates
     
+    #if time_zone is not None:
+    #    timedata = timedata.dt.tz_localize(time_zone, ambiguous=False, nonexistent="shift_forward")
+    #    values = pvlib.solarposition.get_solarposition(timedata, latitude, longitude)
+    #    timedata = timedata.dt.tz_localize(None)
+    #    return values
     if UTC_offset is not None:
         return pvlib.solarposition.get_solarposition(timedata - UTC_offset, latitude, longitude)
     else:

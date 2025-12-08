@@ -37,11 +37,11 @@ class PandasCSVHandler:
         df["Date"] = pd.to_datetime(df["Time"]).dt.date ###!!!
     
     
-    def addZenithColumn(self, df, coordinates, UTC_offset):
+    def addZenithColumn(self, df, coordinates, time_zone=None, UTC_offset=None):
         """ Adds the solar zenith angle for each timestep with the given coordinates. 
         User needs to provide the UTC offset of the local time, since PVLib always works in UTC """
         from solar_module import calculateZenithAngles
-        solar_data = calculateZenithAngles(coordinates, df["Time"], UTC_offset)
+        solar_data = calculateZenithAngles(coordinates, df["Time"], time_zone=time_zone, UTC_offset=UTC_offset)
         df["zenith"] = np.array(solar_data["zenith"])
         
         
