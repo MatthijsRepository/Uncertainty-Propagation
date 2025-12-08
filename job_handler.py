@@ -119,6 +119,25 @@ class Results:
             return fails, identifiers
         return fails
     
+    def getSuccessBooleanList(self, failcode=None):
+        """ Gets lists of all identifiers and an array of booleans on whether the run was a success, optionally filter for failcodes.
+            Can be used to identify seasonal depenency of filtering hits. In case of large differences between march-october and october-march, 
+            Check whether PVLIB handles daylight savings time in correspondence to how the dataset handles it. """
+        all_identifiers, success_bools = [], []
+        
+        for result in self.run_results:
+            all_identifiers.append(result.fail_code)
+            if result.succeeded:
+                success_bools.append(True)
+                continue
+            elif failcode is None:
+                success_bools.append(False)
+                continue
+            elif result.failcode == failcode:
+                success_bools.append(False)
+        return success_bools, all_identifiers
+        
+    
     def summariseFails(self):
         """ Lists the number of times a failcode occurs, the number of times the job succeeded, and the total number of job calls """
         fails, identifiers = self.getFails()
