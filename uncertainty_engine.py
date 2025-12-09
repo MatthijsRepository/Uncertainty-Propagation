@@ -115,9 +115,11 @@ class UncertaintyEngine:
         if var.harmonization_cache is not None:
             harmonization_data = var.harmonization_cache[dep_name]
             for i in range(len(dep_weighted_uncertainties)):
+                #Get low and high offset indices
+                low_index, high_index = harmonization_data.getTotalOffsetSteps()
                 #First we prune the weighted uncertainties using the original total upsample factor
-                dep_weighted_uncertainties[i] = dep_weighted_uncertainties[i][int(harmonization_data.low_index * total_upsample_factors[i]) : \
-                                                                              int(harmonization_data.high_index * total_upsample_factors[i]) ]
+                dep_weighted_uncertainties[i] = dep_weighted_uncertainties[i][int(low_index * total_upsample_factors[i]) : \
+                                                                              int(high_index * total_upsample_factors[i]) ]
                 #now we update the total upsample factor
                 local_upsample_factors[i] += [harmonization_data.upsample_factor]
                 total_upsample_factors[i] *= harmonization_data.upsample_factor
