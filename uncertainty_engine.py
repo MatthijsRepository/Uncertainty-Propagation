@@ -189,7 +189,7 @@ class UncertaintyEngine:
                 #If there are no uncertainties for this dependency we skip it immediately
                 if len(dep_sources)==0:
                     continue
-
+                
                 #Update the sensitivities block-wise by blockwise-multiplying the previous weighted uncertainties with new sensitivities
                 dep_weighted_uncertainties, dep_total_upsample_factors, dep_local_upsample_factors = \
                     self._rootWeightedUncertaintyCalculator(var, dep_name, partial_derivatives,
@@ -230,19 +230,19 @@ class UncertaintyEngine:
         new_weighted_uncertainties = []
         
         for i, source in enumerate(sources):
-            #Calculate the correction factor for the aggregation of intensive variables
-            #Each upsampling by a factor f at the node of an intensive variable will add a factor 1/n to the total
+            #Calculate the correction factor for the aggregation of intensive variables and rates
+            #Each upsampling by a factor f at the node of an intensive variable or a rate will add a factor 1/n to the total
             #Thus, we loop back through the stack (i.e. move downwards):
             aggregation_correction_factor = 1
-            
             #We start our traversal one level below the calling variable
             for j, var in enumerate(reversed(propagation_paths[i][:-1])):
                 #Timesums are destructive nodes, stop our propagation here
                 if var.is_timesum:
                     break
             
-                if var.aggregation_rule.startswith("ave"):
-                    aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
+                if var.aggregation_rule.startswith("ave") or var.is_rate:
+                    #Note: we take index j+1 here because we skipped the first variable in the propagation path
+                    aggregation_correction_factor *= 1/local_upsample_factors[i][-(j+1)] 
             
             #Perform the time aggregation
             corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
@@ -253,7 +253,7 @@ class UncertaintyEngine:
                 aggregation_correction_factor *= 1/len(calling_var.non_aggregated_values)
             if calling_var.is_rate:
                 aggregation_correction_factor *= calling_var.aggregation_step
-
+            
             #Apply correction factor                
             result *= aggregation_correction_factor
             new_weighted_uncertainties.append(result)
@@ -268,6 +268,7 @@ class UncertaintyEngine:
             Note that the time aggregation is a destructive procedure in general; time aggregation of time aggregates only makes sense for fully (un)correlated error sources """
         #Note, we cannot make this function fully numpy in general, because the arrays inside weighted_uncertainties can be of different lengths
         new_weighted_uncertainties = []
+        
         for i, source in enumerate(sources):
             factor = total_upsample_factors[i]
             #We take a shortcut if the total upsample factor is 1, then no rebinning has to take place for this source
@@ -284,9 +285,12 @@ class UncertaintyEngine:
                 #Timesums are destructive nodes, stop our propagation here
                 if var.is_timesum:
                     break
-                if var.aggregation_rule.startswith("ave"):
+                if var.aggregation_rule.startswith("ave") or var.is_rate:
+                    #Note the difference with the timesum variant: there we skip the last variable in the backpropagation
+                    #Here we do not skip the last step, hence we index with j
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
-
+            
+            #Building correlation matrix and uncertainty vector
             corr_matrix = source.getCorrelationMatrix(factor)
             wu = weighted_uncertainties[i].reshape((-1, factor))
             #Calculate new uncertainties, append to list
@@ -309,7 +313,7 @@ class UncertaintyEngine:
             var.uncertainty.root_total_upsample_factors, var.uncertainty.root_local_upsample_factors, \
                 var.uncertainty.root_propagation_paths = self.getWeightedRootUncertainties(var, mask=mask)
         
-        #Populate mask setting
+        #Populate masking setting
         var.uncertainty.is_masked = mask
         
         #Here we aggregate all uncertainties to the temporal resolution of the called variable
