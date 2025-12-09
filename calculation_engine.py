@@ -69,7 +69,7 @@ class CalculationEngine:
                 return var.values
         
         args, timedata, harmonized_data = self.time_engine.ensureDependencyTimeHarmony(var, force_recalculation=force_recalculation)
-        
+         
         calculated_values = var.executable(*args)   
         
         #Time aggregation if the variable is a timesum

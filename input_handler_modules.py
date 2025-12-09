@@ -9,14 +9,32 @@ class PandasCSVHandler:
     def __init__(self):
         return
     
-    def readCSVData(self, filepath, delimiter, structure_list, timeformat=None, select_days=None):
+    def readCSVData(self, filepath, delimiter, skip_rows=None, structure_list=None, structure_dict=None, timeformat=None, select_days=None):
         """ Reads CSV data into a pandas dataframe """
-        df = pd.read_csv(filepath, sep=delimiter)
         
-        rename_map = dict(zip(list(df.columns), structure_list))
+        #Skip header rows
+        if skip_rows is None:
+            skip_rows = 0
         
-        df = df.rename(columns=rename_map)
-        df.pop("-")
+        #At least a structure list or dict must be provided
+        if structure_list is None and structure_dict is None:
+            raise ValueError("Please provide either a structure list or structure dictionary when reading out a CSV!")
+        
+        #Read out the columns and match to the desired names
+        if structure_dict is not None:
+            #Read CSV
+            df = pd.read_csv(filepath, sep=delimiter, header=None, skiprows=skip_rows)
+            #Extract the correct columns from the dataframe
+            columns_to_read = list(structure_dict.keys())
+            df = df.iloc[:, columns_to_read]
+            #Rename columns
+            df = df.rename(columns=structure_dict)
+        else:
+            #Usage of structure list is deprecated
+            df = pd.read_csv(filepath, sep=delimiter)
+            rename_map = dict(zip(list(df.columns), structure_list))
+            df = df.rename(columns=rename_map)
+            df.pop("-")
         
         # Parse datetime
         if timeformat is None:
@@ -24,6 +42,13 @@ class PandasCSVHandler:
             df["Time"] = pd.to_datetime(df["Time"], errors='coerce')  ###!!! Not robust
         else:
             df["Time"] = pd.to_datetime(df["Time"], format=timeformat) ###!!!
+        
+        #If a specific "Date" column is present, convert its values to datetime objects and inform the "Time" column of its dates
+        if "Date" in df.columns:
+            df["Date"] = pd.to_datetime(df["Date"]).dt.date
+            df["Time"] = pd.Series([
+                pd.Timestamp.combine(d, t.time()) for d, t in zip(df["Date"], df["Time"])
+            ])
 
         df.set_index("Time") ###!!!
         # Filter for selected days
@@ -36,6 +61,12 @@ class PandasCSVHandler:
         """ Adds a date column, extracted from the datetime column. For easier subsetting by date. """
         df["Date"] = pd.to_datetime(df["Time"]).dt.date ###!!!
     
+    def addDateToTime(self, df):
+        """ If a csv has a date and a time column, uses the date column to inform the times of their date """
+        df["Time"] = pd.Series([
+            pd.Timestamp.combine(d.date(), t.time()) for d, t in zip(df["Date"], df["Time"])
+        ])
+        return df
     
     def addZenithColumn(self, df, coordinates, time_zone=None, UTC_offset=None):
         """ Adds the solar zenith angle for each timestep with the given coordinates. 
