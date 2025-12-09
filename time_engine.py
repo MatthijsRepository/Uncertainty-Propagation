@@ -176,7 +176,7 @@ class TimeEngine:
                 new_values[i] += var.values[start+factor] * high_fraction
 
         #If aggregation rule is to average, we take the time average
-        if var.aggregation_rule == "average": 
+        if var.aggregation_rule == "average" or var.is_rate: 
             new_values /= factor
         return new_values
     

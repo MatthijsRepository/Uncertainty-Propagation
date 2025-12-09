@@ -188,6 +188,7 @@ class UncertaintyEngine:
                     self._rootWeightedUncertaintyCalculator(var, dep_name, partial_derivatives,
                                                             dep_weighted_uncertainties, dep_total_upsample_factors,
                                                             dep_local_upsample_factors)
+                
                 #Update propagation paths
                 for path in dep_propagation_paths:
                     path += [var]
@@ -317,7 +318,7 @@ class UncertaintyEngine:
         var.uncertainty.total_uncertainty_calculated = True
         
         #If the uncertainty is just a single value, we replace the length-1 array by the numeric value
-        if len(var.uncertainty.total_uncertainty)==1:
+        if isinstance(var.uncertainty.total_uncertainty, np.ndarray) and len(var.uncertainty.total_uncertainty)==1:
             var.uncertainty.total_uncertainty = var.uncertainty.total_uncertainty[0]
         
         return var.uncertainty.total_uncertainty
