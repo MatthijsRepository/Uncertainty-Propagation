@@ -308,7 +308,10 @@ class UncertaintyEngine:
         var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, \
             var.uncertainty.root_total_upsample_factors, var.uncertainty.root_local_upsample_factors, \
                 var.uncertainty.root_propagation_paths = self.getWeightedRootUncertainties(var, mask=mask)
-            
+        
+        #Populate mask setting
+        var.uncertainty.is_masked = mask
+        
         #Here we aggregate all uncertainties to the temporal resolution of the called variable
         aggregated_weighted_uncertainties = self.aggregateWeightedRootUncertainties(var.uncertainty.root_sources, var.uncertainty.root_weighted_uncertainties, 
                                                                                     var.uncertainty.root_total_upsample_factors, var.uncertainty.root_local_upsample_factors,
@@ -324,7 +327,6 @@ class UncertaintyEngine:
         var.uncertainty.aggregated_weighted_uncertainties   = aggregated_weighted_uncertainties
         var.uncertainty.total_uncertainty                   = np.sqrt(np.sum(aggregated_weighted_uncertainties**2, axis=0))
         var.uncertainty.total_uncertainty_calculated        = True
-        var.uncertainty.is_masked                           = mask
         
         #If the uncertainty is just a single value, we replace the length-1 array by the numeric value
         if isinstance(var.uncertainty.total_uncertainty, np.ndarray) and len(var.uncertainty.total_uncertainty)==1:
