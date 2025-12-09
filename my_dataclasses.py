@@ -105,6 +105,18 @@ class CSVData:
         column = self.data[column_name]
         column[np.isnan(column)] = new_value
     
+    def cleanNaNAtNight(self, column_name):
+        """ Cleans NaN's before and after the main day data to assume the first and last value of the data that is not NaN, respectively. """
+        column = self.data[column_name]
+        #Identifiying start and end indices
+        indices = ~np.isnan(column)
+        indices = np.where(indices)[0]
+        first, last = indices[0], indices[-1]
+
+        #Replacing values
+        column[:first] = column[first]
+        column[last:] = column[last]
+    
     def cleanAllNaN(self, new_value=0):
         """ Cleans all NaN instances and replaces them by a new value. Replacement value can be manually specified """
         for name, column in self.data.items():
@@ -252,6 +264,7 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
     
     direct_uncertainties_calculated:        Optional[bool] = False
     total_uncertainty_calculated:           Optional[bool] = False
+    is_masked:                              Optional[bool] = False
     is_certain:                             Optional[bool] = None
     
     def __post_init__(self):

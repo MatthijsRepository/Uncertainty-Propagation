@@ -21,7 +21,8 @@ class UncertaintyEngine:
             #Check if there is already an executable in place. If not: we create it now
             if source.executable is None:
                 if self.equation_engine is None:
-                    raise ValueError(f"Cannot calculate the uncertainty values of uncertainty source {source.name} of variable {var.name}. Please provide the calculation engine with an uncertainty engine to interpret the source equation.")
+                    raise ValueError(f"Cannot calculate the uncertainty values of uncertainty source {source.name} of variable {var.name}. \
+                                     Please provide the calculation engine with an uncertainty engine to interpret the source equation.")
                 #Preparing source dependencies
                 source.equation = source.multiplier
                 source.dependencies = {}
@@ -87,21 +88,22 @@ class UncertaintyEngine:
         lst = [np.full(forced_length, v) if (np.isscalar(v) or (isinstance(v, np.ndarray) and v.size == 1))  else v for v in lst]
         return np.vstack(lst).astype(float)
 
-    def _initializeUncertaintyPropagation(self, var):
+    def _initializeUncertaintyPropagation(self, var, mask):
         """ initializer for the getWeightedRootUncertainties function, prepares direct uncertainties and helps to short circuit the main retriever in trivial cases """
-        if not var.uncertainty.direct_uncertainties_calculated:
-            self._prepareVariableDirectUncertainties(var)
         if var.uncertainty.is_certain:
             return [], [], [], [], []
         if var.uncertainty.total_uncertainty_calculated and var.uncertainty.root_weighted_uncertainties is not None:
-            return (deepcopy(var.uncertainty.root_sources),
-                    deepcopy(var.uncertainty.root_weighted_uncertainties),
-                    deepcopy(var.uncertainty.root_total_upsample_factors),
-                    deepcopy(var.uncertainty.root_local_upsample_factors),
-                    deepcopy(var.uncertainty.root_propagation_paths))
+            #We can only return previously calculated results if they both have the same mask settings, otherwise we have to recalculate
+            if var.uncertainty.is_masked is mask:
+                return (deepcopy(var.uncertainty.root_sources),
+                        deepcopy(var.uncertainty.root_weighted_uncertainties),
+                        deepcopy(var.uncertainty.root_total_upsample_factors),
+                        deepcopy(var.uncertainty.root_local_upsample_factors),
+                        deepcopy(var.uncertainty.root_propagation_paths))
         return None
 
-    def _rootWeightedUncertaintyCalculator(self, var, dep_name, new_sensitivities, dep_weighted_uncertainties, total_upsample_factors, local_upsample_factors):
+    def _rootWeightedUncertaintyCalculator(self, var, dep_name, new_sensitivities, dep_weighted_uncertainties, 
+                                           total_upsample_factors, local_upsample_factors):
         """ For a given variable and dependency, this function will prune the weighted uncertainties to the right length, and multiply sections
             of length 'total_upsample_factor' of the old sensitivities by its corresponding entry in the new_sensitivities
             in other words: if variable var has timesep of a factor 'total_upsample_factor=x' greater than the timestep of the original uncertainty 
@@ -126,7 +128,7 @@ class UncertaintyEngine:
         else:
             for i in range(len(dep_weighted_uncertainties)):
                 #If no time harmonization was performed we can append a local upsample factor of 1 to the stacks
-                local_upsample_factors [i] += [1]
+                local_upsample_factors[i] += [1]
                 #Here we extend the new sensitivities by copying each entry 'total_upsample_factors[i]' times
                 shaped_new_sensitivities = np.kron(new_sensitivities[dep_name], np.ones(total_upsample_factors[i]))
                 #now the two arrays are both of the same shape and we can multiply the two arrays directly
@@ -143,8 +145,9 @@ class UncertaintyEngine:
         if mask and var.is_maskable and not np.isscalar(var.values):
             nz = np.nonzero(var.values)[0]
             if len(nz)>0:
-                uncertainty_mask[:nz[0]] = 0
+                uncertainty_mask[:nz[0]] = 0  
                 uncertainty_mask[nz[-1]:] = 0
+                
         
         #Initialize the relevant objects using the direct uncertainty sources of this variable
         all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths = [], [], [], [], []
@@ -164,8 +167,12 @@ class UncertaintyEngine:
             Returns a list of uncertainty source objects, a list of their corresponding weighted uncertainties, 
             and the total temporal resolution difference factor between the source and the present variable """
         
-        #Initialization helper checks whether direct uncertainties are already calculated and short-circuits the function in trivial cases (already calculated, no uncertainty)
-        args = self._initializeUncertaintyPropagation(var)
+        #Prepare the direct uncertainties acting on this variable
+        if not var.uncertainty.direct_uncertainties_calculated:
+            self._prepareVariableDirectUncertainties(var)
+        
+        #Initialization helper short-circuits the function in trivial cases (uncertainty already calculated, no uncertainty)
+        args = self._initializeUncertaintyPropagation(var, mask)
         if args is not None:
             return args
         
@@ -182,7 +189,7 @@ class UncertaintyEngine:
                 #If there are no uncertainties for this dependency we skip it immediately
                 if len(dep_sources)==0:
                     continue
-                
+
                 #Update the sensitivities block-wise by blockwise-multiplying the previous weighted uncertainties with new sensitivities
                 dep_weighted_uncertainties, dep_total_upsample_factors, dep_local_upsample_factors = \
                     self._rootWeightedUncertaintyCalculator(var, dep_name, partial_derivatives,
@@ -253,7 +260,8 @@ class UncertaintyEngine:
             
         return new_weighted_uncertainties
                  
-    def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors, local_upsample_factors, propagation_paths):
+    def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors, 
+                                           local_upsample_factors, propagation_paths):
         """ Performs a time-aggregation on a retrieved set of root sources, weighted root uncertainties and upsample factors
             In other words, this function brings the weighted root uncertainties for a variable retrieved by the getWeightedRootUncertainties function
             and aggregates all uncertainty arrays to the timestep of the variable.
@@ -313,9 +321,10 @@ class UncertaintyEngine:
             var.uncertainty.is_certain = True
             return
         
-        var.uncertainty.aggregated_weighted_uncertainties = aggregated_weighted_uncertainties
-        var.uncertainty.total_uncertainty = np.sqrt(np.sum(aggregated_weighted_uncertainties**2, axis=0))
-        var.uncertainty.total_uncertainty_calculated = True
+        var.uncertainty.aggregated_weighted_uncertainties   = aggregated_weighted_uncertainties
+        var.uncertainty.total_uncertainty                   = np.sqrt(np.sum(aggregated_weighted_uncertainties**2, axis=0))
+        var.uncertainty.total_uncertainty_calculated        = True
+        var.uncertainty.is_masked                           = mask
         
         #If the uncertainty is just a single value, we replace the length-1 array by the numeric value
         if isinstance(var.uncertainty.total_uncertainty, np.ndarray) and len(var.uncertainty.total_uncertainty)==1:
