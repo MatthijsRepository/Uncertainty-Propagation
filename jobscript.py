@@ -24,7 +24,7 @@ UTC_offset = pd.Timedelta(1, 'hour')
 
 
 #Define the the data preprocessing steps to be carried out
-def preprocessing(handler):
+def preprocessing(handler, identifier=None):
     #Initial missing value interpolation
     handler.interpolateNaN("Pout")
     handler.interpolateNaN("G")
@@ -68,7 +68,7 @@ def preprocessing(handler):
     return True, None
 
 #Define the main calculation procedure
-def main(handler):
+def main(handler, identifier=None):
     #Evaluate values and uncertainties of PR and temperature-corrected PR
     handler.evaluateVariable("PR")
     handler.evaluateVariable("PR_temp_corr")

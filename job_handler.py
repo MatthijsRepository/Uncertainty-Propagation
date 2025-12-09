@@ -227,14 +227,27 @@ class JobHandler:
             self.csv_variables_populated   = False
     
     
-    def getCSVColumn(self, name):
-        """ Get a CSV of name 'name' from any of the CSVData registries """
+    def getCSVColumnFromMatch(self, name, match_name, return_csv=False):
+        """ Get a CSV column of name 'name' from any CSVData that also contains a column 'match_name' """
+        data, csv = self.getCSVColumn(match_name, return_csv=True)
+        if name not in csv.keys():
+            raise ValueError(f"Tried to extract column {name} from job handler CSV data, but matched csv only contains columns {list(csv.data.keys())}.")
+        if return_csv:
+            return csv.data[name], csv
+        else:
+            return csv.data[name]
+    
+    def getCSVColumn(self, name, return_csv=False):
+        """ Get a CSV column of name 'name' from any of the CSVData registries """
         if not self.has_csv_data:
             raise ValueError(f"Tried to extract column {name} from job handler CSV data, but no CSV data is loaded in handler.")
         for csv in self.csv_data:
             if name in csv.data.keys():
-                return csv.data[name]
-            raise ValueError(f"Tried to extract column {name} from job handler CSV data, but loaded csv's do not contain {name}.")
+                if return_csv:
+                    return csv.data[name], csv
+                else:
+                    return csv.data[name]
+        raise ValueError(f"Tried to extract column {name} from job handler CSV data, but loaded csv's do not contain {name}.")
     
     def populateVariablesFromCSV(self, reset_registry=True):
         """ For each variable in the csv_pointers dictionary this function attempts to couple the referenced column name to a column name of our processed CSVs """
@@ -329,7 +342,7 @@ class JobHandler:
         
         #Perform the data preprocessing
         if self.preprocessing is not None:
-            success, fail_code = self.preprocessing(self)
+            success, fail_code = self.preprocessing(self, identifier=identifier)
             #If preprocessing failed, we log this in the results, we also clear the loaded csv data
             if not success:
                 self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
@@ -346,7 +359,7 @@ class JobHandler:
         self.validateBasicVariables()
         
         #Execute job
-        success, fail_code = self.main(self)
+        success, fail_code = self.main(self, identifier=identifier)
         if not success:
             self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
             self.csv_data = []
@@ -467,6 +480,17 @@ class JobHandler:
                 break
         if not found:
             raise ValueError(f"Tried to perform negative cleaning for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
+    
+    def cleanNaNAtNight(self, column_name, *args, **kwargs):
+        """ Wrapper for CSVData.cleanNaNAtNight function for data preprocessing """
+        found = False
+        for csv in self.csv_data:
+            if column_name in csv.data.keys():
+                found = True
+                csv.cleanNaNAtNight(column_name, *args, **kwargs)
+                break
+        if not found:
+            raise ValueError(f"Tried to perform NaN at night cleaning for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
     
     def cleanAllNaN(self, *args, **kwargs):
         """ Executes nan cleaning for all loaded csv's """
