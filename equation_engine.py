@@ -125,7 +125,7 @@ class EquationEngine:
         is_rate = None
         for dep in var.dependencies.values():
             rules.append(dep.aggregation_rule)
-            if dep.is_rate and not dep.is_timesum:
+            if dep.is_rate and not dep.is_timesum and not var.is_timesum:
                 is_rate=True
         # summing > averaging > None    ###!!! Note: ratio between two extensive quantities is an intensive quantity, 
         ### this function does not handle any complex algebra for this. When in doubt: specify manually
@@ -239,8 +239,6 @@ class EquationEngine:
         for name in derived_variables:
             var = variables[name]
             self.populateVariableDependencies(var, variables)
-    
-
         
     def _buildSymPySymbolMap(self, variables):
         """ builds a dictionary relating variable names to sympy symbols """
