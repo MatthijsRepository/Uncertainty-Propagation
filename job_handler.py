@@ -407,6 +407,21 @@ class JobHandler:
     
     #################################################################
     
+    
+    def callPreprocessingStep(self, method_name, column_name, *args, **kwargs):
+        found = False
+        for csv in self.csv_data:
+            if column_name in csv.data.keys():
+                found = True
+                method = getattr(csv, method_name, None)
+                if method is None:
+                    raise ValueError(f"CSVData does not have a method named {method_name}.")
+                return method(column_name, *args, **kwargs), f"{column_name}_{method_name}"
+        if not found:
+            raise ValueError(f"Tried to perform NaN to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
+    
+    
+    
     def checkForExtremeValues(self, column_name, *args, **kwargs):
         """ Wrapper for CSVData.compareNaNToZenith function, used for data consistency checking """
         found = False

@@ -9,7 +9,7 @@ class PandasCSVHandler:
     def __init__(self):
         return
     
-    def readCSVData(self, filepath, delimiter, skip_rows=None, structure_list=None, structure_dict=None, timeformat=None, select_days=None):
+    def readCSVData(self, filepath, delimiter, skip_rows=None, structure_list=None, structure_dict=None, timeformat=None, dateformat=None, select_days=None):
         """ Reads CSV data into a pandas dataframe """
         
         #Skip header rows
@@ -45,7 +45,10 @@ class PandasCSVHandler:
         
         #If a specific "Date" column is present, convert its values to datetime objects and inform the "Time" column of its dates
         if "Date" in df.columns:
-            df["Date"] = pd.to_datetime(df["Date"]).dt.date
+            if dateformat is None:
+                df["Date"] = pd.to_datetime(df["Date"], errors='coerce').dt.date
+            else:
+                df["Date"] = pd.to_datetime(df["Date"], format=dateformat).dt.date
             df["Time"] = pd.Series([
                 pd.Timestamp.combine(d, t.time()) for d, t in zip(df["Date"], df["Time"])
             ])
@@ -56,6 +59,21 @@ class PandasCSVHandler:
             days = pd.to_datetime(select_days).normalize()
             df = df[df.index.normalize().isin(days)]
         return df
+    
+    
+    def deleteNaTAtEnds(self, df, col_name = "Time"):
+        """ Deletes any Not a Time rows from the start and end of the datasets, if present. """
+        valid = df[col_name].notna()
+        
+        if not valid.any():
+            return df
+        
+        first_valid = valid.idxmax()
+        last_valid = valid[::-1].idxmax()
+        
+        return df.loc[first_valid:last_valid]
+        
+    
     
     def addDateColumn(self, df):
         """ Adds a date column, extracted from the datetime column. For easier subsetting by date. """
