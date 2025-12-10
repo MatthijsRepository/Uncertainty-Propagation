@@ -15,42 +15,59 @@ class CSVData:
     
     
     def checkForValidValues(self, column_name): ###!!! needs revision
-        """ Checks if the column contains any defined value except for 0 """
+        """ Checks if the column contains any defined value except for 0 
+            Returns True if there are any values inside the dataset"""
+        column = self.data[column_name]
+        mask = np.isnan(column) | (column==0)
+        return not np.all(mask)
+        """
         mask = np.invert(np.isnan(self.data[column_name])) & (self.data[column_name] != 0)
         if np.argmax(mask) == 0:
             return False
         else:
             return True
+        """
         
     def checkForExtremeValues(self, column_name, value_limit):
         """ Checks if there is any case where the data assumes a value (in absolute terms) greater than the value limit """
         return not np.any(np.abs(self.data[column_name]) > value_limit)
     
+    
+    
+    def checkForNaNInBody(self, column_name, body_start_after=0):
+        """ Checks if there are any NaN's or zeros in the body of a dataset. The body is defined to be the interval between the first non-zero value and the last non-zero value.
+            Allows user to let the interval bounds to start after a certain amount of nonzero values have passed at both ends, to allow for alternating NaN and nonzero values at dawn and dusk. 
+            Returns True if there are not any nan's or zeroes inside the body of the data. """
+        column = self.data[column_name]
+        #True is element is nan or 0
+        mask = np.isnan(column) | (column==0)
+        indices = np.nonzero(~mask)[0]
+        first_index, last_index = indices[body_start_after], indices[::-1][body_start_after]
+        
+        return not np.any(mask[first_index:last_index])
+    
+    
     def compareNaNToZenith(self, column_name, zenith_limit=85): 
         """ Checks if there are any nan's or zeroes in a column after the solar zenith angle is above a certain height
-            Used to check whether a dataset contains undefined values during the day """
+            Used to check whether a dataset contains undefined values during the day 
+            Returns True if there are not any nan's or zeroes when the zenith is under the zenith limit (i.e. sun is high) """
         if not "zenith" in self.data.keys():
             raise ValueError(f"Tried to compare {column_name} to solar zenith angle, while no zenith angle is defined for this csv.")
         column = self.data[column_name]
         #True if the element is nan or 0
         mask = np.isnan(column) | (column == 0)
-        
-        #Indices where zenith angle is under the limit and the data is 0 or NaN
-        #indices = np.where((self.data["zenith"] < zenith_limit) & mask)[0]
-        #if len(indices)>0:
-        #    return False
-        #else:
-        #    return True
+
         return not np.any((self.data["zenith"] < zenith_limit) & mask)
         
         
     def compareNonZeroToZenith(self, column_name, zenith_limit=100):
         """ Checks if the column is nonzero after the solar zenith angle is below a certain heigh
-            Used to check whether a column is nonzero during the night. """
+            Used to check whether a column is nonzero during the night. 
+            Returns true if there are not any nonzero values when the sun is low. """
         if not "zenith" in self.data.keys():
             raise ValueError(f"Tried to compare {column_name} to solar zenith angle, while no zenith angle is defined for this csv.")
         column = self.data[column_name]
-        mask = np.invert(np.isnan(column)) & (self.data["zenith"] > zenith_limit)
+        mask = np.invert(np.isnan(column) | (column==0)) & (self.data["zenith"] > zenith_limit)
         
         #indices = np.where(column[mask]>0)[0]
         #if len(indices)>0:
@@ -650,7 +667,7 @@ class Variable:
         
         self.timestep = timestep.total_seconds()
         if not self.timestep.is_integer():
-            raise ValueError(f"Timestep {self.timestep} is not integer, please ensure timesteps are an integer amount of seconds!")
+            raise ValueError(f"Setting timestep for {self.name} failed: timestep {self.timestep} is not integer, please ensure timesteps are an integer amount of seconds!")
         self.timestep = int(self.timestep)
     
         
