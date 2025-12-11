@@ -124,9 +124,22 @@ class EquationEngine:
         rules = []
         is_rate = None
         for dep in var.dependencies.values():
+            #Check whether the dependency has populated aggregation rules and is_rate booleans, otherwise it retrieves and populates them
+            if (dep.aggregation_rule is None or dep.is_rate is None) and not dep.is_basic:
+                #Retrieve rules from dependencies
+                retr_agg_rule, retr_is_rate = self._getAggregationRulesFromDependencies(dep)
+                #Populate fields in the dependency if they are empty
+                if dep.aggregation_rule is None:
+                    dep.aggregation_rule = retr_agg_rule
+                if dep.is_rate is None:
+                    dep.is_rate = retr_is_rate
+                    
+            #Append found rules to the list
             rules.append(dep.aggregation_rule)
-            if dep.is_rate and not dep.is_timesum and not var.is_timesum:
+            if dep.is_rate and not dep.is_timesum:
                 is_rate=True
+            
+        #Declare the fields in the variable under consideration
         # summing > averaging > None    ###!!! Note: ratio between two extensive quantities is an intensive quantity, 
         ### this function does not handle any complex algebra for this. When in doubt: specify manually
         if "sum" in rules:
