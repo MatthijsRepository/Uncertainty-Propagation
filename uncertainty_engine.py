@@ -241,7 +241,9 @@ class UncertaintyEngine:
                 #Timesums are destructive nodes, stop our propagation here
                 if var.is_timesum:
                     break
-            
+                #If no aggregation rule is defined we skip this node
+                if var.aggregation_rule is None:
+                    continue
                 if var.aggregation_rule.startswith("ave") or var.is_rate:
                     #Note: we take index j+1 here because we skipped the first variable in the propagation path
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-(j+1)] 
