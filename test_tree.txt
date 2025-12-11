@@ -7,7 +7,7 @@ input BASIC VARIABLES
 	var T
 		value: CSV.T
 		timestep: CSV
-		description: Temperature
+		description: Ambient temperature
 		aggregation: average
 		maskable: False
 		#UNCERTAINTIES:
@@ -26,7 +26,7 @@ input BASIC VARIABLES
 		aggregation: sum
 		rate over time: True
 		UNCERTAINTIES:
-			-single module rating at STC: relative, shape=normal, symmetric, correlation=1, sigma=1.5, include=True
+			-IEC total power uncertainty: relative, shape=rectangular, symmetric, correlation=1, bound=0.2
 		END UNCERTAINTIES
 	end var Pout
 	var S
@@ -57,6 +57,9 @@ input BASIC VARIABLES
 	var P0
 		value: 245
 		description: Module power rating at STC
+		UNCERTAINTIES:
+			-single module rating at STC: relative, shape=rectangular, symmetric, correlation=1, bound=1.5, include=True
+		END UNCERTAINTIES
 	end var P0
 	var G_STC
 		value: 1000
@@ -75,7 +78,7 @@ input DERIVED VARIABLES
 		aggregation: average
 		maskable: False
 		UNCERTAINTIES:
-			-temperature uncertainty: absolute, shape=normal, symmetric, correlation=1, sigma=0.5, include=True
+			-temperature uncertainty: absolute, shape=rectangular, symmetric, correlation=1, bound=0.5, include=True
 		end UNCERTAINTIES
 	end eq T_mod
 	eq G

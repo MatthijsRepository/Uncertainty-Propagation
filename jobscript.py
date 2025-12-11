@@ -10,7 +10,7 @@ import pandas as pd
 #When defining multiple CSVs to read the data from, make sure to use unique identifiers for all columns
 
 #Equation tree input file
-equation_tree_filepath = "C:\\Users\\mate\\Desktop\\python\\Experimental\\test_tree.txt"
+equation_tree_filepath = "C:\\Users\\mate\\Desktop\\python\\Uncertainty-Propagation\\test_tree.txt"
 
 
 CSV_filepath = "\\\\Office\\RedirectedFolders\\mate\\My Documents\\local files Matthijs\\Dataset-SolarTechLab.csv"
