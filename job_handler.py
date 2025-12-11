@@ -126,7 +126,7 @@ class Results:
         all_identifiers, success_bools = [], []
         
         for result in self.run_results:
-            all_identifiers.append(result.fail_code)
+            all_identifiers.append(result.identifier)
             if result.succeeded:
                 success_bools.append(True)
                 continue
