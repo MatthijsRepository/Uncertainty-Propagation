@@ -191,8 +191,15 @@ print(f"Avg PR                        : {PR_avg} +/- {PR_u_avg*2} (k=2)")
 print(f"Avg PR (temperature corrected): {PR_T_avg} +/- {PR_T_u_avg*2} (k=2)")
 
 
-plt.errorbar(x=np.arange(len(PR_array)), y=PR_array*100, yerr=2*PR_u_array*100, linestyle="", marker=".", label="PR")
-plt.errorbar(x=np.arange(len(PR_T_array))+1/3, y=PR_T_array*100, yerr=2*PR_T_u_array*100, linestyle="", marker=".", label="PR (T25)")
+success_booleans, identifiers = job.results.getSuccessBooleans(as_array=True)
+success_identifiers = identifiers[success_booleans]
+
+plt.errorbar(x=success_identifiers, y=PR_array*100, yerr=2*PR_u_array*100, linestyle="", marker=".", label="PR")
+plt.errorbar(x=success_identifiers, y=PR_T_array*100, yerr=2*PR_T_u_array*100, linestyle="", marker=".", label="PR (T25)")
+
+#plt.errorbar(x=np.arange(len(PR_array)), y=PR_array*100, yerr=2*PR_u_array*100, linestyle="", marker=".", label="PR")
+#plt.errorbar(x=np.arange(len(PR_T_array))+1/3, y=PR_T_array*100, yerr=2*PR_T_u_array*100, linestyle="", marker=".", label="PR (T25)")
+
 plt.ylim(60,120)
 plt.ylabel("PR [%]")
 plt.xlabel("Succesful run no.")

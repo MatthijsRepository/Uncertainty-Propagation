@@ -119,7 +119,7 @@ class Results:
             return fails, identifiers
         return fails
     
-    def getSuccessBooleanList(self, failcode=None):
+    def getSuccessBooleans(self, as_array=False, failcode=None):
         """ Gets lists of all identifiers and an array of booleans on whether the run was a success, optionally filter for failcodes.
             Can be used to identify seasonal depenency of filtering hits. In case of large differences between march-october and october-march, 
             Check whether PVLIB handles daylight savings time in correspondence to how the dataset handles it. """
@@ -135,6 +135,9 @@ class Results:
                 continue
             elif result.failcode == failcode:
                 success_bools.append(False)
+        
+        if as_array:
+            return np.array(success_bools), np.array(all_identifiers)
         return success_bools, all_identifiers
         
     
