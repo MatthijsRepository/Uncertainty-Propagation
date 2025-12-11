@@ -107,7 +107,7 @@ The dataclass contains a dictionary with data, and the common data timestep and 
 The code makes use of 4 main engines. Engines act on a registry of variables and are designed to perform specific functions for the user.
 
 #### The Equation engine
-The equation engine takes an uninitialized set of variables and is converts it to a working equation tree. After input parsing, the variables only contain their equation in the form of a string. 
+The equation engine takes an uninitialized set of variables and converts it to a working equation tree. After input parsing, the variables only contain their equation in the form of a string. 
 - The equation engine can read the equation string, extract dependencies from it, match these with the variables in the given (or an internal) variable registry and populate the variables with pointers to the variables they depend on, creating a recursive tree.
 - The equation engine can check whether the equation tree is well-defined, in the sense that there are no missing dependencies and no circular definitions.
 - The equation engine can read the equation string, converts it to a format sympy can work with and subsequently convert it to a sympy equation format. Sympy is a python library for symbolic mathematics, and can be used to create executables from equations and take partial derivatives.
