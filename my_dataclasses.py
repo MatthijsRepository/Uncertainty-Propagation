@@ -338,68 +338,6 @@ class VariableUncertainty: ###!!! Handle some stuff in post-init?
             return None
         
     
-    def getAbsoluteRootSplit(self, k):
-        """ Gets absolute uncertainty split by root source, multiplied by a coverage factor k """
-        if not self.is_calculated:
-            raise ValueError("Tried to obtain absolute root split for variable {var_name}, uncertainty is not calculated yet.")
-        if self.root_uncertainty_contribution_split is None:
-            raise ValueError("Cannot get an absolute root split: please calculate the uncertainty root split first!")
-        return np.multiply(self.root_uncertainty_contribution_split, self.total_uncertainty * k)
-    
-    def getRelativeRootSplit(self, k):
-        """ Gets relative uncertainty split by root source, multiplied by a coverage factor k """
-        absolute_split = self.getAbsoluteRootSplit(k)
-        relative_uncertainty_split = np.divide(absolute_split,
-                                               self.variable.values,
-                                               out=np.zeros_like(self.root_uncertainty_contribution_split),
-                                               where=(self.variable.values != 0))
-        relative_uncertainty_split *= 100
-        relative_uncertainty_split[np.where(relative_uncertainty_split>20)] = 20
-        return relative_uncertainty_split
-    
-    def plotAbsoluteRootSplit(self, k):
-        """ Plots absolute root split of the uncertainty, over time, with coverage factor k """
-        absolute_split = self.getAbsoluteRootSplit(k)
-        time_axis = self.variable.getTimeAxis()
-        
-        fig = plt.figure(figsize=(15,6), dpi=100)
-        ax = plt.subplot(111)
-        ax.stackplot(time_axis, *absolute_split, labels=self.root_uncertainty_sources)
-        
-        ax.grid()
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
-            
-        # Put a legend to the right of the current axis
-        box = ax.get_position()
-        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        
-        plt.xlabel("Time")
-        plt.ylabel("Absolute error split")
-        plt.show()
-        
-    def plotRelativeRootSplit(self, k):
-        """ Plots relative root split of the uncertainty, over time, with coverage factor k """
-        relative_split = self.getRelativeRootSplit(k)
-        time_axis = self.variable.getTimeAxis()
-        
-        fig = plt.figure(figsize=(15,6), dpi=100)
-        ax = plt.subplot(111)
-        ax.stackplot(time_axis, *relative_split, labels=self.root_uncertainty_sources)
-        
-        ax.set_ylim(0,10)
-        ax.grid()
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
-            
-        # Put a legend to the right of the current axis
-        box = ax.get_position()
-        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
-        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5))
-        
-        plt.xlabel("Time")
-        plt.ylabel("Relative error split")
-        plt.show()
-    
             
         
 
@@ -734,6 +672,30 @@ class Variable:
     
     
     
+    def plotValues(self):
+        if self.values is None:
+            raise ValueError(f"Cannot plot values of variable {self.name} since they are not calculated yet.")
+        if np.isscalar(self.values):
+            print("Cannot plot values of variable {self.name} because it is a scalar.")
+            
+        time_axis = self.getTimeAxis()
+        
+        fig = plt.figure(figsize=(15,6), dpi=100)
+        ax = plt.subplot(111)
+        
+        ax.plot(time_axis, self.values)
+        ax.grid()
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+            
+        # Put a legend to the right of the current axis
+        box = ax.get_position()
+        ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
+
+        plt.xlabel("Time")
+        plt.ylabel(self.name)
+        plt.show()
+    
+    
     def plotValuesAndUncertainty(self, k):
         if self.values is None or self.uncertainty.total_uncertainty_calculated is False:
             raise ValueError(f"Cannot plot values and uncertainties of variable {self.name} since they are not calculated yet.")
@@ -757,8 +719,7 @@ class Variable:
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
 
         plt.xlabel("Time")
-        plt.ylabel(self.name + " [$W/m^2$]")
-        plt.title("$G_{POA}$ " + f"Assumed values and uncertainty, k={k}")
+        plt.ylabel(self.name)
         plt.show()
         
             
