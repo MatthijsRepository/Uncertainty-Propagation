@@ -22,7 +22,7 @@ def calculateProjectedZenithAngles(coordinates, timedata, UTC_offset, zenith_off
     """ Should transpose the zenith angle to be relative to the plane of array
         WARNING: Does not appear to work correctly """
     solar_positions = calculateZenithAngles(coordinates, timedata, UTC_offset)
-    return pvlib.shading.projected_solar_zenith_angle(solar_positions["zenith"], solar_positions["azimuth"], zenith_offset, azimuth_offset)
+    return pvlib.irradiance.aoi(zenith_offset, azimuth_offset, solar_positions["zenith"], solar_positions["azimuth"])
 
 
 
