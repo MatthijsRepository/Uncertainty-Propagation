@@ -50,7 +50,7 @@ To load CSV data to variables, the code makes use of a `CSVData` dataclass. This
 The usage of this dataclass is because of earlier architectural decisions. It is recommended to deprecate usage of this dataclass and move to a purely-pandas based method.
 
 #### Dependencies
-The code is purely python-based and makes use mostly of standard python libraries: `numpy`, `matplotlib`, `pandas`. The code also uses `pvlib` to perform solar zenith angle calculations. In case you don't want to use this functionality, simply do not use functionality related to solar zenith angles and comment out the lines in `solar_module.py` related to it.
+The code is purely python-based and makes use mostly of standard python libraries: `numpy`, `matplotlib`, `pandas`. The code makes use of `SymPy` for the creation of executables of a variable's equation and to take symbolic partial derivatives of the variable's equation, which can subsequently be turned into executables, to calculate sensitivity coefficients. The code also uses `pvlib` to perform solar zenith angle calculations. In case you don't want to use this functionality, simply do not use functionality related to solar zenith angles and comment out the lines in `solar_module.py` related to it.
 
 ## Overall workflow
 - The user creates instances of the `JobHandler` and `PandasCSVHandler` classes.
