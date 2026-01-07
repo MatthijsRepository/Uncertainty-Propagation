@@ -59,9 +59,22 @@ class CSVData:
 
         return not np.any((self.data["zenith"] < zenith_limit) & mask)
         
+    
+    def cleanNonZeroToZenith(self, column_name, max_value=1.01, zenith_limit=100):
+        """ Checks if the column is nonzero after the solar zenith angle is below a certain height
+            If this is the case and the nonzero values are below max_value, the values are replaced by zeroes
+        """
+        if not "zenith" in self.data.keys():
+            raise ValueError(f"Tried to compare {column_name} to solar zenith angle, while no zenith angle is defined for this csv.")
+        column = self.data[column_name]
+        mask = np.invert(np.isnan(column) | (column==0)) & (self.data["zenith"] > zenith_limit)
         
+        mask = mask & (column < max_value)
+        column[mask] = 0
+        
+    
     def compareNonZeroToZenith(self, column_name, zenith_limit=100):
-        """ Checks if the column is nonzero after the solar zenith angle is below a certain heigh
+        """ Checks if the column is nonzero after the solar zenith angle is below a certain height
             Used to check whether a column is nonzero during the night. 
             Returns true if there are not any nonzero values when the sun is low. """
         if not "zenith" in self.data.keys():
@@ -558,11 +571,14 @@ class Variable:
             #self.direct_uncertainties.append(uncertainty)
             self.uncertainty.direct_uncertainty_sources.append(uncertainty)
             
-    def getTimeAxis(self):
+    def getTimeAxis(self, times_only=False):
         if isinstance(self.values, (float, int)):
             raise ValueError("Cannot construct time axis for variable {self.name}, since the variable is not time-dependent.")
         n = len(self.values)
-        return [self.first_time + timedelta(seconds=i * self.timestep) for i in range(n)]
+        if times_only:
+            return [(self.first_time + timedelta(seconds=i * self.timestep)).time() for i in range(n)]
+        else:
+            return [self.first_time + timedelta(seconds=i * self.timestep) for i in range(n)]
     
     def getTimeData(self):
         if self.timestep is None:
@@ -685,14 +701,14 @@ class Variable:
         
         ax.plot(time_axis, self.values)
         ax.grid()
-        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
+        ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
             
         # Put a legend to the right of the current axis
         box = ax.get_position()
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
 
-        plt.xlabel("Time")
-        plt.ylabel(self.name)
+        plt.xlabel("Time", fontsize=14)
+        plt.ylabel(self.name, fontsize=14)
         plt.show()
     
     
