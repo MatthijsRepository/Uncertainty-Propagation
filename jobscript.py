@@ -10,10 +10,10 @@ import pandas as pd
 #When defining multiple CSVs to read the data from, make sure to use unique identifiers for all columns
 
 #Equation tree input file
-equation_tree_filepath = "C:\\Users\\mate\\Desktop\\python\\Uncertainty-Propagation\\test_tree.txt"
+equation_tree_filepath = "C:\\Users\\mate\\Desktop\\local_work\\code\\Uncertainty-Propagation\\test_tree.txt"
 
 
-CSV_filepath = "\\\\Office\\RedirectedFolders\\mate\\My Documents\\local files Matthijs\\Dataset-SolarTechLab.csv"
+CSV_filepath = "C:\\Users\\mate\\Desktop\\local_work\\code\\Uncertainty-Propagation\\Dataset-SolarTechLab.csv"
 structure_list = ["Time", "Pout", "T", "-", "G", "W", "-"]
 timeformat = None
 
@@ -156,7 +156,7 @@ i=0
 for day in unique_days:
     i+=1
     #if i>80: break
-    #print(day)
+    print(day)
     job.addCSVData(data_handler.compileOneDayCSVData(df, day))
     job.execute(identifier=day)
 print()
