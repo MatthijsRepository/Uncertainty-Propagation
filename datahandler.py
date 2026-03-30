@@ -1,0 +1,414 @@
+import numpy as np
+import pandas as pd
+
+
+        
+
+class DataHandler:
+    def __init__(self):
+        self.dataframes   = []
+        self.lookup_dict  = {}
+        
+        self.blacklisted_days = {}
+        
+    def addDataFrame(self, df):
+        """ Adds dataframe to internal registry """
+        index = len(self.dataframes)
+        df.df_index = index
+        
+        self.dataframes.append(df)
+        
+        for name in df.columns:
+            if name.lower()=="time" or name.lower()=="zenith" or name.lower()=="date":
+                continue
+            if name in self.lookup_dict.keys():
+                raise ValueError(f"Data column of name {name} is doubly defined: in dataframe {self.lookup_dict[name]} and dataframe {index}.")
+            self.lookup_dict[name] = index
+            
+    def getDataFrame(self, name=None, coupled_name=None, df_index=None):
+        """ Get dataframe from registry
+            df_index > coupled_name > name  """
+        if df_index is None:
+            if coupled_name is not None:
+                df_index = self.lookup_dict.get(coupled_name)
+            else:
+                df_index = self.lookup_dict.get(name)
+        if df_index is None:
+            raise ValueError(f"Failed to retrieve dataframe, no dataframe contains column {name} or {coupled_name}. Be aware that you cannot retrieve dataframes on columns named 'time' or 'date' or 'zenith'")
+        return self.dataframes[df_index]
+    
+        
+    def getColumnView(self, name, day=None, coupled_name=None, df_index=None):
+        
+        df = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index)
+        #Check if column exists
+        if not name in df.columns:
+            raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {df.columns}")
+        
+        ##If asked for specific days, check if date column exists
+        if day is not None:
+            self.ensureDateColumn(df=df)
+            mask = df["Date"] == day
+        else:
+            mask = None
+        return df, mask
+        
+            
+    
+    def getColumn_DEPRECATED(self, name, day=None, coupled_name=None, df_index=None, df=None, as_array=False):
+        """ Get data of name, potentially for selected days. Columns like 'time' or 'zenith' may be degenerate, so these can be retrieved using
+            'coupled_name', then the function returns the times of zenith angles corresponding to this column """
+        #Get correct dataframe
+        if df is None:
+            df = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index)
+        
+        #Check if column exists
+        if not name in df.columns:
+            raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {df.columns}")
+        
+        ##If asked for specific days, check if date column exists and return this   
+        if day is None:
+            data = df[name].copy()
+        else:
+            self.ensureDateColumn(df=df)
+            data = df.loc[df["Date"] == day, name].copy()
+        
+        #Potentially return data as numpy array
+        if as_array:
+            data = data.to_numpy()
+        return data
+    
+    
+    def getColumn(self, name, day=None, coupled_name=None, df_index=None, df=None, as_array=False, as_copy=False):
+        """ Get data of name, potentially for selected days. Columns like 'time' or 'zenith' may be degenerate, so these can be retrieved using
+            'coupled_name', then the function returns the times of zenith angles corresponding to this column """
+        #Get correct dataframe
+        if df is None:
+            df = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index)
+        
+        #Check if column exists
+        if not name in df.columns:
+            raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {df.columns}")
+        
+        ##If asked for specific days, check if date column exists and return this   
+        if day is None:
+            data = df[name]
+        else:
+            self.ensureDateColumn(df=df)
+            data = df.loc[df["Date"] == day, name]
+        
+        #Potentially return a copy of the data upon request, helps avoid accidentally mutating data in storage, at the cost of memory efficiency
+        if as_copy:
+            data = data.copy()
+        
+        #Potentially return data as numpy array
+        if as_array:
+            data = data.copy()      #!!! 
+            data = data.to_numpy()
+        return data
+    
+    def setColumn(self, name, values, base_values=None, day=None, coupled_name=None, df_index=None, df=None):
+        """ Set values of a column """
+        #Get dataframe
+        if df is None:
+            df = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index)
+        
+        #Create column if it does not exist yet
+        if name not in df.columns:
+            self.createColumn(name, base_values=base_values, df=df)
+        
+        #Set values
+        if day is None:
+            df[name] = values
+        else:
+            self.ensureDateColumn(df=df)
+            df.loc[df["Date"] == day, name] = values
+            
+    def createColumn(self, name, base_values=None, coupled_name=None, df_index=None, df=None):
+        """ Creates a column 'name' and sets values to 'base_values' """
+        if df is None:
+            df = self.getDataFrame(name=None, coupled_name=coupled_name, df_index=df_index)
+        if base_values is None:
+            base_values = np.nan
+        if name in df.columns:
+            raise ValueError(f"Column of name {name} is already present in this dataframe: {df.columns}.")
+        
+        self.lookup_dict[name] = df.df_index
+        df[name] = base_values
+        
+        
+    ############################
+    ### Routines for adding, ensuring or getting metadata columns
+    ############################
+    
+    def blacklistDay(self, day, reason):
+        """ Blacklist a day for a given reason """
+        self.blacklisted_days[day] = reason
+    
+    def getTimeRange(self, name=None, day=None, df_index=None, df=None):
+        """ Retrieve the timestamps of the first and last datapoints of the selected window """
+        if df is None:
+            df = self.getDataFrame(name=name, df_index=df_index)
+        if day is None:
+            times = df["Time"]
+        else:
+            times = df.loc[df["Date"] == day, "Time"]
+        return [times.iloc[0], times.iloc[-1]]
+        
+    
+    def getDays(self, name=None, df_index=None, df=None):
+        """ Get all unique days in a timeseries """
+        if df is None:
+            df = self.getDataFrame(name=name, df_index=df_index)
+        self.ensureDateColumn(df)
+        return df["Date"].unique()
+    
+    def ensureDateColumn(self, df=None, df_index=None):
+        """ Ensures a dataframe has a date column for indexing by days """
+        if df is None:
+            df = self.getDataFrame(df_index=df_index)
+        if "Date" not in df.columns:
+            self.addDateColumn(df=df)
+            
+    def addDateColumn(self, df=None, df_index=None):
+        """ Adds a date column, extracted from the datetime column. For easier subsetting by date. """
+        if df is None:
+            df = self.getDataFrame(df_index=df_index)
+        df["Date"] = pd.to_datetime(df["Time"]).dt.date ###!!!
+    
+    def addDateToTime(self, df=None, df_index=None):
+        """ If a csv has a date and a time column, uses the date column to inform the times of their date """
+        if df is None:
+            df = self.getDataFrame(df_index=df_index)
+        df["Time"] = pd.Series([
+            pd.Timestamp.combine(d.date(), t.time()) for d, t in zip(df["Date"], df["Time"])
+        ])
+        return df
+    
+    def addZenithColumn(self, coordinates, df=None, df_index=None, time_zone=None, UTC_offset=None):
+        """ Adds the solar zenith angle for each timestep with the given coordinates. 
+        User needs to provide the UTC offset of the local time, since PVLib always works in UTC """
+        from solar_module import calculateZenithAngles
+        if df is None:
+            df = self.getDataFrame(df_index=df_index)
+        solar_data = calculateZenithAngles(coordinates, df["Time"], time_zone=time_zone, UTC_offset=UTC_offset)
+        df["zenith"] = np.array(solar_data["zenith"])
+        
+    
+    
+    ############################
+    ### Routines for filtering and cleaning data
+    ############################   
+    
+    
+    
+        
+    def deleteNaTAtEnds(self, df=None, df_index=None, col_name = "Time"):
+        """ Deletes any Not a Time rows from the start and end of the datasets, if present. """
+        if df is None:
+            df = self.getDataFrame(df_index=df_index)
+        valid = df[col_name].notna()
+        
+        if not valid.any():
+            return df
+        
+        first_valid = valid.idxmax()
+        last_valid = valid[::-1].idxmax()
+        
+        return df.loc[first_valid:last_valid]
+        
+
+
+    def checkForValidValues(self, column_name, day=None): ###!!! needs revision
+        """ Checks if the column contains any defined value except for 0 
+            Returns True if there are any values inside the dataset"""
+        column = self.getColumn(column_name, day=day)
+        mask = np.isnan(column) | (column==0)
+        return not np.all(mask)
+        """
+        mask = np.invert(np.isnan(self.data[column_name])) & (self.data[column_name] != 0)
+        if np.argmax(mask) == 0:
+            return False
+        else:
+            return True
+        """
+        
+    def checkForExtremeValues(self, column_name, value_limit, day=None):
+        """ Checks if there is any case where the data assumes a value (in absolute terms) greater than the value limit, returns true if the data does not contain extreme values """
+        column = self.getColumn(column_name, day=day)
+        mask = ~np.isnan(column)
+        return not np.any(np.abs(column[mask]) > value_limit)
+    
+    
+    def checkForNaNInBody(self, column_name, day, body_start_after=0):
+        """ Checks if there are any NaN's or zeros in the body of a dataset. The body is defined to be the interval between the first non-zero value and the last non-zero value.
+            Allows user to let the interval bounds to start after a certain amount of nonzero values have passed at both ends, to allow for alternating NaN and nonzero values at dawn and dusk. 
+            Returns True if there are not any nan's or zeroes inside the body of the data. """
+        column = self.getColumn(column_name, day=day)
+        #True means element is nan or 0
+        mask = np.isnan(column) | (column==0)
+        indices = np.nonzero(~mask)[0]
+        if len(indices) <= (2*body_start_after)+1:
+            return True
+        first_index, last_index = indices[body_start_after], indices[::-1][body_start_after]
+        
+        return not np.any(mask[first_index:last_index])
+    
+    
+    def compareNaNToZenith(self, column_name, day=None, zenith_limit=85): 
+        """ Checks if there are any nan's or zeroes in a column after the solar zenith angle is above a certain height
+            Used to check whether a dataset contains undefined values during the day 
+            Returns True if there are not any nan's or zeroes when the zenith is under the zenith limit (i.e. sun is high) """
+        df = self.getDataFrame(name=column_name)
+        if not "zenith" in df.columns:
+            raise ValueError(f"Tried to compare {column_name} to solar zenith angle, while no zenith angle is defined for this csv.")
+        
+        column = self.getColumn(name=column_name, day=day, df=df)
+        zenith = self.getColumn(name="zenith", day=day, df=df)
+        #True if the element is nan or 0
+        mask = (np.isnan(column) | (column == 0)) & (zenith < zenith_limit)
+        
+        return ~np.any(mask)
+        
+    
+    def cleanNonZeroToZenith(self, column_name, day=None, max_value=1.01, zenith_limit=100):
+        """ Checks if the column is nonzero after the solar zenith angle is below a certain height
+            If this is the case and the nonzero values are below max_value, the values are replaced by zeroes
+        """
+        df = self.getDataFrame(name=column_name)
+        if not "zenith" in df.columns:
+            raise ValueError(f"Tried to compare {column_name} to solar zenith angle, while no zenith angle is defined for this csv.")
+        
+        column = self.getColumn(name=column_name, day=day, df=df)
+        zenith = self.getColumn(name="zenith", day=day, df=df)
+        
+        mask = np.invert(np.isnan(column) | (column==0)) & (zenith > zenith_limit)
+        
+        mask = mask & (column < max_value)
+        column[mask] = 0
+        self.setColumn(column_name, column, day=day)
+        
+    
+    def compareNonZeroToZenith(self, column_name, day=None, zenith_limit=100):
+        """ Checks if the column is nonzero after the solar zenith angle is below a certain height
+            Used to check whether a column is nonzero during the night. 
+            Returns true if there are no nonzero values when the zenith is over the zenith limit (i.e. sun is low). """
+        df = self.getDataFrame(name=column_name)
+        if not "zenith" in df.columns:
+            raise ValueError(f"Tried to compare {column_name} to solar zenith angle, while no zenith angle is defined for this csv.")
+        
+        column = self.getColumn(name=column_name, day=day, df=df)
+        zenith = self.getColumn(name="zenith", day=day, df=df)
+        
+        mask = np.invert(np.isnan(column) | (column==0)) & (zenith > zenith_limit)
+        return ~np.any(mask)
+
+        
+    def interpolateNaN(self, column_name, day=None, min_value=0, else_value=np.nan):
+        """ Interpolates isolated nan's, that are neighboured by two defined values, as the average of their neighbours.
+            In case the average is less than min_value, the nan is instead replaced by else_value.
+            This is to allow nan's near the beginning and end of the day to be set to 0 instead of to the interpolated value. """
+        #Obtain nan's that is neighboured by two defined values
+        column = self.getColumn(name=column_name, day=day, as_array=True)
+        isnan = np.isnan(column)
+        isolated_nans = isnan & np.invert(np.roll(isnan, 1)) & np.invert(np.roll(isnan, -1))
+        indices = np.where(isolated_nans)[0]
+        
+        for idx in indices:
+            if idx in [0, len(column)-1]: 
+                continue
+            interpolation = (column[idx-1] + column[idx+1]) / 2
+            if interpolation>min_value:
+                column[idx] = interpolation
+            else:
+                column[idx] = else_value
+        self.setColumn(column_name, column, day=day)
+    
+    def interpolateExtremeValues(self, column_name, value_limit, day=None):
+        """ Interpolates isolated values that exceed (in absolute terms) the extreme_limit. Used to remove unphysical values from dataset """
+        column = self.getColumn(column_name, day=day, as_array=True)
+        extremes = np.where(np.abs(column)>value_limit)
+        isolated_extremes = extremes & np.invert(np.roll(extremes, 1)) & np.invert(np.roll(extremes, -1))
+        indices = np.where(isolated_extremes)[0]
+        
+        for idx in indices:
+            if idx in [0, len(column)-1]: 
+                continue
+            column[idx] = (column[idx-1] + column[idx+1]) / 2
+        self.setColumn(column_name, column, day=day)
+
+            
+    def cleanExtremeValues(self, column_name, value_limit=10000, new_value=np.nan, day=None):
+        """ Replaces extreme values by new value """
+        column = self.getColumn(column_name, day=day, as_array=True)
+        column[np.where(np.abs(column)>value_limit)] = new_value
+        self.setColumn(column_name, column, day=day)
+    
+    def cleanNegatives(self, column_name, new_value=0, day=None):
+        """ Replaces negative values by specified value """
+        column = self.getColumn(column_name, day=day, as_array=True)
+        column[np.where(column<0)] = new_value
+        self.setColumn(column_name, column, day=day)
+
+        
+    def cleanNaN(self, column_name, new_value, day=None):
+        """ Cleans NaN instances and replaces them by a new value. Replacement value can be manually specified """
+        column = self.getColumn(column_name, day=day, as_array=True)
+        column[np.isnan(column)] = new_value
+        self.setColumn(column_name, column, day=day)
+    
+    def cleanNaNAtNight(self, column_name, day):
+        """ Cleans NaN's before and after the main day data to assume the first and last value of the data that is not NaN, respectively. """
+        column = self.getColumn(column_name, day=day, as_array=True)
+        #Identifiying start and end indices
+        indices = ~np.isnan(column)
+        indices = np.where(indices)[0]
+        first, last = indices[0], indices[-1]
+
+        #Replacing values
+        column[:first] = column[first]
+        column[last:] = column[last]
+        self.setColumn(column_name, column, day=day)
+        
+    def cleanAllNaN(self, new_value=0, day=None):
+        """ Replaces all NaN's for the given time window by the new value """
+        for name in self.lookup_dict.keys():
+            column = self.getColumn(name, day=day, as_array=True)
+            column[np.isnan(column)] = new_value
+            self.setColumn(name, column, day=day)
+            
+    
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        

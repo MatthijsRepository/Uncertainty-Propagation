@@ -34,7 +34,7 @@ input BASIC VARIABLES
 		description: Pyranometer sensitivity
 		aggregation: average
 		UNCERTAINTIES:
-			-calibration: 		   relative, shape=normal, symmetric, correlation=1, bound=1.5
+			-calibration: 		   relative, shape=rectangular, symmetric, correlation=1, bound=1
 			-non-stability: 	   relative, shape=rectangular, symmetric, correlation=1, bound=0.8
 			-nonlinearity: 		   relative, shape=rectangular, symmetric, correlation=1, bound=0.5
 			-clear sky spectral error: relative, shape=rectangular, symmetric, correlation=1, bound=0.5
@@ -50,7 +50,7 @@ input BASIC VARIABLES
 		aggregation: sum
 		rate over time: True
 		UNCERTAINTIES:
-			-datalogger accuracy: 	absolute, shape=rectangular, symmetric, correlation=1, bound=0, include=False
+			-datalogger accuracy: 	absolute, shape=rectangular, symmetric, correlation=1, bound=10, include=True
 			-testUncertainty: 	absolute, shape=rectangular, symmetric, correlation=1, bound=0, include=False
 		END UNCERTAINTIES
 	end var V
@@ -58,7 +58,7 @@ input BASIC VARIABLES
 		value: 245
 		description: Module power rating at STC
 		UNCERTAINTIES:
-			-single module rating at STC: relative, shape=rectangular, symmetric, correlation=1, bound=1.5, include=True
+			-single module rating at STC: relative, shape=normal, symmetric, correlation=1, bound=2.4, include=True
 		END UNCERTAINTIES
 	end var P0
 	var G_STC
@@ -78,7 +78,7 @@ input DERIVED VARIABLES
 		aggregation: average
 		maskable: False
 		UNCERTAINTIES:
-			-temperature uncertainty: absolute, shape=rectangular, symmetric, correlation=1, bound=0.5, include=True
+			-temperature uncertainty: absolute, shape=rectangular, symmetric, correlation=1, bound=1, include=True
 		end UNCERTAINTIES
 	end eq T_mod
 	eq G
@@ -94,6 +94,7 @@ input DERIVED VARIABLES
 			-zero off-set other sources: 		absolute, shape=rectangular, symmetric, correlation=1, bound=1
 			#-directional response: 			absolute, shape=rectangular, symmetric, correlation=1, bound=10, multiplier=sin(pi*'zenith'/180)
 			#-directional response: 			relative, shape=rectangular, symmetric, correlation=1, bound=10, multiplier=1/(10 * cos(pi*'zenith'/180))
+			#-directional response: 			absolute, shape=rectangular, symmetric, correlation=1, bound=10, multiplier='G'/(1000 * cos(pi*'zenith'/180))
 			-directional response: 			absolute, shape=rectangular, symmetric, correlation=1, bound=10
 			-additional signal processing errors: 	absolute, shape=rectangular, symmetric, correlation=1, bound=2
 		END UNCERTAINTIES

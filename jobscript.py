@@ -25,14 +25,31 @@ UTC_offset = pd.Timedelta(1, 'hour')
 
 #Define the the data preprocessing steps to be carried out
 def preprocessing(handler, identifier=None):
+    day=identifier
     #Initial missing value interpolation
-    handler.interpolateNaN("Pout")
-    handler.interpolateNaN("G")
-    handler.interpolateExtremeValues("T", value_limit=100)
+    handler.data.interpolateNaN("Pout", day=day)
+    handler.data.interpolateNaN("G", day=day)
+    handler.data.interpolateExtremeValues("T", value_limit=100, day=day)
+    
+    handler.data.cleanNonZeroToZenith("G", day=day, max_value=5.01, zenith_limit=100)
+
 
     #Consistency checks    
-    success, error_code = handler.compareNaNToZenith("Pout", zenith_limit=80)
+    #success, error_code = handler.data.compareNaNToZenith("Pout", day, zenith_limit=80)
+    success = handler.data.compareNaNToZenith("Pout", day, zenith_limit=80)
     if not success:
+        
+        """
+        Pout = handler.data.getColumn("Pout", day=day, as_array=True)
+        zenith = handler.data.getColumn("zenith", day=day, df_index=0, as_array=True)
+        fig, ax = plt.subplots()
+        ax.plot(Pout/245)
+        ax.plot((90-zenith)/90)
+        ax.hlines((90-80)/90, xmin=0, xmax=len(zenith))
+        plt.show()
+        """
+        
+        error_code = "NaNtoZenith_Pout"
         #handler.cleanNaN("Pout", new_value=245)
         #data = handler.getCSVColumn("Pout")
         #zenith = handler.getCSVColumn("zenith") ###!!!
@@ -45,26 +62,34 @@ def preprocessing(handler, identifier=None):
         #plt.show()
         return success, error_code
     
-    success, error_code = handler.compareNaNToZenith("G", zenith_limit=80)
+    #success, error_code = handler.data.compareNaNToZenith("G", day=day, zenith_limit=80)
+    success = handler.data.compareNaNToZenith("G", day=day, zenith_limit=80)
     if not success:
+        error_code = "NanToZenith_G"
         return success, error_code
     
-    success, error_code = handler.compareNonZeroToZenith("Pout", zenith_limit=100)
+    #success, error_code = handler.data.compareNonZeroToZenith("Pout", day=day, zenith_limit=100)
+    success = handler.data.compareNonZeroToZenith("Pout", day=day, zenith_limit=100)
     if not success:
+        error_code = "NonzeroToZenith_Pout"
         return success, error_code
     
-    success, error_code = handler.compareNonZeroToZenith("G", zenith_limit=100)
+    #success, error_code = handler.data.compareNonZeroToZenith("G", day=day, zenith_limit=100)
+    success = handler.data.compareNonZeroToZenith("G", day=day, zenith_limit=100)
     if not success:
+        error_code = "NonzeroToZenith_G"
         return success, error_code
     
-    success, error_code = handler.checkForExtremeValues("T", value_limit=100)
+    #success, error_code = handler.data.checkForExtremeValues("T", day=day, value_limit=100)
+    success = handler.data.checkForExtremeValues("T", day=day, value_limit=100)
     if not success:
+        error_code = "Extreme_T"
         return success, error_code    
         
     #Final data cleaning    
-    handler.cleanAllNaN()
-    handler.cleanNegatives("Pout")
-    handler.cleanNegatives("G")
+    handler.data.cleanAllNaN(new_value=0, day=day)
+    handler.data.cleanNegatives("Pout", day=day)
+    handler.data.cleanNegatives("G", day=day)
     return True, None
 
 #Define the main calculation procedure
@@ -77,20 +102,22 @@ def main(handler, identifier=None):
     handler.calculateTotalUncertainty("PR_temp_corr", mask=True)
     
     #You can define your own post-calculation validity checks if desired. 
-    if handler.variables["PR"].values < 0.6:
+    if handler.variables["PR"].values < 0.4:
         return False, "Unreliable_PR"
         #plt.plot(handler.variables["G"].values / 1000)
         #plt.plot(handler.variables["Pout"].values / 245)
         #plt.grid()
         #plt.show()
+    """
     if handler.variables["PR"].uncertainty.total_uncertainty>0.20:
         return False, "Unreliable_PR_uncertainty"
         #handler.calculateTotalUncertainty("G", mask=True)
         #plt.plot(handler.variables["G"].values)
         #plt.show()
         #handler.uncertainty_engine.plotAbsoluteRootContributions(handler.variables["G"])
+    """
         
-    if handler.variables["PR_temp_corr"].values < 0.6:
+    if handler.variables["PR_temp_corr"].values < 0.4:
         #plt.plot(handler.variables["G"].values / 1000)
         #plt.plot(handler.variables["Pout"].values / 245)
         #plt.grid()
@@ -102,6 +129,7 @@ def main(handler, identifier=None):
         #plt.title("T_mod")
         #plt.show()
         return False, "Unreliable_PR_T"
+    """
     if handler.variables["PR"].uncertainty.total_uncertainty>0.20:
         #handler.calculateTotalUncertainty("G", mask=True)
         #plt.plot(handler.variables["G"].values)
@@ -112,6 +140,7 @@ def main(handler, identifier=None):
         #plt.show()
         handler.uncertainty_engine.plotAbsoluteRootContributions(handler.variables["G"])
         return False, "Unreliable_PR_T_uncertainty"
+    """
     
     #Retrieve uncertainty contribution splits
     PR_u_split = handler.uncertainty_engine.calculateRootContributions(handler.variables["PR"])
@@ -135,6 +164,10 @@ def main(handler, identifier=None):
     return True, None
     
 
+
+import time
+t0 = time.time()
+
 #Create JobHandler instance, load equation tree, populate preprocessing and main functions
 job = JobHandler()
 job.loadEquationTree(equation_tree_filepath)
@@ -145,22 +178,38 @@ job.main          = main
 #Create Pandas datahander instance, read a CSV, add a date column, add a solar zenith column
 data_handler = PandasCSVHandler()
 df = data_handler.readCSVData(CSV_filepath, ";", structure_list=structure_list, timeformat=timeformat, select_days=None)
+del data_handler
+#data_handler.addDateColumn(df)
+#data_handler.addZenithColumn(df, coordinates, UTC_offset=UTC_offset)
 
-data_handler.addDateColumn(df)
-data_handler.addZenithColumn(df, coordinates, UTC_offset=UTC_offset)
 
+
+
+job.addDataFrame(df)
+job.data.addDateColumn(df_index=0)
+job.data.addZenithColumn(coordinates, UTC_offset=UTC_offset, df_index=0)
+
+
+days = job.data.getDays(name="Pout")
+
+
+#import sys; sys.exit()
 
 #Loop through the data day-by-day and execute the job
-unique_days = df["Date"].unique()[:-1]
-i=0
-for day in unique_days:
-    i+=1
-    #if i>80: break
+unique_days = days[:-1]
+for i, day in enumerate(unique_days):
+    if i>80: break
     print(day)
-    job.addCSVData(data_handler.compileOneDayCSVData(df, day))
-    job.execute(identifier=day)
+    #job.populateVariablesFromCSV(day=day)
+    job.execute(day=day, identifier=day)
 print()
     
+
+print(f"Total execution time: {time.time()-t0 }")
+print(f"Total preprocessing time: {job.t_prepro}, total main time: {job.t_main}")
+print()
+
+job.results.summariseFails()
 
 
 #Retrieve results
@@ -181,7 +230,6 @@ PR_T_u_sources   = job.results.getUniqueResult("PR T u sources")
 
 
 job.results.summariseFails()
-
 
 
 #print(PR_array)

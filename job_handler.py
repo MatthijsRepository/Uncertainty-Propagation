@@ -3,6 +3,7 @@ from equation_engine import EquationEngine
 from calculation_engine import CalculationEngine
 from uncertainty_engine import UncertaintyEngine
 from time_engine import TimeEngine
+from datahandler import DataHandler
 import numpy as np
 import pandas as pd
 from dataclasses import dataclass
@@ -155,10 +156,17 @@ class Results:
             
             
 
+import time
 
 class JobHandler:
     def __init__(self):
-        self.CSV_handler = CSVHandler() ###!!! DEPRECATED
+        #self.CSV_handler = CSVHandler() ###!!! DEPRECATED
+        
+        self.t_prepro  = 0
+        self.t_treepop = 0
+        self.t_main    = 0
+        
+        self.data = DataHandler()
         
         self.equation_engine = None
         self.calculation_engine = None
@@ -181,6 +189,8 @@ class JobHandler:
         self.has_csv_data              = False
         self.basic_variables_validated = False
         self.csv_variables_populated   = False
+        
+        ##
         return
     
     def loadEquationTree(self, filepath):
@@ -230,96 +240,19 @@ class JobHandler:
             self.csv_variables_populated   = False
     
     
-    def getCSVColumnFromMatch(self, name, match_name, return_csv=False):
-        """ Get a CSV column of name 'name' from any CSVData that also contains a column 'match_name' """
-        data, csv = self.getCSVColumn(match_name, return_csv=True)
-        if name not in csv.keys():
-            raise ValueError(f"Tried to extract column {name} from job handler CSV data, but matched csv only contains columns {list(csv.data.keys())}.")
-        if return_csv:
-            return csv.data[name], csv
-        else:
-            return csv.data[name]
     
-    def getCSVColumn(self, name, return_csv=False):
-        """ Get a CSV column of name 'name' from any of the CSVData registries """
-        if not self.has_csv_data:
-            raise ValueError(f"Tried to extract column {name} from job handler CSV data, but no CSV data is loaded in handler.")
-        for csv in self.csv_data:
-            if name in csv.data.keys():
-                if return_csv:
-                    return csv.data[name], csv
-                else:
-                    return csv.data[name]
-        raise ValueError(f"Tried to extract column {name} from job handler CSV data, but loaded csv's do not contain {name}.")
-    
-    def populateVariablesFromCSV(self, reset_registry=True):
-        """ For each variable in the csv_pointers dictionary this function attempts to couple the referenced column name to a column name of our processed CSVs """
+    def populateVariablesFromCSV(self, day=None, reset_registry=True):
+        """ For each variable in the csv_pointers dictionary this function will populate the variables with the requested window from their data backend """
         if reset_registry:
             self.resetVariableRegistry()
             
         for var_name, column_name in self.var_csv_pointers.items():
             #Column name is of the form "CSV.name", we strip the first 4 characters
             column_name = column_name[4:]
-            
-            found = False
-            for csv in self.csv_data:
-                if column_name in csv.data.keys():
-                    found = True
-                    self.variables[var_name].values = np.asarray(csv.data[column_name])
-                    if csv.time_range is not None:
-                        self.variables[var_name].addTimeStep(csv.time_range)
-                    break
-            if not found:
-                if not self.has_csv_data:
-                    raise ValueError(f"Failed to populate variable {var_name}: no csv data loaded to jobhandler.")
-                else:
-                    raise ValueError(f"CSV data does not contain data named {column_name}.")
+            self.variables[var_name].values = self.data.getColumn(column_name, day=day, as_array=True)
+            self.variables[var_name].addTimeStep(self.data.getTimeRange(name=column_name, day=day))
         self.csv_variables_populated = True
             
-
-    def populateVariablesFromCSV_OLD(self, CSV_data, reset_registry=True):
-        """ For each variable in the csv_pointers dictionary this function attempts to couple the referenced column name to a column name of our processed CSVs """
-        if reset_registry:
-            self.resetVariableRegistry()
-        
-        if not isinstance(CSV_data, (list, np.ndarray)):
-            CSV_data = [CSV_data]
-        
-        for var_name, column_name in self.var_csv_pointers.items():
-            #Column name is of the form "CSV.name", we strip the first 4 characters
-            column_name = column_name[4:]
-            
-            found = False
-            for csv in CSV_data:
-                if column_name in csv.data.keys():
-                    found = True
-                    self.variables[var_name].values = np.asarray(csv.data[column_name])
-                    if csv.time_range is not None:
-                        self.variables[var_name].addTimeStep(csv.time_range)
-                    break
-            if not found:
-                raise ValueError(f"CSV data does not contain data named {column_name}.")
-        self.csv_variables_populated = True
-
-    
-    def readFromCSV_DEPRECATED(self, filepaths, metadata, clean_nan=True, reset_registry=True):
-        """ Populate variables from given csv's using the functions in the CSVHandler function
-            Note: this function does not use pandas """
-        if reset_registry:
-            self.resetVariableRegistry()
-        
-        CSV_data = []
-        #First we read out all CSV data and store it as CSVData objects
-        for i, filepath in enumerate(filepaths):
-            args = metadata[i]
-            temp_csv_data = self.CSV_handler.compileCSVData(filepath, *args)
-            #Optional cleaning of NaN
-            if clean_nan:
-                temp_csv_data.cleanAllNaN()
-            CSV_data.append(temp_csv_data)
-        
-        #populate variables, set flag to True
-        self.populateVariablesFromCSV_OLD(CSV_data)
     
     def validateBasicVariables(self):
         """ Wrapper for calculation engine function of the same name, also updates the relevant flag """
@@ -333,16 +266,23 @@ class JobHandler:
         return
     
     
-    def execute(self, identifier=None):
+    
+    def runDay(self, day):
+        self.populateVariablesFromCSV(day=day)
+        
+    
+    
+    def execute(self, day, identifier=None):
         """ Main job execution function, handles correct order of operations for preprocessing, storage of results and reinitializing the variable registry after completion """
         if self.main is None:
             raise ValueError("No main jobscript is provided to the job handler. Please provide a main function under JobHandler.main")
         if not self.initialized_engines:
             self.prepareEngines()
         
-        if not self.has_csv_data:
-            print("WARNING: trying to perform calculations while no CSV data appears to be loaded. Crash may occur.")
+        #if not self.has_csv_data:
+        #    print("WARNING: trying to perform calculations while no CSV data appears to be loaded. Crash may occur.")
         
+        t0 = time.time()
         #Perform the data preprocessing
         if self.preprocessing is not None:
             success, fail_code = self.preprocessing(self, identifier=identifier)
@@ -352,15 +292,21 @@ class JobHandler:
                 self.csv_data = []
                 self.has_csv_data = False
                 return
+        self.t_prepro += time.time()-t0
+        
+        t0 = time.time()
         
         #Populate variables using loaded CSV data, and subsequently dump the csv data
-        self.populateVariablesFromCSV()
-        self.csv_data = []
-        self.has_csv_data = False
+        self.populateVariablesFromCSV(day=day)
+        #self.csv_data = []
+        #self.has_csv_data = False
         
         #Validate basic variables
         self.validateBasicVariables()
         
+        self.t_treepop += time.time() - t0
+        
+        t0 = time.time()
         #Execute job
         success, fail_code = self.main(self, identifier=identifier)
         if not success:
@@ -368,6 +314,8 @@ class JobHandler:
             self.csv_data = []
             self.has_csv_data = False
             return
+        self.t_main += time.time()-t0
+        
         
         #Create run result
         self.results.createRunResult(succeeded=True, identifier=identifier)
@@ -394,6 +342,10 @@ class JobHandler:
             return self._resolve_arg(args)
         return tuple(self._resolve_arg(arg) for arg in args)
     
+    def addDataFrame(self, df):
+        """ Adds a pandas dataframe to the data backend """
+        self.data.addDataFrame(df)
+        
     
     def addCSVData(self, csv):
         """ Adds CSVData object or list of CSVData objects to internal registry """
@@ -409,6 +361,8 @@ class JobHandler:
         print(self.results.get(name))
     
     #################################################################
+    
+    
     
     
     def callPreprocessingStep(self, method_name, column_name, *args, **kwargs):
