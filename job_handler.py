@@ -162,10 +162,11 @@ class JobHandler:
     def __init__(self):
         #self.CSV_handler = CSVHandler() ###!!! DEPRECATED
         
-        self.t_prepro  = 0
-        self.t_treepop = 0
-        self.t_main    = 0
-        self.t_runresult = 0
+        self.t_prepro  = 0 ###!!!
+        self.t_treepop = 0 ###!!!
+        self.t_main    = 0 ###!!!
+        self.t_runresult = 0 ###!!!
+        self.preprocessed = False ###!!!
         
         self.data = DataHandler()
         
@@ -242,7 +243,7 @@ class JobHandler:
     
     
     
-    def populateVariablesFromCSV(self, day=None, reset_registry=True):
+    def populateVariablesFromCSV_OLD(self, day=None, reset_registry=True):
         """ For each variable in the csv_pointers dictionary this function will populate the variables with the requested window from their data backend """
         if reset_registry:
             self.resetVariableRegistry()
@@ -254,6 +255,23 @@ class JobHandler:
             self.variables[var_name].addTimeStep(self.data.getTimeRange(name=column_name, day=day))
         self.csv_variables_populated = True
             
+    def populateVariablesFromCSV(self, day=None, reset_registry=True):
+        """ For each variable in the csv_pointers dictionary this function will populate the variables with the requested window from their data backend """
+        if reset_registry:
+            self.resetVariableRegistry()
+            
+        for var_name, column_name in self.var_csv_pointers.items():
+            #Column name is of the form "CSV.name", we strip the first 4 characters
+            column_name = column_name[4:]
+            data, start_time, end_time, timestep = self.data.getColumn(column_name, day=day, as_array=True)
+            
+            var = self.variables[var_name]
+            var.values     = data
+            var.start_time = start_time
+            var.end_time   = end_time
+            var.timestep   = timestep
+            
+        self.csv_variables_populated = True
     
     def validateBasicVariables(self):
         """ Wrapper for calculation engine function of the same name, also updates the relevant flag """
@@ -273,13 +291,49 @@ class JobHandler:
         
     
     
-    def execute_prepro_at_once(self):
+    def execute(self, day, identifier=None):
+        if self.main is None:
+            raise ValueError("No main jobscript is provided to the job handler. Please provide a main function under JobHandler.main")
+        if not self.initialized_engines:
+            self.prepareEngines()
         
+        if not self.preprocessed:
+            t0 = time.time()
+            self.preprocessing(self)
+            self.data.blacklist = list(set(self.data.blacklist))
+            self.preprocessed = True
+            self.t_prepro += time.time() - t0
         
+        t0 = time.time()
         
+        if day in self.data.blacklist:
+            self.results.createRunResult(succeeded=False, identifier=identifier, fail_code="Prepro")
+            return
+        
+        self.populateVariablesFromCSV(day=day)
+        self.validateBasicVariables()
+        
+        self.t_treepop += time.time() - t0
+        
+        t0 = time.time()
+        #Execute job
+        success, fail_code = self.main(self, identifier=identifier)
+        if not success:
+            self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
+            self.csv_data = []
+            self.has_csv_data = False
+            self.t_main += time.time()-t0
+            return
+        
+        self.t_main += time.time()-t0
+        
+        t0 = time.time()
+        #Create run result
+        self.results.createRunResult(succeeded=True, identifier=identifier)
+        self.t_runresult += time.time()-t0
         return
     
-    def execute(self, day, identifier=None):
+    def execute_reg(self, day, identifier=None):
         """ Main job execution function, handles correct order of operations for preprocessing, storage of results and reinitializing the variable registry after completion """
         if self.main is None:
             raise ValueError("No main jobscript is provided to the job handler. Please provide a main function under JobHandler.main")
@@ -357,7 +411,6 @@ class JobHandler:
         """ Adds a pandas dataframe to the data backend """
         self.data.addDataFrame(df)
         
-    
     def addCSVData(self, csv):
         """ Adds CSVData object or list of CSVData objects to internal registry """
         self.csv_data.append(csv)

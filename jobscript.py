@@ -23,8 +23,28 @@ UTC_offset = pd.Timedelta(1, 'hour')
 ##############################################
 
 
+def preprocessing(handler):
+    handler.data.interpolateNaN("Pout")
+    handler.data.interpolateNaN("G")
+    handler.data.interpolateExtremeValues("T", value_limit=100)
+    
+    handler.data.cleanNonZeroToZenith("G", max_value=5.01, zenith_limit=100)
+
+    
+    handler.data.compareNaNToZenith("Pout", zenith_limit=80)
+    handler.data.compareNaNToZenith("G", zenith_limit=80)
+    handler.data.compareNonZeroToZenith("Pout", zenith_limit=100)
+    handler.data.compareNonZeroToZenith("G", zenith_limit=100)
+    handler.data.checkForExtremeValues("T", value_limit=100)
+    
+    handler.data.cleanAllNaN(new_value=0)
+    handler.data.cleanNegatives("Pout")
+    handler.data.cleanNegatives("G")
+    return True, None
+
+
 #Define the the data preprocessing steps to be carried out
-def preprocessing(handler, identifier=None):
+def preprocessing_old(handler, identifier=None):
     day=identifier
     #Initial missing value interpolation
     handler.data.interpolateNaN("Pout", day=day)
@@ -190,18 +210,25 @@ job.data.addDateColumn(df_index=0)
 job.data.addZenithColumn(coordinates, UTC_offset=UTC_offset, df_index=0)
 
 
+job.data.groupByDate(df_index=0)
+
+
+
+
+
 days = job.data.getDays(name="Pout")
 
 prep_time = time.time()-t0
 
 
 #import sys; sys.exit()
+
 t1 = time.time()
 
 #Loop through the data day-by-day and execute the job
 unique_days = days[:-1]
 for i, day in enumerate(unique_days):
-    if i>80: break
+    #if i>80: break
     print(day)
     #job.populateVariablesFromCSV(day=day)
     job.execute(day=day, identifier=day)
