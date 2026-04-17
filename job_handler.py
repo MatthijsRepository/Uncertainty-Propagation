@@ -165,6 +165,7 @@ class JobHandler:
         self.t_prepro  = 0
         self.t_treepop = 0
         self.t_main    = 0
+        self.t_runresult = 0
         
         self.data = DataHandler()
         
@@ -272,6 +273,12 @@ class JobHandler:
         
     
     
+    def execute_prepro_at_once(self):
+        
+        
+        
+        return
+    
     def execute(self, day, identifier=None):
         """ Main job execution function, handles correct order of operations for preprocessing, storage of results and reinitializing the variable registry after completion """
         if self.main is None:
@@ -291,6 +298,7 @@ class JobHandler:
                 self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
                 self.csv_data = []
                 self.has_csv_data = False
+                self.t_prepro += time.time()-t0
                 return
         self.t_prepro += time.time()-t0
         
@@ -300,7 +308,7 @@ class JobHandler:
         self.populateVariablesFromCSV(day=day)
         #self.csv_data = []
         #self.has_csv_data = False
-        
+
         #Validate basic variables
         self.validateBasicVariables()
         
@@ -313,12 +321,15 @@ class JobHandler:
             self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
             self.csv_data = []
             self.has_csv_data = False
+            self.t_main += time.time()-t0
             return
+        
         self.t_main += time.time()-t0
         
-        
+        t0 = time.time()
         #Create run result
         self.results.createRunResult(succeeded=True, identifier=identifier)
+        self.t_runresult += time.time()-t0
         return
         
     def _resolve_arg(self, arg):

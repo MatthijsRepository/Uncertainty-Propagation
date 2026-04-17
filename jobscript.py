@@ -192,8 +192,11 @@ job.data.addZenithColumn(coordinates, UTC_offset=UTC_offset, df_index=0)
 
 days = job.data.getDays(name="Pout")
 
+prep_time = time.time()-t0
+
 
 #import sys; sys.exit()
+t1 = time.time()
 
 #Loop through the data day-by-day and execute the job
 unique_days = days[:-1]
@@ -203,10 +206,18 @@ for i, day in enumerate(unique_days):
     #job.populateVariablesFromCSV(day=day)
     job.execute(day=day, identifier=day)
 print()
-    
 
-print(f"Total execution time: {time.time()-t0 }")
-print(f"Total preprocessing time: {job.t_prepro}, total main time: {job.t_main}")
+main_time = np.round(time.time()-t1, decimals=2)
+
+execution_time = np.round(time.time()-t0, decimals=2)
+print(f"Total execution time: {execution_time}")
+print(f"Total preparation time: {np.round(prep_time, decimals=2)} s - {np.round(prep_time/execution_time*100, decimals=2)} % ")
+print(f"Total preprocessing time: {np.round(job.t_prepro, decimals=2)} s - {np.round(job.t_prepro/execution_time*100, decimals=2)} % ")
+print(f"Total main time: {np.round(job.t_main, decimals=2)} s - {np.round(job.t_main/execution_time*100, decimals=2)} % ")
+print(f"Total population time: {np.round(job.t_treepop, decimals=2)} s - {np.round(job.t_treepop/execution_time*100, decimals=2)} % ")
+print(f"Total result time: {np.round(job.t_runresult, decimals=2)} s - {np.round(job.t_runresult/execution_time*100, decimals=2)} % ")
+print()
+print(f"Main time external: {main_time} s")
 print()
 
 job.results.summariseFails()

@@ -2,32 +2,49 @@ import numpy as np
 import pandas as pd
 
 
-        
+class DataSet:
+    def __init__(self, df, groups=None):
+        """ Container to couple a pandas df to precomputed groups for easy indexing based on e.g. dates """
+        self.df = df
+        self.groups = groups
+    
+  
 
 class DataHandler:
     def __init__(self):
-        self.dataframes   = []
-        self.lookup_dict  = {}
+        self.dataframes     = []  #Stores the dataframes and potentially their groupings as DataSet objects
+        self.lookup_dict    = {}  #Dictionary coupling variable names to a specific dataframe
         
-        self.blacklisted_days = {}
+        self.blacklisted_days = {} #Dictionary of blacklisted days and their reason
         
-    def addDataFrame(self, df):
+    def addDataFrame(self, df, index_by_date=True):
         """ Adds dataframe to internal registry """
         index = len(self.dataframes)
         df.df_index = index
         
-        self.dataframes.append(df)
-        
+        #Check if the column names do not already exist in the dataset
         for name in df.columns:
-            if name.lower()=="time" or name.lower()=="zenith" or name.lower()=="date":
+            if name.lower() in ["time", "date", "zenith"]:
                 continue
             if name in self.lookup_dict.keys():
                 raise ValueError(f"Data column of name {name} is doubly defined: in dataframe {self.lookup_dict[name]} and dataframe {index}.")
             self.lookup_dict[name] = index
             
-    def getDataFrame(self, name=None, coupled_name=None, df_index=None):
+        #Create dictionary of the dataframe and of groups used for indexing and add data to dataset
+        #data = {"df": df,
+        #        "groups": None}
+        #self.dataframes.append(df)
+        self.dataframes.append(DataSet(df))
+        
+        
+    #def setGrouping(self, df_index, groups):
+    #    """ Add a grouping to accompany a dataframe in the dataframe registry """
+    #    self.dataframes[df_index]["groups"] = groups
+    
+    def getDataFrame(self, name=None, coupled_name=None, df_index=None, return_index=False, return_dataset=False):
         """ Get dataframe from registry
             df_index > coupled_name > name  """
+        #Get the index of the data in self.dataframes
         if df_index is None:
             if coupled_name is not None:
                 df_index = self.lookup_dict.get(coupled_name)
@@ -35,23 +52,33 @@ class DataHandler:
                 df_index = self.lookup_dict.get(name)
         if df_index is None:
             raise ValueError(f"Failed to retrieve dataframe, no dataframe contains column {name} or {coupled_name}. Be aware that you cannot retrieve dataframes on columns named 'time' or 'date' or 'zenith'")
-        return self.dataframes[df_index]
+        
+        #If return index: return the index of the dataframe in self.dataframes
+        #Elif return groups: return the DataSet containing the df and the groups
+        #Else: return only the df
+        if return_index:
+            return df_index
+        elif return_dataset:
+            return self.dataframes[df_index]
+        else:
+            return self.dataframes[df_index].df
     
         
     def getColumnView(self, name, day=None, coupled_name=None, df_index=None):
         
-        df = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index)
+        dataset = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index, return_dataset=True)
         #Check if column exists
-        if not name in df.columns:
-            raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {df.columns}")
+        if not name in dataset.df.columns:
+            raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {dataset.df.columns}")
         
         ##If asked for specific days, check if date column exists
         if day is not None:
-            self.ensureDateColumn(df=df)
-            mask = df["Date"] == day
+            if dataset.groups is None:
+                self.groupByDate(dataset=dataset)
+            mask = dataset.groups[day]
         else:
-            mask = None
-        return df, mask
+            mask = slice(None)
+        return dataset.df, mask
         
             
     
@@ -138,7 +165,7 @@ class DataHandler:
         
         
     ############################
-    ### Routines for adding, ensuring or getting metadata columns
+    ### Routines for adding, ensuring or getting metadata
     ############################
     
     def blacklistDay(self, day, reason):
@@ -163,12 +190,30 @@ class DataHandler:
         self.ensureDateColumn(df)
         return df["Date"].unique()
     
+    
+    def groupByDate(self, dataset=None, name=None, coupled_name=None, df_index=None):
+        """ Create groupings by date for dataframe, for easy day-by-day accessing """
+        #Retrieve dataset object
+        if dataset is None:
+            dataset = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index, return_dataset=True)
+        #Ensure data has a Date column
+        self.ensureDateColumn(dataset.df)
+        #Compute groups and add these to main dataset
+        dataset.groups = dataset.df.groupby("Date").groups
+        
+        
+        
+        
+        
+        
+        
     def ensureDateColumn(self, df=None, df_index=None):
         """ Ensures a dataframe has a date column for indexing by days """
         if df is None:
             df = self.getDataFrame(df_index=df_index)
         if "Date" not in df.columns:
             self.addDateColumn(df=df)
+        
             
     def addDateColumn(self, df=None, df_index=None):
         """ Adds a date column, extracted from the datetime column. For easier subsetting by date. """
@@ -203,10 +248,9 @@ class DataHandler:
     
     
         
-    def deleteNaTAtEnds(self, df=None, df_index=None, col_name = "Time"):
-        """ Deletes any Not a Time rows from the start and end of the datasets, if present. """
-        if df is None:
-            df = self.getDataFrame(df_index=df_index)
+    def deleteNaTAtEnds(self, df, col_name = "Time"):
+        """ Deletes any Not a Time rows from the start and end of the datasets, if present.
+            Use this function with caution: deleting data will break any precomputed groupings by date, these must be recomputed """
         valid = df[col_name].notna()
         
         if not valid.any():
@@ -222,8 +266,8 @@ class DataHandler:
     def checkForValidValues(self, column_name, day=None): ###!!! needs revision
         """ Checks if the column contains any defined value except for 0 
             Returns True if there are any values inside the dataset"""
-        column = self.getColumn(column_name, day=day)
-        mask = np.isnan(column) | (column==0)
+        df, date_mask = self.getColumnView(column_name, day=day)
+        mask = np.isnan(df.loc[date_mask, column_name]) | (df.loc[date_mask, column_name]==0)
         return not np.all(mask)
         """
         mask = np.invert(np.isnan(self.data[column_name])) & (self.data[column_name] != 0)
@@ -235,9 +279,9 @@ class DataHandler:
         
     def checkForExtremeValues(self, column_name, value_limit, day=None):
         """ Checks if there is any case where the data assumes a value (in absolute terms) greater than the value limit, returns true if the data does not contain extreme values """
-        column = self.getColumn(column_name, day=day)
-        mask = ~np.isnan(column)
-        return not np.any(np.abs(column[mask]) > value_limit)
+        df, date_mask = self.getColumnView(column_name, day=day)
+        mask = ~np.isnan(df.loc[date_mask, column_name])
+        return not np.any(np.abs(df.loc[date_mask, column_name][mask]) > value_limit)
     
     
     def checkForNaNInBody(self, column_name, day, body_start_after=0):
