@@ -145,12 +145,9 @@ class UncertaintyEngine:
         
         uncertainty_mask = np.ones(n_values)
         if mask and var.is_maskable and not np.isscalar(var.values):
-            nz = np.nonzero(var.values)[0]
-            if len(nz)>0:
-                uncertainty_mask[:nz[0]] = 0  
-                uncertainty_mask[nz[-1]:] = 0
-                
-        
+            uncertainty_mask = np.zeros(n_values)
+            uncertainty_mask[np.nonzero(var.values)] = 1
+
         #Initialize the relevant objects using the direct uncertainty sources of this variable
         all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths = [], [], [], [], []
         for source in var.uncertainty.direct_uncertainty_sources:
