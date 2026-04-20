@@ -2,11 +2,6 @@ import numpy as np
 import pandas as pd
 
 
-class DataSet:
-    def __init__(self, df_index, groups):
-        """ Container to couple a pandas df to precomputed groups for easy indexing based on e.g. dates """
-        self.df_index = df_index
-        self.groups = groups
     
 class GroupInfo:
     def __init__(self, group, start_time, end_time, timestep):
@@ -15,17 +10,12 @@ class GroupInfo:
         self.end_time   = end_time
         self.timestep   = timestep
 
-
-
-
 class DataHandler:
     def __init__(self):
         self.dataframes     = {}  #Stores the dataframes and potentially their groupings as DataSet objects
         self.groups         = {}
         self.lookup_dict    = {}  #Dictionary coupling variable names to a specific dataframe
-        
-        self.blacklist      = []
-        self.blacklisted_days = {} #Dictionary of blacklisted days and their reason
+        self.blacklist      = {}  
         
     def addDataFrame(self, df, index_by_date=True):
         """ Adds dataframe to internal registry """
@@ -40,18 +30,9 @@ class DataHandler:
                 raise ValueError(f"Data column of name {name} is doubly defined: in dataframe {self.lookup_dict[name]} and dataframe {index}.")
             self.lookup_dict[name] = index
             
-        #Create dictionary of the dataframe and of groups used for indexing and add data to dataset
-        #data = {"df": df,
-        #        "groups": None}
         self.dataframes[index] = df
-        #self.dataframes.append(DataSet(df))
         
-        
-    #def setGrouping(self, df_index, groups):
-    #    """ Add a grouping to accompany a dataframe in the dataframe registry """
-    #    self.dataframes[df_index]["groups"] = groups
-    
-    def getDataFrame(self, name=None, coupled_name=None, df_index=None, return_index=False, return_dataset=False):
+    def getDataFrame(self, name=None, coupled_name=None, df_index=None, return_index=False):
         """ Get dataframe from registry
             df_index > coupled_name > name  """
         #Get the index of the data in self.dataframes
@@ -70,82 +51,8 @@ class DataHandler:
             return df_index
         else:
             return self.dataframes[df_index]
-        #elif return_dataset:
-        #    return self.dataframes[df_index]
-        #else:
-        #    return self.dataframes[df_index].df
     
-        
-    def getColumnView(self, name, day=None, coupled_name=None, df_index=None):
-        
-        dataset = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index, return_dataset=True)
-        #Check if column exists
-        if not name in dataset.df.columns:
-            raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {dataset.df.columns}")
-        
-        ##If asked for specific days, check if date column exists
-        if day is not None:
-            if dataset.groups is None:
-                self.groupByDate(dataset=dataset)
-            mask = dataset.groups[day]
-        else:
-            mask = slice(None)
-        return dataset.df, mask
-        
-            
-    
-    def getColumn_DEPRECATED(self, name, day=None, coupled_name=None, df_index=None, df=None, as_array=False):
-        """ Get data of name, potentially for selected days. Columns like 'time' or 'zenith' may be degenerate, so these can be retrieved using
-            'coupled_name', then the function returns the times of zenith angles corresponding to this column """
-        #Get correct dataframe
-        if df is None:
-            df = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index)
-        
-        #Check if column exists
-        if not name in df.columns:
-            raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {df.columns}")
-        
-        ##If asked for specific days, check if date column exists and return this   
-        if day is None:
-            data = df[name].copy()
-        else:
-            self.ensureDateColumn(df=df)
-            data = df.loc[df["Date"] == day, name].copy()
-        
-        #Potentially return data as numpy array
-        if as_array:
-            data = data.to_numpy()
-        return data
-    
-    
-    def getColumn_OLD(self, name, day=None, coupled_name=None, df_index=None, df=None, as_array=False, as_copy=False):
-        """ Get data of name, potentially for selected days. Columns like 'time' or 'zenith' may be degenerate, so these can be retrieved using
-            'coupled_name', then the function returns the times of zenith angles corresponding to this column """
-        #Get correct dataframe
-        if df is None:
-            df = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index)
-        
-        #Check if column exists
-        if not name in df.columns:
-            raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {df.columns}")
-        
-        ##If asked for specific days, check if date column exists and return this   
-        if day is None:
-            data = df[name]
-        else:
-            self.ensureDateColumn(df=df)
-            data = df.loc[df["Date"] == day, name]
-        
-        #Potentially return a copy of the data upon request, helps avoid accidentally mutating data in storage, at the cost of memory efficiency
-        if as_copy:
-            data = data.copy()
-        
-        #Potentially return data as numpy array
-        if as_array:
-            data = data.copy()      #!!! 
-            data = data.to_numpy()
-        return data
-    
+ 
     def getColumn(self, name, day=None, coupled_name=None, df_index=None, df=None, as_array=False, as_copy=False):
         """ Get data of name, potentially for selected days. Columns like 'time' or 'zenith' may be degenerate, so these can be retrieved using
             'coupled_name', then the function returns the times of zenith angles corresponding to this column """
@@ -166,8 +73,6 @@ class DataHandler:
         
         return data, start_time, end_time, timestep
         
-        
-    
     def setColumn(self, name, values, base_values=None, day=None, coupled_name=None, df_index=None, df=None):
         """ Set values of a column """
         #Get dataframe
@@ -202,9 +107,15 @@ class DataHandler:
     ### Routines for adding, ensuring or getting metadata
     ############################
     
-    def blacklistDay(self, day, reason):
-        """ Blacklist a day for a given reason """
-        self.blacklisted_days[day] = reason
+    def compileBlacklist(self): ###!!!
+        temp = {}
+        for code, days in self.blacklist.items():
+            for day in days:
+                entry = temp.get(day)
+                if entry is None:
+                    temp[day] = []
+                temp[day].append(code)
+        return temp
     
     def getTimeRange(self, name=None, day=None, df_index=None, df=None):
         """ Retrieve the timestamps of the first and last datapoints of the selected window """
@@ -225,18 +136,7 @@ class DataHandler:
         return df["Date"].unique()
     
     
-    def groupByDate_OLD(self, dataset=None, name=None, coupled_name=None, df_index=None):
-        """ Create groupings by date for dataframe, for easy day-by-day accessing """
-        #Retrieve dataset object
-        if dataset is None:
-            dataset = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index, return_dataset=True)
-        #Ensure data has a Date column
-        self.ensureDateColumn(dataset.df)
-        #Compute groups and add these to main dataset
-        dataset.groups = dataset.df.groupby("Date").groups
-        
-    
-    def groupByDate(self, df_index):
+    def groupByDate(self, df_index): ###!!!
         df = self.getDataFrame(df_index=df_index)
         self.ensureDateColumn(df)
         
@@ -253,8 +153,6 @@ class DataHandler:
         
         self.groups[df_index] = results
         
-        
-        
     def ensureDateColumn(self, df=None, df_index=None):
         """ Ensures a dataframe has a date column for indexing by days """
         if df is None:
@@ -262,7 +160,6 @@ class DataHandler:
         if "Date" not in df.columns:
             self.addDateColumn(df=df)
         
-            
     def addDateColumn(self, df=None, df_index=None):
         """ Adds a date column, extracted from the datetime column. For easier subsetting by date. """
         if df is None:
@@ -292,12 +189,7 @@ class DataHandler:
     ############################
     ### Routines for filtering and cleaning data
     ############################   
-    
-    
-    
-    
-    
-        
+
     def deleteNaTAtEnds(self, df, col_name = "Time"):
         """ Deletes any Not a Time rows from the start and end of the datasets, if present.
             Use this function with caution: deleting data will break any precomputed groupings by date, these must be recomputed """
@@ -310,8 +202,6 @@ class DataHandler:
         last_valid = valid[::-1].idxmax()
         
         return df.loc[first_valid:last_valid]
-        
-
 
     def checkForValidValues(self, column_name, day=None): ###!!! needs revision
         """ Checks if the column contains any defined value except for 0 
@@ -319,32 +209,17 @@ class DataHandler:
         df, date_mask = self.getColumnView(column_name, day=day)
         mask = np.isnan(df.loc[date_mask, column_name]) | (df.loc[date_mask, column_name]==0)
         return not np.all(mask)
-        """
-        mask = np.invert(np.isnan(self.data[column_name])) & (self.data[column_name] != 0)
-        if np.argmax(mask) == 0:
-            return False
-        else:
-            return True
-        """
         
     def checkForExtremeValues(self, column_name, value_limit, day=None):
-        """ Checks if there is any case where the data assumes a value (in absolute terms) greater than the value limit, returns true if the data does not contain extreme values """
-        
+        """ Checks if there is any case where the data assumes a value (in absolute terms) greater than the value limit, returns true if the data does not contain extreme values """        
         df = self.getDataFrame(column_name)
         self.ensureDateColumn(df=df)
         
         mask = df[column_name].abs() > value_limit
-        self.blacklist += list(df.loc[mask, "Date"].unique())
-        
-        print(f"Extreme {column_name} : {len(list(df.loc[mask, 'Date'].unique()))}")
-        
-        """df, date_mask = self.getColumnView(column_name, day=day)
-        mask = ~np.isnan(df.loc[date_mask, column_name])
-        return not np.any(np.abs(df.loc[date_mask, column_name][mask]) > value_limit)
-        """
+        self.blacklist[f"Extreme_{column_name}"] = list(df.loc[mask, "Date"].unique())
     
     
-    def checkForNaNInBody(self, column_name, day, body_start_after=0):
+    def checkForNaNInBody(self, column_name, day, body_start_after=0): ###!!!
         """ Checks if there are any NaN's or zeros in the body of a dataset. The body is defined to be the interval between the first non-zero value and the last non-zero value.
             Allows user to let the interval bounds to start after a certain amount of nonzero values have passed at both ends, to allow for alternating NaN and nonzero values at dawn and dusk. 
             Returns True if there are not any nan's or zeroes inside the body of the data. """
@@ -358,7 +233,6 @@ class DataHandler:
         
         return not np.any(mask[first_index:last_index])
     
-    
     def compareNaNToZenith(self, column_name, day=None, zenith_limit=85): 
         """ Checks if there are any nan's or zeroes in a column after the solar zenith angle is above a certain height
             Used to check whether a dataset contains undefined values during the day 
@@ -370,18 +244,7 @@ class DataHandler:
         self.ensureDateColumn(df=df)
         
         mask = (df[column_name].isna() | (df[column_name]==0)) & (df["zenith"] < zenith_limit)
-        self.blacklist += list(df.loc[mask, "Date"].unique())
-        
-        print(f"Nan to zenith of {column_name} : {len(list(df.loc[mask, 'Date'].unique()))}")
-        """
-        column = self.getColumn(name=column_name, day=day, df=df)
-        zenith = self.getColumn(name="zenith", day=day, df=df)
-        #True if the element is nan or 0
-        mask = (np.isnan(column) | (column == 0)) & (zenith < zenith_limit)
-        
-        return ~np.any(mask)
-        """
-        
+        self.blacklist[f"Nan_zenith_{column_name}"] = list(df.loc[mask, "Date"].unique())
     
     def cleanNonZeroToZenith(self, column_name, day=None, max_value=1.01, zenith_limit=100):
         """ Checks if the column is nonzero after the solar zenith angle is below a certain height
@@ -395,18 +258,6 @@ class DataHandler:
                 & (df[column_name] < max_value) 
                 & (df["zenith"] > zenith_limit) )
         df.loc[mask, column_name] = 0
-        
-        """
-        column = self.getColumn(name=column_name, day=day, df=df)
-        zenith = self.getColumn(name="zenith", day=day, df=df)
-        
-        mask = np.invert(np.isnan(column) | (column==0)) & (zenith > zenith_limit)
-        
-        mask = mask & (column < max_value)
-        column[mask] = 0
-        self.setColumn(column_name, column, day=day)
-        """
-        
     
     def compareNonZeroToZenith(self, column_name, day=None, zenith_limit=100):
         """ Checks if the column is nonzero after the solar zenith angle is below a certain height
@@ -419,16 +270,7 @@ class DataHandler:
         self.ensureDateColumn(df=df)
         
         mask = ~(df[column_name].isna() | (df[column_name]==0)) & (df["zenith"] > zenith_limit)
-        self.blacklist += list(df.loc[mask, "Date"].unique())
-        print(f"Nonzero to zenith of {column_name} : {len(list(df.loc[mask, 'Date'].unique()))}")
-        
-        """
-        column = self.getColumn(name=column_name, day=day, df=df)
-        zenith = self.getColumn(name="zenith", day=day, df=df)
-        
-        mask = np.invert(np.isnan(column) | (column==0)) & (zenith > zenith_limit)
-        return ~np.any(mask)
-        """
+        self.blacklist[f"Nonzero_zenith_{column_name}"] = list(df.loc[mask, "Date"].unique())
 
         
     def interpolateNaN(self, column_name, day=None, min_value=0, else_value=np.nan):
@@ -447,24 +289,8 @@ class DataHandler:
         
         df.loc[isolated & (interpolated_values > min_value), column_name] = interpolated_values
         df.loc[isolated & (interpolated_values < min_value), column_name] = else_value
-        """        
-        column = self.getColumn(name=column_name, day=day, as_array=True)
-        isnan = np.isnan(column)
-        isolated_nans = isnan & np.invert(np.roll(isnan, 1)) & np.invert(np.roll(isnan, -1))
-        indices = np.where(isolated_nans)[0]
-        
-        for idx in indices:
-            if idx in [0, len(column)-1]: 
-                continue
-            interpolation = (column[idx-1] + column[idx+1]) / 2
-            if interpolation>min_value:
-                column[idx] = interpolation
-            else:
-                column[idx] = else_value
-        self.setColumn(column_name, column, day=day)
-        """
     
-    def interpolateExtremeValues(self, column_name, value_limit, day=None):
+    def interpolateExtremeValues(self, column_name, value_limit):
         """ Interpolates isolated values that exceed (in absolute terms) the extreme_limit. Used to remove unphysical values from dataset """
         df = self.getDataFrame(column_name)
         
@@ -477,55 +303,24 @@ class DataHandler:
         
         df.loc[isolated, column_name] = interpolated_values
         
-        
-        """
-        column = self.getColumn(column_name, day=day, as_array=True)
-        extremes = np.where(np.abs(column)>value_limit)
-        isolated_extremes = extremes & np.invert(np.roll(extremes, 1)) & np.invert(np.roll(extremes, -1))
-        indices = np.where(isolated_extremes)[0]
-        
-        for idx in indices:
-            if idx in [0, len(column)-1]: 
-                continue
-            column[idx] = (column[idx-1] + column[idx+1]) / 2
-        self.setColumn(column_name, column, day=day)
-        """
-
-            
-    def cleanExtremeValues(self, column_name, value_limit=10000, new_value=np.nan, day=None):
+    def cleanExtremeValues(self, column_name, value_limit=10000, new_value=np.nan):
         """ Replaces extreme values by new value """
         df = self.getDataFrame(column_name)
         df.loc[df[column_name].abs() > value_limit, column_name] = new_value
         
-        """
-        column = self.getColumn(column_name, day=day, as_array=True)
-        column[np.where(np.abs(column)>value_limit)] = new_value
-        self.setColumn(column_name, column, day=day)
-        """
     
-    def cleanNegatives(self, column_name, new_value=0, day=None):
+    def cleanNegatives(self, column_name, new_value=0):
         """ Replaces negative values by specified value """
         df = self.getDataFrame(column_name)
         df.loc[df[column_name] < 0, column_name] = new_value
-        """
-        column = self.getColumn(column_name, day=day, as_array=True)
-        column[np.where(column<0)] = new_value
-        self.setColumn(column_name, column, day=day)
-        """
 
         
-    def cleanNaN(self, column_name, new_value, day=None):
+    def cleanNaN(self, column_name, new_value):
         """ Cleans NaN instances and replaces them by a new value. Replacement value can be manually specified """
         df = self.getDataFrame(column_name)
         df.loc[df[column_name].isna(), column_name] = new_value
-        
-        """
-        column = self.getColumn(column_name, day=day, as_array=True)
-        column[np.isnan(column)] = new_value
-        self.setColumn(column_name, column, day=day)
-        """
     
-    def cleanNaNAtNight(self, column_name, day):
+    def cleanNaNAtNight(self, column_name, day): ###!!!
         """ Cleans NaN's before and after the main day data to assume the first and last value of the data that is not NaN, respectively. """
         column = self.getColumn(column_name, day=day, as_array=True)
         #Identifiying start and end indices
@@ -538,18 +333,10 @@ class DataHandler:
         column[last:] = column[last]
         self.setColumn(column_name, column, day=day)
         
-    def cleanAllNaN(self, new_value=0, day=None):
+    def cleanAllNaN(self, new_value=0):
         """ Replaces all NaN's for the given time window by the new value """
         for df_index, df in self.dataframes.items():
             df.fillna(new_value, inplace=True)
-        
-        """
-        for name in self.lookup_dict.keys():
-            column = self.getColumn(name, day=day, as_array=True)
-            column[np.isnan(column)] = new_value
-            self.setColumn(name, column, day=day)
-        """
-            
     
     
 

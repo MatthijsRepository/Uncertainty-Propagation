@@ -1,11 +1,13 @@
-from input_handler_modules import EquationTreeReader, CSVHandler, PandasCSVHandler
+from input_handler_modules import EquationTreeReader, PandasCSVHandler
 from equation_engine import EquationEngine
 from calculation_engine import CalculationEngine
 from uncertainty_engine import UncertaintyEngine
 from time_engine import TimeEngine
 from datahandler import DataHandler
+
 import numpy as np
 import pandas as pd
+import time
 from dataclasses import dataclass
 from typing import Union, Optional
 
@@ -156,7 +158,7 @@ class Results:
             
             
 
-import time
+
 
 class JobHandler:
     def __init__(self):
@@ -166,14 +168,14 @@ class JobHandler:
         self.t_treepop = 0 ###!!!
         self.t_main    = 0 ###!!!
         self.t_runresult = 0 ###!!!
-        self.preprocessed = False ###!!!
+        
         
         self.data = DataHandler()
         
-        self.equation_engine = None
+        self.equation_engine    = None
         self.calculation_engine = None
         self.uncertainty_engine = None
-        self.time_engine = None
+        self.time_engine        = None
         
         self.preprocessing = None
         self.main = None
@@ -181,14 +183,17 @@ class JobHandler:
         self.variables = None
         self.derived_variables_names = None
         self.var_csv_pointers = None
-        self.csv_data = []
+        self.csv_data = [] ###!!!
+        
+        self.blacklist = {}
     
-        self.results = Results()
+        self.results = Results() ###!!!
         
         ##computational control flow booleans
         self.initialized_eq_tree       = False
         self.initialized_engines       = False
-        self.has_csv_data              = False
+        self.ready_for_execution       = False
+        self.has_csv_data              = False ###!!!
         self.basic_variables_validated = False
         self.csv_variables_populated   = False
         
@@ -240,21 +245,7 @@ class JobHandler:
         self.basic_variables_validated = False
         if len(self.var_csv_pointers) != 0:
             self.csv_variables_populated   = False
-    
-    
-    
-    def populateVariablesFromCSV_OLD(self, day=None, reset_registry=True):
-        """ For each variable in the csv_pointers dictionary this function will populate the variables with the requested window from their data backend """
-        if reset_registry:
-            self.resetVariableRegistry()
-            
-        for var_name, column_name in self.var_csv_pointers.items():
-            #Column name is of the form "CSV.name", we strip the first 4 characters
-            column_name = column_name[4:]
-            self.variables[var_name].values = self.data.getColumn(column_name, day=day, as_array=True)
-            self.variables[var_name].addTimeStep(self.data.getTimeRange(name=column_name, day=day))
-        self.csv_variables_populated = True
-            
+               
     def populateVariablesFromCSV(self, day=None, reset_registry=True):
         """ For each variable in the csv_pointers dictionary this function will populate the variables with the requested window from their data backend """
         if reset_registry:
@@ -286,34 +277,34 @@ class JobHandler:
     
     
     
-    def runDay(self, day):
-        self.populateVariablesFromCSV(day=day)
+    def prepareForExecution(self):
+        if not self.initialized_engines:
+            self.prepareEngines()
         
-    
+        if self.preprocessing is not None:
+            self.preprocessing(self)
+        self.blacklist = self.data.compileBlacklist()
+        
+        if self.main is None:
+            raise ValueError("No main jobscript is provided to the job handler. Please provide a main function under JobHandler.main")
+        
+        self.ready_for_execution = True
+        
     
     def execute(self, day, identifier=None):
-        if self.main is None:
-            raise ValueError("No main jobscript is provided to the job handler. Please provide a main function under JobHandler.main")
-        if not self.initialized_engines:
-            self.prepareEngines()
+        """ Main job execution function, handles correct order of operations for preprocessing, storage of results and reinitializing the variable registry after completion """
+        if not self.ready_for_execution:
+            self.prepareForExecution()
         
-        if not self.preprocessed:
-            t0 = time.time()
-            self.preprocessing(self)
-            self.data.blacklist = list(set(self.data.blacklist))
-            self.preprocessed = True
-            self.t_prepro += time.time() - t0
         
-        t0 = time.time()
-        
-        if day in self.data.blacklist:
-            self.results.createRunResult(succeeded=False, identifier=identifier, fail_code="Prepro")
+        preprocessing_error = self.blacklist.get(day)
+        if preprocessing_error is not None:
+            fail_code = preprocessing_error[0]
+            self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
             return
         
         self.populateVariablesFromCSV(day=day)
         self.validateBasicVariables()
-        
-        self.t_treepop += time.time() - t0
         
         t0 = time.time()
         #Execute job
@@ -333,59 +324,6 @@ class JobHandler:
         self.t_runresult += time.time()-t0
         return
     
-    def execute_reg(self, day, identifier=None):
-        """ Main job execution function, handles correct order of operations for preprocessing, storage of results and reinitializing the variable registry after completion """
-        if self.main is None:
-            raise ValueError("No main jobscript is provided to the job handler. Please provide a main function under JobHandler.main")
-        if not self.initialized_engines:
-            self.prepareEngines()
-        
-        #if not self.has_csv_data:
-        #    print("WARNING: trying to perform calculations while no CSV data appears to be loaded. Crash may occur.")
-        
-        t0 = time.time()
-        #Perform the data preprocessing
-        if self.preprocessing is not None:
-            success, fail_code = self.preprocessing(self, identifier=identifier)
-            #If preprocessing failed, we log this in the results, we also clear the loaded csv data
-            if not success:
-                self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
-                self.csv_data = []
-                self.has_csv_data = False
-                self.t_prepro += time.time()-t0
-                return
-        self.t_prepro += time.time()-t0
-        
-        t0 = time.time()
-        
-        #Populate variables using loaded CSV data, and subsequently dump the csv data
-        self.populateVariablesFromCSV(day=day)
-        #self.csv_data = []
-        #self.has_csv_data = False
-
-        #Validate basic variables
-        self.validateBasicVariables()
-        
-        self.t_treepop += time.time() - t0
-        
-        t0 = time.time()
-        #Execute job
-        success, fail_code = self.main(self, identifier=identifier)
-        if not success:
-            self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
-            self.csv_data = []
-            self.has_csv_data = False
-            self.t_main += time.time()-t0
-            return
-        
-        self.t_main += time.time()-t0
-        
-        t0 = time.time()
-        #Create run result
-        self.results.createRunResult(succeeded=True, identifier=identifier)
-        self.t_runresult += time.time()-t0
-        return
-        
     def _resolve_arg(self, arg):
         """ Replaces function argument string referring to function attribute by the value of this attribute at time of calling """
         if isinstance(arg, str) and arg.startswith("var."):
@@ -395,12 +333,7 @@ class JobHandler:
                 obj = getattr(obj, attr)
             return obj
         return arg
-    
-    #def _resolve_args(self, args):
-    #    if not isinstance(args, tuple):
-    #        return self._resolve_arg(args)
-    #    return tuple(self._resolve_arg(arg) for arg in args)
-    
+        
     def resolve_args(self, args):
         """ Resolves all function arguments such that strings are replaced by attributes they refer to """
         if not isinstance(args, tuple):
@@ -424,115 +357,7 @@ class JobHandler:
         """ print result of name 'name' from the result storage """
         print(self.results.get(name))
     
-    #################################################################
-    
-    
-    
-    
-    def callPreprocessingStep(self, method_name, column_name, *args, **kwargs):
-        found = False
-        for csv in self.csv_data:
-            if column_name in csv.data.keys():
-                found = True
-                method = getattr(csv, method_name, None)
-                if method is None:
-                    raise ValueError(f"CSVData does not have a method named {method_name}.")
-                return method(column_name, *args, **kwargs), f"{column_name}_{method_name}"
-        if not found:
-            raise ValueError(f"Tried to perform NaN to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
-    
-    
-    
-    def checkForExtremeValues(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.compareNaNToZenith function, used for data consistency checking """
-        found = False
-        for csv in self.csv_data:
-            if column_name in csv.data.keys():
-                found = True
-                return csv.checkForExtremeValues(column_name, *args, **kwargs), f"{column_name}_Extreme_Values"
-        if not found:
-            raise ValueError(f"Tried to perform NaN to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
-    
-    def compareNaNToZenith(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.compareNaNToZenith function, used for data consistency checking """
-        found = False
-        for csv in self.csv_data:
-            if column_name in csv.data.keys():
-                found = True
-                return csv.compareNaNToZenith(column_name, *args, **kwargs), f"{column_name}_NaN_to_Zenith"
-        if not found:
-            raise ValueError(f"Tried to perform NaN to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
-    
-    def compareNonZeroToZenith(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.compareNonZeroToZenith function, used for data consistency checkingb """
-        found = False
-        for csv in self.csv_data:
-            if column_name in csv.data.keys():
-                found = True
-                return csv.compareNonZeroToZenith(column_name, *args, **kwargs), f"{column_name}_Nonzero_to_Zenith"
-        if not found:
-            raise ValueError(f"Tried to perform nonzero to zenith comparison for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
-    
-    def interpolateNaN(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.interpolateNaN function for data preprocessing """
-        found = False
-        for csv in self.csv_data:
-            if column_name in csv.data.keys():
-                found = True
-                csv.interpolateNaN(column_name, *args, **kwargs)
-                break
-        if not found:
-            raise ValueError(f"Tried to perform NaN interpolation for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
-            
-    def interpolateExtremeValues(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.interpolateExtremeValues function for data preprocessing """
-        found = False
-        for csv in self.csv_data:
-            if column_name in csv.data.keys():
-                found = True
-                csv.interpolateExtremeValues(column_name, *args, **kwargs)
-                break
-        if not found:
-            raise ValueError(f"Tried to perform extreme value interpolation for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
 
-    def cleanNegatives(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.cleanNegatives function for data preprocessing """
-        found = False
-        for csv in self.csv_data:
-            if column_name in csv.data.keys():
-                found = True
-                csv.cleanNegatives(column_name, *args, **kwargs)
-                break
-        if not found:
-            raise ValueError(f"Tried to perform negative cleaning for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
-    
-    def cleanNaN(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.cleanNaN function for data preprocessing """
-        found = False
-        for csv in self.csv_data:
-            if column_name in csv.data.keys():
-                found = True
-                csv.cleanNaN(column_name, *args, **kwargs)
-                break
-        if not found:
-            raise ValueError(f"Tried to perform negative cleaning for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
-    
-    def cleanNaNAtNight(self, column_name, *args, **kwargs):
-        """ Wrapper for CSVData.cleanNaNAtNight function for data preprocessing """
-        found = False
-        for csv in self.csv_data:
-            if column_name in csv.data.keys():
-                found = True
-                csv.cleanNaNAtNight(column_name, *args, **kwargs)
-                break
-        if not found:
-            raise ValueError(f"Tried to perform NaN at night cleaning for {column_name}, but {column_name} was not found as an entry in the loaded csv data.")
-    
-    def cleanAllNaN(self, *args, **kwargs):
-        """ Executes nan cleaning for all loaded csv's """
-        for csv in self.csv_data:
-            csv.cleanAllNaN(*args, **kwargs)
-    
     #################################################################
     
     def store(self, name, arg):
