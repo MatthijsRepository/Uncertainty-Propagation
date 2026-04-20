@@ -225,7 +225,21 @@ class UncertaintyEngine:
             all_total_upsample_factors = [1 for _ in all_total_upsample_factors]
         #Pass on the package
         return all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
-        
+    
+    def _calculateUncertaintyAggregation(self, weighted_uncertainties, source):
+        """ Performs the aggregation calculation of uncertainty timeseries data. Function catches trivial instances to avoid matrix unnecessary matrix calculations.
+            Aggregation is performed on the last axis of the weigthed_uncertainties array, which is allowed to be 2D. This allows to vectorize partial aggregations over the first axis. """
+        #Check for trivial instances, 0 or 1 autocorrelation
+        if isinstance(source.correlation, (float, int)):
+            if source.correlation == 0:
+                return np.sqrt(np.sum(weighted_uncertainties**2, axis=-1))
+            if source.correlation == 1:
+                return np.sum(weighted_uncertainties, axis=-1)
+        #If case is not trivial, build correlation matrix of correct size and calculate the vector-matrix-vector product
+        size = np.shape(weighted_uncertainties)[-1]
+        corr_matrix = source.getCorrelationMatrix(size)
+        return np.sqrt(np.vecdot(weighted_uncertainties, np.matvec(corr_matrix, weighted_uncertainties)))
+    
     def timeSumWeightedRootUncertainties(self, calling_var, sources, weighted_uncertainties, local_upsample_factors, propagation_paths):
         """ This function performs a full timesum of the uncertainty of all root sources while keeping it split by source
             Temporal autocorrelation is included. Cross-correlation between sources is not included - sources are assumed independent """
@@ -249,8 +263,7 @@ class UncertaintyEngine:
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-(j+1)] 
             
             #Perform the time aggregation
-            corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
-            result = np.sqrt(np.vecdot(weighted_uncertainties[i], np.matvec(corr_matrix, weighted_uncertainties[i])))
+            result = self._calculateUncertaintyAggregation(weighted_uncertainties[i], source)
             
             #Handle rules for the calling timesum
             if calling_var.aggregation_rule.startswith("ave"):
@@ -261,7 +274,6 @@ class UncertaintyEngine:
             #Apply correction factor                
             result *= aggregation_correction_factor
             new_weighted_uncertainties.append(result)
-            
         return new_weighted_uncertainties
                  
     def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors, 
@@ -294,11 +306,11 @@ class UncertaintyEngine:
                     #Here we do not skip the last step, hence we index with j
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
             
-            #Building correlation matrix and uncertainty vector
-            corr_matrix = source.getCorrelationMatrix(factor)
-            wu = weighted_uncertainties[i].reshape((-1, factor))
             #Calculate new uncertainties, append to list
-            result = np.sqrt(np.vecdot(wu, np.matvec(corr_matrix, wu)))
+            wu = weighted_uncertainties[i].reshape((-1, factor))
+            result = self._calculateUncertaintyAggregation(wu, source)
+            
+            #Apply correction factor, append to lists
             result *= aggregation_correction_factor
             new_weighted_uncertainties.append(result)
             
