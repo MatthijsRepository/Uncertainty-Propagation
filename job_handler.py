@@ -307,25 +307,6 @@ class JobHandler:
         self.basic_variables_validated = False
         if len(self.var_backend_pointers) != 0:
             self.backend_variables_populated = False
-               
-    def populateVariablesFromBackend_DEPRECATED(self, day=None, reset_registry=True):
-        """ For each variable in the backend_pointers dictionary this function will populate the variables with the requested window from their data backend """
-        if reset_registry:
-            self.resetVariableRegistry()
-            
-        for var_name, column_name in self.var_backend_pointers.items():
-            #Column name is of the form "CSV.name", we strip the first 4 characters
-            column_name = column_name[4:]
-            data, start_time, end_time, timestep = self.data.getColumn_DEPRECATED(column_name, day=day, as_array=True)
-            
-            var = self.variables[var_name]
-            var.values     = data
-            var.start_time = start_time
-            var.end_time   = end_time
-            var.timestep   = timestep
-            
-        self.backend_variables_populated = True
-        
         
     def populateVariablesFromBackend(self, day=None, blacklist=[], reset_registry=True):
         """ For each variable in the backend_pointers dictionary this function will populate the variables with the requested window from their data backend """
@@ -333,16 +314,27 @@ class JobHandler:
             self.resetVariableRegistry()
             
         for var_name, column_name in self.var_backend_pointers.items():
-            #Column name is of the form "CSV.name", we strip the first 4 characters
+            #column_name is either CSV.column_name or CSV.coupled_name.column_name
+            #column_name is of the form "CSV.___", we strip the first 4 characters
             column_name = column_name[4:]
-            data, start_time, end_time, timestep = self.data.getColumn(column_name, day=day, as_array=True, blacklist=blacklist)
+            #Split coupled and column names
+            parts = column_name.split(".")
+            if len(parts)>1:
+                column_name  = parts[1]
+                coupled_name = parts[0]
+            else:
+                column_name  = parts[0]
+                coupled_name = None
             
+            data, start_time, end_time, timestep = self.data.getColumn(name         = column_name, 
+                                                                       coupled_name = coupled_name, 
+                                                                       day          = day, 
+                                                                       as_array     = True, 
+                                                                       blacklist    = blacklist)
             var = self.variables[var_name]
             var.values     = data
-            var.start_time = start_time
-            var.end_time   = end_time
-            var.timestep   = timestep
-            
+            var.setTimeData((start_time, end_time, timestep))
+        
         self.backend_variables_populated = True
 
     def validateBasicVariables(self):
@@ -356,8 +348,8 @@ class JobHandler:
         self.basic_variables_validated = True
         return
     
-    
     def prepareForExecution(self):
+        ###!!!
         if not self.initialized_engines:
             self.prepareEngines()
         
@@ -370,11 +362,8 @@ class JobHandler:
         
         self.ready_for_execution = True
         
-    
-
-    
     def _blacklistResolver(self, day, blacklist_mode):
-        
+        ###!!!        
         #Handle the 'fail' blacklist mode
         if blacklist_mode == "fail":
             #Day is None
