@@ -142,14 +142,12 @@ class CalculationEngine:
         #Here we catch shape mismatches in case of trivial derivatives that evaluate to a constant. 
         #In this case the partial derivatives may not match the shape of the dependency in question. These shapes must match for the uncertainty calculation
         #We must extract the expected length from the inputs. The args list follows the same order as the dependency_names list, so we can use the same index
-        
         if np.isscalar(calculated_values):
             target_length = len(args[var.dependency_names.index(dep_name)])
-            
             if target_length > 1:
                 calculated_values = np.full(target_length, calculated_values, dtype=float)
         
-        #In case of a trivial equation, calculated values will be a Variable object. Here we fix that
+        #In case of a trivial equation, calculated values will be a Variable object. Here we ensure we return numerical values.
         if isinstance(calculated_values, Variable):     ###!!! change this to be handled through an equation engine wrapper
             calculated_values = calculated_values.values
         
