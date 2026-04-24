@@ -29,7 +29,6 @@ def preprocessing(handler):
     handler.data.interpolateExtremeValues("T", value_limit=100)
     
     handler.data.cleanNonZeroToZenith("G", max_value=5.01, zenith_limit=100)
-
     
     handler.data.compareNaNToZenith("Pout", zenith_limit=80)
     handler.data.compareNaNToZenith("G", zenith_limit=80)
@@ -42,75 +41,6 @@ def preprocessing(handler):
     handler.data.cleanNegatives("G")
     return True, None
 
-
-#Define the the data preprocessing steps to be carried out
-def preprocessing_old(handler, identifier=None):
-    day=identifier
-    #Initial missing value interpolation
-    handler.data.interpolateNaN("Pout", day=day)
-    handler.data.interpolateNaN("G", day=day)
-    handler.data.interpolateExtremeValues("T", value_limit=100, day=day)
-    
-    handler.data.cleanNonZeroToZenith("G", day=day, max_value=5.01, zenith_limit=100)
-
-
-    #Consistency checks    
-    #success, error_code = handler.data.compareNaNToZenith("Pout", day, zenith_limit=80)
-    success = handler.data.compareNaNToZenith("Pout", day, zenith_limit=80)
-    if not success:
-        
-        """
-        Pout = handler.data.getColumn("Pout", day=day, as_array=True)
-        zenith = handler.data.getColumn("zenith", day=day, df_index=0, as_array=True)
-        fig, ax = plt.subplots()
-        ax.plot(Pout/245)
-        ax.plot((90-zenith)/90)
-        ax.hlines((90-80)/90, xmin=0, xmax=len(zenith))
-        plt.show()
-        """
-        
-        error_code = "NaNtoZenith_Pout"
-        #handler.cleanNaN("Pout", new_value=245)
-        #data = handler.getCSVColumn("Pout")
-        #zenith = handler.getCSVColumn("zenith") ###!!!
-        
-        #plt.hlines((90-zen_lim) / 90, 0, 1440)
-        #plt.plot(data/245)
-        #plt.plot( (90 - zenith) / 90)
-        #plt.grid()
-        #plt.ylim(-0.8, 1.2)
-        #plt.show()
-        return success, error_code
-    
-    #success, error_code = handler.data.compareNaNToZenith("G", day=day, zenith_limit=80)
-    success = handler.data.compareNaNToZenith("G", day=day, zenith_limit=80)
-    if not success:
-        error_code = "NanToZenith_G"
-        return success, error_code
-    
-    #success, error_code = handler.data.compareNonZeroToZenith("Pout", day=day, zenith_limit=100)
-    success = handler.data.compareNonZeroToZenith("Pout", day=day, zenith_limit=100)
-    if not success:
-        error_code = "NonzeroToZenith_Pout"
-        return success, error_code
-    
-    #success, error_code = handler.data.compareNonZeroToZenith("G", day=day, zenith_limit=100)
-    success = handler.data.compareNonZeroToZenith("G", day=day, zenith_limit=100)
-    if not success:
-        error_code = "NonzeroToZenith_G"
-        return success, error_code
-    
-    #success, error_code = handler.data.checkForExtremeValues("T", day=day, value_limit=100)
-    success = handler.data.checkForExtremeValues("T", day=day, value_limit=100)
-    if not success:
-        error_code = "Extreme_T"
-        return success, error_code    
-        
-    #Final data cleaning    
-    handler.data.cleanAllNaN(new_value=0, day=day)
-    handler.data.cleanNegatives("Pout", day=day)
-    handler.data.cleanNegatives("G", day=day)
-    return True, None
 
 #Define the main calculation procedure
 def main(handler, identifier=None):
@@ -210,33 +140,45 @@ job.data.addDateColumn(df_index=0)
 job.data.addZenithColumn(coordinates, UTC_offset=UTC_offset, df_index=0)
 
 
+print("NOTE: zenith handling in uncertainty calculation not yet implemented")
+print("NOTE: implement greater than or less than modes for cleaning to zenith funcs, set defaults as the practical case")
+print("NOTE: implement check if group by date has been performed to avoid crashes in job.data.getColumn")
+
 job.data.groupByDate(df_index=0)
 
 
 
 
-
 days = job.data.getDays(name="Pout")
+unique_days = days[:-1]
+
 
 prep_time = time.time()-t0
 
 
-#import sys; sys.exit()
+
+job.execute(identifier="year", blacklist_mode="mask", results_group="year")
+
+res = job.results.getResult(identifier="year", group="year")
+print()
+print("Year results:")
+print(f"PR  : {np.round( res.data['PR values'], decimals=5)} +/- {np.round( res.data['PR uncertainty']*2, decimals=5)} (k=2)")
+print(f"PR_T: {np.round( res.data['PR T values'], decimals=5)} +/- {np.round( res.data['PR T uncertainty']*2, decimals=5)} (k=2)")
+print()
 
 t1 = time.time()
 
 #Loop through the data day-by-day and execute the job
-unique_days = days[:-1]
 for i, day in enumerate(unique_days):
     #if i>80: break
-    print(day)
-    #job.populateVariablesFromCSV(day=day)
-    job.execute(day=day, identifier=day)
+    #print(day)
+    job.execute(day=day, identifier=day, blacklist_mode="fail")
 print()
 
-main_time = np.round(time.time()-t1, decimals=2)
 
+main_time = np.round(time.time()-t1, decimals=2)
 execution_time = np.round(time.time()-t0, decimals=2)
+
 print(f"Total execution time: {execution_time}")
 print(f"Total preparation time: {np.round(prep_time, decimals=2)} s - {np.round(prep_time/execution_time*100, decimals=2)} % ")
 print(f"Total preprocessing time: {np.round(job.t_prepro, decimals=2)} s - {np.round(job.t_prepro/execution_time*100, decimals=2)} % ")
@@ -288,7 +230,7 @@ plt.errorbar(x=success_identifiers, y=PR_T_array*100, yerr=2*PR_T_u_array*100, l
 
 plt.ylim(60,120)
 plt.ylabel("PR [%]")
-plt.xlabel("Succesful run no.")
+plt.xlabel("Date")
 plt.legend()
 plt.grid()
 plt.show()
