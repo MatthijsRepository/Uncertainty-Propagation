@@ -1,4 +1,9 @@
 input BASIC VARIABLES
+	var zenith
+		value: CSV.G.zenith
+		timestep: CSV
+		aggregation: average
+	end var zenith
 	var certain_G
 		value: CSV.G
 		timestep: CSV
@@ -10,9 +15,6 @@ input BASIC VARIABLES
 		description: Ambient temperature
 		aggregation: average
 		maskable: False
-		#UNCERTAINTIES:
-		#	-temperature uncertainty: absolute, shape=normal, symmetric, correlation=1, sigma=0.5, include=True
-		#end UNCERTAINTIES
 	end var T
 	var W_speed
 		value: CSV.W
@@ -51,7 +53,6 @@ input BASIC VARIABLES
 		rate over time: True
 		UNCERTAINTIES:
 			-datalogger accuracy: 	absolute, shape=rectangular, symmetric, correlation=1, bound=10, include=True
-			-testUncertainty: 	absolute, shape=rectangular, symmetric, correlation=1, bound=0, include=False
 		END UNCERTAINTIES
 	end var V
 	var P0
@@ -92,10 +93,7 @@ input DERIVED VARIABLES
 			-zero off-set A: 			absolute, shape=rectangular, one-sided, correlation=1, bound=7
 			-zero off-set B: 			absolute, shape=rectangular, symmetric, correlation=1, bound=2
 			-zero off-set other sources: 		absolute, shape=rectangular, symmetric, correlation=1, bound=1
-			#-directional response: 			absolute, shape=rectangular, symmetric, correlation=1, bound=10, multiplier=sin(pi*'zenith'/180)
-			#-directional response: 			relative, shape=rectangular, symmetric, correlation=1, bound=10, multiplier=1/(10 * cos(pi*'zenith'/180))
-			#-directional response: 			absolute, shape=rectangular, symmetric, correlation=1, bound=10, multiplier='G'/(1000 * cos(pi*'zenith'/180))
-			-directional response: 			absolute, shape=rectangular, symmetric, correlation=1, bound=10
+			-directional response: 			absolute, shape=rectangular, symmetric, correlation=1, bound=10, multiplier='G'/(1000 * cos(pi*'zenith'/180))
 			-additional signal processing errors: 	absolute, shape=rectangular, symmetric, correlation=1, bound=2
 		END UNCERTAINTIES
 	end eq G
