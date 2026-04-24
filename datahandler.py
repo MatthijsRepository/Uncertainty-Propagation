@@ -13,9 +13,9 @@ class GroupInfo:
 class DataHandler:
     def __init__(self):
         self.dataframes     = {}  #Stores the dataframes and potentially their groupings as DataSet objects
-        self.groups         = {}
+        self.groups         = {}  #Stores grouping information (typically by date) of the dataframes for easy by-day access, keys identical to those of dataframes
         self.lookup_dict    = {}  #Dictionary coupling variable names to a specific dataframe
-        self.blacklist      = {}  
+        self.blacklist      = {}  #Dictionary populated by preprocessing functions, blacklisting days for certain reasons
         
     def addDataFrame(self, df, index_by_date=True):
         """ Adds dataframe to internal registry """
@@ -44,9 +44,7 @@ class DataHandler:
         if df_index is None:
             raise ValueError(f"Failed to retrieve dataframe, no dataframe contains column {name} or {coupled_name}. Be aware that you cannot retrieve dataframes on columns named 'time' or 'date' or 'zenith'")
         
-        #If return index: return the index of the dataframe in self.dataframes
-        #Elif return groups: return the DataSet containing the df and the groups
-        #Else: return only the df
+        #If return index: return the index of the dataframe in self.dataframes, Else: return only the df
         if return_index:
             return df_index
         else:
@@ -81,10 +79,13 @@ class DataHandler:
             raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {df.columns}")
         
         if day is not None:
+            self.ensureGroupedByDate(df_index)
+            
             group_data = self.groups[df_index][day]
             data       = df.loc[group_data.group, name].to_numpy()
             if day in blacklist:
                 data   = np.zeros(len(data))
+            
             start_time = group_data.start_time
             end_time   = group_data.end_time
             timestep   = group_data.timestep
@@ -168,6 +169,13 @@ class DataHandler:
         self.ensureDateColumn(df)
         return df["Date"].unique()
     
+    
+    def ensureGroupedByDate(self, df_index):
+        """ Ensures a dataframe is grouped by date """
+        if self.groups.get(df_index) is not None:
+            return
+        else:
+            self.groupByDate(df_index)
     
     def groupByDate(self, df_index): ###!!!
         df = self.getDataFrame(df_index=df_index)
