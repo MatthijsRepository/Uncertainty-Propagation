@@ -51,9 +51,25 @@ class DataHandler:
             return df_index
         else:
             return self.dataframes[df_index]
-    
- 
-    def getColumn(self, name, day=None, coupled_name=None, df_index=None, df=None, as_array=False, as_copy=False):
+           
+    def setColumn(self, name, values, base_values=None, day=None, coupled_name=None, df_index=None, df=None):
+        """ Set values of a column """
+        #Get dataframe
+        if df is None:
+            df = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index)
+        
+        #Create column if it does not exist yet
+        if name not in df.columns:
+            self.createColumn(name, base_values=base_values, df=df)
+        
+        #Set values
+        if day is None:
+            df[name] = values
+        else:
+            self.ensureDateColumn(df=df)
+            df.loc[df["Date"] == day, name] = values
+            
+    def getColumn(self, name, day=None, coupled_name=None, df_index=None, df=None, as_array=False, as_copy=False, blacklist=[]):
         """ Get data of name, potentially for selected days. Columns like 'time' or 'zenith' may be degenerate, so these can be retrieved using
             'coupled_name', then the function returns the times of zenith angles corresponding to this column """
         #Get correct dataframe
@@ -64,13 +80,26 @@ class DataHandler:
         if not name in df.columns:
             raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {df.columns}")
         
-        group_data = self.groups[df_index][day]
-        
-        data       = df.loc[group_data.group, name].to_numpy()
-        start_time = group_data.start_time
-        end_time   = group_data.end_time
-        timestep   = group_data.timestep
-        
+        if day is not None:
+            group_data = self.groups[df_index][day]
+            data       = df.loc[group_data.group, name].to_numpy()
+            if day in blacklist:
+                data   = np.zeros(len(data))
+            start_time = group_data.start_time
+            end_time   = group_data.end_time
+            timestep   = group_data.timestep
+        else:
+            #Create mask for the blacklisted days
+            mask = df["Date"].isin(blacklist)
+            #Ensure no data is destroyed, mask values of a copy
+            data = df[name].copy()
+            data[mask] = 0
+            data = data.to_numpy()
+            
+            times      = df["Time"]
+            start_time = times.iloc[0]
+            end_time   = times.iloc[-1]
+            timestep   = pd.Timedelta.total_seconds(times.iloc[1] - times.iloc[0])
         return data, start_time, end_time, timestep
         
     def setColumn(self, name, values, base_values=None, day=None, coupled_name=None, df_index=None, df=None):
@@ -92,6 +121,10 @@ class DataHandler:
             
     def createColumn(self, name, base_values=None, coupled_name=None, df_index=None, df=None):
         """ Creates a column 'name' and sets values to 'base_values' """
+        #Check if the name is already in the lookup dictionary
+        if self.lookup_dict.get(name) is not None:
+            raise ValueError(f"Column of name {name} already present in dataframe: {self.lookup_dict.get(name)}.")
+        #Retrieve dataframe
         if df is None:
             df = self.getDataFrame(name=None, coupled_name=coupled_name, df_index=df_index)
         if base_values is None:
