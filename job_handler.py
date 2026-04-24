@@ -20,17 +20,48 @@ class RunResult:
     data: dict                   #Stores results of the run
     fail_code: Optional(str)    #Stores which datacheck caused preprocessing to fail
     
+    def __str__(self):
+        temp = f"Run identifier: {self.identifier} \nRun succeeded: {self.succeeded}\n"
+        if not self.succeeded:
+            temp += f"Error code: {self.fail_code}\n"
+        temp += f"Data fields: {list(self.data.keys())}"
+        return temp
+    
     
 class Results:
     """ Stores all run results, as well as the staged data to be turned into the next run result """
     def __init__(self):
-        self.num_runs           = 0             #Stores the number of runs this result object contains
-        self.run_identifiers    = []            #For each run, can be used to an identifier (such as the date)
-        self.run_results        = []            #Stores RunResult object for each run
+        self.groups = {
+            "default": {
+                "run_results"     : [],
+                "run_identifiers" : [],
+                "num_runs"        : 0}
+            }
+        
+        #self.num_runs           = 0             #Stores the number of runs this result object contains
+        #self.run_identifiers    = []            #For each run, can be used to an identifier (such as the date)
+        #self.run_results        = []            #Stores RunResult object for each run
         self.unique_results     = {}            #Stores results that only need to be stored once
         #self.averages_effective_lengts = {}     #Stores effective lengths N for data that is stored as average: A -> (A*(N-1) + value)/N for the N'th result
         self.staged_data        = {}           #Staged data dictionary to be populated in the present run
-        
+       
+    def _createGroup(self, name):
+        ###!!!
+        #Check if group name exists already
+        if self.groups.get(name) is not None:
+            raise ValueError("Error creating new results group: group name {name} already taken. Please check result-writing workflow.")
+        self.groups[name] = {
+            "run_results"     : [],
+            "run_identifiers" : [],
+            "num_runs"        : 0}
+    
+    def _getGroup(self, name):
+        ###!!!
+        group = self.groups.get(name)
+        if group is None:
+            raise ValueError("Results group '{name}' does not exist.")
+        return group
+    
     def add(self, key: str, value):
         """ Append a new result to the staged data for a given key, automatically creates a field for the key if it does not exist yet """
         if key not in self.staged_data:
@@ -42,29 +73,58 @@ class Results:
             column = list(column)
         column.append(value)
                 
-    def createRunResult(self, succeeded=True, identifier=None, fail_code=None):
+    def createRunResult(self, succeeded=True, identifier=None, fail_code=None, group="default"):
         """ Compiles a RunResult object for the given run, resets the staged data dictionary """
-        if identifier is None:
-            identifier = self.num_runs
+        #Retrieve results group        
+        if self.groups.get(group) is None:
+            self._createGroup(group)
+        group = self.groups.get(group)
         
+        #Define identifier is none is given
+        if identifier is None:
+            identifier = group["num_runs"]
+        
+        #Compile result from staged data
         result = RunResult(identifier   = identifier,
                            succeeded    = succeeded,
                            data         = self.staged_data,
                            fail_code    = fail_code)
-        self.run_results.append(result)
-        
-        self.run_identifiers.append(identifier)
+        #Clear staged data
         self.staged_data = {}
-        self.num_runs    += 1
-    
+        
+        #Append result to group
+        group["run_results"].append(result)
+        group["run_identifiers"].append(identifier)
+        group["num_runs"] += 1
+
+
+    def getResult(self, identifier=None, index=None, group="default"):
+        ###!!!
+        group = self._getGroup(group)
+        
+        if not ( (identifier is None) ^ (index is None)):
+            raise ValueError("Cannot get result: provide either an identifier or an index, not both.")
+
+        #Get index of the identifier        
+        if identifier is not None:
+            index = np.where(np.array(group["run_identifiers"]) == identifier)[0][0]
+        
+        if index > len(group["run_results"]):
+            raise ValueError(f"Cannot get result: index {index} > length results {len(group['run_results'])}")
+        
+        return group["run_results"][index]
+            
+
     def getUniqueResult(self, name):
         """ Retrieve results from the unique result dictionary """
         return self.unique_results[name]
     
-    def getResultSeries(self, name, give_identifiers=False):
+    def getResultList(self, name, give_identifiers=False, group="default"):
         """ Creates a list with all results corresponding to the given name from the list of runresult objects, also returns the identifiers. """
+        group = self._getGroup(group)
+        
         series, identifiers = [], []
-        for result in self.run_results:
+        for result in group["run_results"]:
             datapoint = result.data.get(name)
             if datapoint is None:
                 continue
@@ -72,26 +132,28 @@ class Results:
             identifiers.append(result.identifier)
         
         if len(series) == 0:
-            print(f"WARNING: No result with name {name} were found")
+            print(f"WARNING: No results with name {name} were found")
         
         if give_identifiers:
             return series, identifiers
-        return series
+        else:
+            return series
     
-    def getResultArray(self, name, decimals=5, give_identifiers=False):
+    def getResultArray(self, name, decimals=5, give_identifiers=False, group="default"):
         """ Same as the getResultSeries function, but returns the results as a numpy array """
-        series, identifiers = self.getResultSeries(name, give_identifiers=True)
+        series, identifiers = self.getResultList(name, give_identifiers=True, group=group)
         series = np.asarray(series)
         if not series.dtype is np.object_:
             series = np.round(series, decimals=decimals)
         
         if give_identifiers:
             return series, identifiers
-        return series
+        else:
+            return series
     
-    def getAverageResult(self, name, decimals=5, give_identifiers=False):
+    def getAverageResult(self, name, decimals=5, give_identifiers=False, group="default"):
         """ Gets the average result over all runs """
-        series, identifiers = self.getResultArray(name, decimals=decimals, give_identifiers=True)
+        series, identifiers = self.getResultArray(name, decimals=decimals, give_identifiers=True, group=group)
         
         if np.ndim(series) > 1:
             series = np.average(series, axis=0)
@@ -102,12 +164,15 @@ class Results:
 
         if give_identifiers:
             return series, identifiers
-        return series
+        else:
+            return series
     
-    def getFails(self, failcode=None, give_identifiers=True):
+    def getFails(self, failcode=None, give_identifiers=True, group="default"):
         """ Gets a list of failcodes and identifiers of all failed runs """
+        group = self._getGroup(group)
+        
         fails, identifiers = [], []
-        for result in self.run_results:
+        for result in group["run_results"]:
             if result.succeeded:
                 continue
             if failcode is None:
@@ -122,13 +187,15 @@ class Results:
             return fails, identifiers
         return fails
     
-    def getSuccessBooleans(self, as_array=False, failcode=None):
+    def getSuccessBooleans(self, as_array=False, failcode=None, group="default"):
         """ Gets lists of all identifiers and an array of booleans on whether the run was a success, optionally filter for failcodes.
             Can be used to identify seasonal depenency of filtering hits. In case of large differences between march-october and october-march, 
             Check whether PVLIB handles daylight savings time in correspondence to how the dataset handles it. """
+        group = self._getGroup(group)
+        
         all_identifiers, success_bools = [], []
         
-        for result in self.run_results:
+        for result in group["run_results"]:
             all_identifiers.append(result.identifier)
             if result.succeeded:
                 success_bools.append(True)
@@ -138,20 +205,23 @@ class Results:
                 continue
             elif result.failcode == failcode:
                 success_bools.append(False)
+            else:
+                success_bools.append(False)
         
         if as_array:
             return np.array(success_bools), np.array(all_identifiers)
         return success_bools, all_identifiers
         
     
-    def summariseFails(self):
+    def summariseFails(self, group="default"):
         """ Lists the number of times a failcode occurs, the number of times the job succeeded, and the total number of job calls """
-        fails, identifiers = self.getFails()
-        successful_executions = self.num_runs - len(fails)
+        fails, identifiers = self.getFails(group=group)
+        num_runs = self.groups[group]["num_runs"]
+        successful_executions = num_runs - len(fails)
         
         unique_fails = list(set(fails))
         print("Summarising calculation failures:")
-        print(f"Successful executions: {successful_executions} out of {self.num_runs} total executions")
+        print(f"Successful executions: {successful_executions} out of {num_runs} total executions")
         for fail in unique_fails:
             print(f"Error code {fail} occurred {fails.count(fail)} times")
         print()
@@ -162,13 +232,10 @@ class Results:
 
 class JobHandler:
     def __init__(self):
-        #self.CSV_handler = CSVHandler() ###!!! DEPRECATED
-        
         self.t_prepro  = 0 ###!!!
         self.t_treepop = 0 ###!!!
         self.t_main    = 0 ###!!!
         self.t_runresult = 0 ###!!!
-        
         
         self.data = DataHandler()
         
@@ -182,34 +249,29 @@ class JobHandler:
         
         self.variables = None
         self.derived_variables_names = None
-        self.var_csv_pointers = None
-        self.csv_data = [] ###!!!
+        self.var_backend_pointers = None
         
         self.blacklist = {}
     
-        self.results = Results() ###!!!
+        self.results = Results()
         
         ##computational control flow booleans
-        self.initialized_eq_tree       = False
-        self.initialized_engines       = False
-        self.ready_for_execution       = False
-        self.has_csv_data              = False ###!!!
-        self.basic_variables_validated = False
-        self.csv_variables_populated   = False
-        
-        ##
-        return
+        self.initialized_eq_tree         = False
+        self.initialized_engines         = False
+        self.ready_for_execution         = False
+        self.basic_variables_validated   = False
+        self.backend_variables_populated = False
     
     def loadEquationTree(self, filepath):
         """ Load an equation tree from a text file into the job handler. 
         Compiles the variable registry, populates dependencies, builds executables and checks equation tree consistency """
         self.equation_tree_reader = EquationTreeReader()
-        self.variables, self.var_csv_pointers = self.equation_tree_reader.parse(filepath)
+        self.variables, self.var_backend_pointers = self.equation_tree_reader.parse(filepath)
         del self.equation_tree_reader
         
         #If no variables need to be populated from csv's: set csv_variables_populated flag to True
-        if len(self.var_csv_pointers) == 0:
-            self.csv_variables_populated = True
+        if len(self.var_backend_pointers) == 0:
+            self.backend_variables_populated = True
         
         self.equation_engine = EquationEngine(self.variables)
         self.derived_variables_names = self.equation_engine.derived_variables
@@ -243,18 +305,18 @@ class JobHandler:
                 var.reset()
         
         self.basic_variables_validated = False
-        if len(self.var_csv_pointers) != 0:
-            self.csv_variables_populated   = False
+        if len(self.var_backend_pointers) != 0:
+            self.backend_variables_populated = False
                
-    def populateVariablesFromCSV(self, day=None, reset_registry=True):
-        """ For each variable in the csv_pointers dictionary this function will populate the variables with the requested window from their data backend """
+    def populateVariablesFromBackend_DEPRECATED(self, day=None, reset_registry=True):
+        """ For each variable in the backend_pointers dictionary this function will populate the variables with the requested window from their data backend """
         if reset_registry:
             self.resetVariableRegistry()
             
-        for var_name, column_name in self.var_csv_pointers.items():
+        for var_name, column_name in self.var_backend_pointers.items():
             #Column name is of the form "CSV.name", we strip the first 4 characters
             column_name = column_name[4:]
-            data, start_time, end_time, timestep = self.data.getColumn(column_name, day=day, as_array=True)
+            data, start_time, end_time, timestep = self.data.getColumn_DEPRECATED(column_name, day=day, as_array=True)
             
             var = self.variables[var_name]
             var.values     = data
@@ -262,19 +324,37 @@ class JobHandler:
             var.end_time   = end_time
             var.timestep   = timestep
             
-        self.csv_variables_populated = True
-    
+        self.backend_variables_populated = True
+        
+        
+    def populateVariablesFromBackend(self, day=None, blacklist=[], reset_registry=True):
+        """ For each variable in the backend_pointers dictionary this function will populate the variables with the requested window from their data backend """
+        if reset_registry:
+            self.resetVariableRegistry()
+            
+        for var_name, column_name in self.var_backend_pointers.items():
+            #Column name is of the form "CSV.name", we strip the first 4 characters
+            column_name = column_name[4:]
+            data, start_time, end_time, timestep = self.data.getColumn(column_name, day=day, as_array=True, blacklist=blacklist)
+            
+            var = self.variables[var_name]
+            var.values     = data
+            var.start_time = start_time
+            var.end_time   = end_time
+            var.timestep   = timestep
+            
+        self.backend_variables_populated = True
+
     def validateBasicVariables(self):
         """ Wrapper for calculation engine function of the same name, also updates the relevant flag """
         #if self.variables is None:
         #    raise ValueError("Validation of basic variables failed: no existing variable registry found.")
-        #if not self.csv_variables_populated:
+        #if not self.backend_variables_populated:
         #    print("WARNING: trying to perform calculations while no CSV data appears to be loaded. Crash may occur.")
             
         self.calculation_engine.validateBasicVariables(equation_engine=self.equation_engine, variables=self.variables)
         self.basic_variables_validated = True
         return
-    
     
     
     def prepareForExecution(self):
@@ -291,37 +371,55 @@ class JobHandler:
         self.ready_for_execution = True
         
     
-    def execute(self, day, identifier=None):
-        """ Main job execution function, handles correct order of operations for preprocessing, storage of results and reinitializing the variable registry after completion """
+
+    
+    def _blacklistResolver(self, day, blacklist_mode):
+        
+        #Handle the 'fail' blacklist mode
+        if blacklist_mode == "fail":
+            #Day is None
+            if day is None and len(self.blacklist)>0:
+                fail_code = "Any day blacklisted"
+                return False, fail_code, []
+            #Day is not None
+            preprocessing_error = self.blacklist.get(day)
+            if preprocessing_error is not None:
+                fail_code = preprocessing_error[0]
+                return False, fail_code, []
+            #Else: passed blacklist checks
+            return True, None, []
+        
+        #Handle the 'mask' blacklist mode
+        elif blacklist_mode == "mask":
+            return True, None, list(self.blacklist.keys())
+        #Handle the 'ignore' blacklist mode
+        elif blacklist_mode == "ignore":
+            return True, None, []
+        else:
+            raise ValueError(f"Error: blacklist execution mode {blacklist_mode} not recognized.")
+    
+    
+    def execute(self, day=None, identifier=None, blacklist_mode="fail", results_group="default"):
+        """ Main job execution function, handles correct order of operations for preprocessing, execution and storage of results """
+        #Ensure engines are staged for execution
         if not self.ready_for_execution:
             self.prepareForExecution()
         
-        
-        preprocessing_error = self.blacklist.get(day)
-        if preprocessing_error is not None:
-            fail_code = preprocessing_error[0]
-            self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
+        #Resolve blacklisting of days
+        succeeded, fail_code, blacklist = self._blacklistResolver(day, blacklist_mode)
+        if not succeeded:
+            self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code, group=results_group)
             return
         
-        self.populateVariablesFromCSV(day=day)
+        #Populate and validate equation tree
+        self.populateVariablesFromBackend(day=day, blacklist=blacklist)
         self.validateBasicVariables()
         
-        t0 = time.time()
         #Execute job
-        success, fail_code = self.main(self, identifier=identifier)
-        if not success:
-            self.results.createRunResult(succeeded=False, identifier=identifier, fail_code=fail_code)
-            self.csv_data = []
-            self.has_csv_data = False
-            self.t_main += time.time()-t0
-            return
-        
-        self.t_main += time.time()-t0
-        
-        t0 = time.time()
+        succeeded, fail_code = self.main(self, identifier=identifier)
+
         #Create run result
-        self.results.createRunResult(succeeded=True, identifier=identifier)
-        self.t_runresult += time.time()-t0
+        self.results.createRunResult(succeeded=succeeded, identifier=identifier, fail_code=fail_code, group=results_group)
         return
     
     def _resolve_arg(self, arg):
@@ -344,20 +442,6 @@ class JobHandler:
         """ Adds a pandas dataframe to the data backend """
         self.data.addDataFrame(df)
         
-    def addCSVData(self, csv):
-        """ Adds CSVData object or list of CSVData objects to internal registry """
-        self.csv_data.append(csv)
-        self.has_csv_data = True
-    
-    def getResult(self, name):
-        """ get result of name 'name' from the result storage """
-        return self.results.get(name)
-    
-    def printResult(self, name):
-        """ print result of name 'name' from the result storage """
-        print(self.results.get(name))
-    
-
     #################################################################
     
     def store(self, name, arg):
