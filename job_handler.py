@@ -1,4 +1,4 @@
-from input_handler_modules import EquationTreeReader, PandasCSVHandler
+from input_handler_modules import EquationTreeReader
 from equation_engine import EquationEngine
 from calculation_engine import CalculationEngine
 from uncertainty_engine import UncertaintyEngine
@@ -6,8 +6,6 @@ from time_engine import TimeEngine
 from datahandler import DataHandler
 
 import numpy as np
-import pandas as pd
-import time
 from dataclasses import dataclass
 from typing import Union, Optional
 
@@ -232,11 +230,6 @@ class Results:
 
 class JobHandler:
     def __init__(self):
-        self.t_prepro  = 0 ###!!!
-        self.t_treepop = 0 ###!!!
-        self.t_main    = 0 ###!!!
-        self.t_runresult = 0 ###!!!
-        
         self.data = DataHandler()
         
         self.equation_engine    = None
