@@ -1,0 +1,121 @@
+input BASIC VARIABLES
+	var zenith
+		value: CSV.G.zenith
+		timestep: CSV
+		aggregation: average
+	end var zenith
+	var certain_G
+		value: CSV.G
+		timestep: CSV
+		aggregation: sum
+	end var certain_G
+	var T
+		value: CSV.T
+		timestep: CSV
+		description: Ambient temperature
+		aggregation: average
+		maskable: False
+	end var T
+	var W_speed
+		value: CSV.W
+		timestep: CSV
+		aggregation: average
+	end var W_speed
+	var Pout
+		value: CSV.Pout
+		timestep: CSV
+		description: Power output
+		aggregation: sum
+		rate over time: True
+		UNCERTAINTIES:
+			-IEC total power uncertainty: relative, shape=rectangular, symmetric, correlation=1, bound=0.2
+		END UNCERTAINTIES
+	end var Pout
+	var S
+		value: 15
+		description: Pyranometer sensitivity
+		aggregation: average
+		UNCERTAINTIES:
+			-calibration: 		   relative, shape=rectangular, symmetric, correlation=1, bound=0.6
+			-non-stability: 	   relative, shape=rectangular, symmetric, correlation=1, bound=0.1
+			-nonlinearity: 		   relative, shape=rectangular, symmetric, correlation=1, bound=0.2
+			-clear sky spectral error: relative, shape=rectangular, symmetric, correlation=1, bound=0.5
+			-temperature response: 	   relative, shape=rectangular, symmetric, correlation=1, bound=0.4
+			-tilt response: 	   relative, shape=rectangular, symmetric, correlation=1, bound=0.2
+		END UNCERTAINTIES
+	end var S
+	var V
+		value: DETERMINE
+		timestep: NONE
+		description: Pyranometer voltage
+		equation: 'G' * 'S'
+		aggregation: sum
+		rate over time: True
+		UNCERTAINTIES:
+			-datalogger accuracy: 	absolute, shape=rectangular, symmetric, correlation=1, bound=10, include=True
+		END UNCERTAINTIES
+	end var V
+	var P0
+		value: 245
+		description: Module power rating at STC
+		UNCERTAINTIES:
+			-single module rating at STC: relative, shape=normal, symmetric, correlation=1, bound=2.4, include=True
+		END UNCERTAINTIES
+	end var P0
+	var G_STC
+		value: 1000
+		description: STC irradiance
+	end var G_STC
+	var gamma
+		value: -0.0048
+		description: relative maximum power temperature coefficient
+	end var gamma
+end input BASIC VARIABLES
+
+input DERIVED VARIABLES
+	eq T_mod
+		value: NO
+		equation: 'certain_G'*exp(-3.47-0.0594*'W_speed') + 'T'
+		aggregation: average
+		maskable: False
+		UNCERTAINTIES:
+			-temperature uncertainty: absolute, shape=rectangular, symmetric, correlation=1, bound=1, include=True
+		end UNCERTAINTIES
+	end eq T_mod
+	eq G
+		value: CSV.G
+		timestep: CSV
+		description: POA irradiance
+		rate over time: True
+		aggregation: sum
+		equation: 'V'/'S'
+		UNCERTAINTIES:
+			-zero off-set A: 			absolute, shape=rectangular, one-sided, correlation=1, bound=2
+			-zero off-set B: 			absolute, shape=rectangular, symmetric, correlation=1, bound=2
+			-zero off-set other sources: 		absolute, shape=rectangular, symmetric, correlation=1, bound=1
+			-directional response: 			absolute, shape=rectangular, symmetric, correlation=1, bound=5, multiplier='G'/(1000 * cos(pi*'zenith'/180))
+			-additional signal processing errors: 	absolute, shape=rectangular, symmetric, correlation=1, bound=0
+		END UNCERTAINTIES
+	end eq G
+	eq C_25
+		value: NO
+		description: temperature-adjustment factor
+		equation: 1 + 'gamma' * ('T_mod'-25)
+		maskable: False
+		#aggregation: auto		
+		aggregation: average
+	end eq C_25
+	eq PR
+		value: NO
+		description: performance ratio
+		#equation: (timesum('Pout'))/(timesum('G') * ('P0'/'G_STC'))
+		equation: timesum('Pout' / 'P0') / timesum('G' / 'G_STC')
+		aggregation: average
+	end eq PR
+	eq PR_temp_corr
+		value: NO
+		description: temperature corrected performance ratio
+		equation: (timesum('Pout') ) / (timesum('G' * 'C_25') * ('P0'/'G_STC'))
+		aggregation: average
+	end eq PR_temp_corr
+end input DERIVED VARIABLES
