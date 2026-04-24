@@ -454,7 +454,7 @@ class UncertaintyEngine:
         plt.ylabel("Percentage contribution split")
         plt.show()
         
-    def plotAbsoluteRootContributions(self, var, k=1):
+    def plotAbsoluteRootContributions(self, var, k=2, ylims=None):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         
@@ -466,6 +466,8 @@ class UncertaintyEngine:
         ax = plt.subplot(111)
         ax.stackplot(time_axis, *root_split, labels=[source.name for source in var.uncertainty.root_sources])
         
+        if ylims is not None:
+            ax.set_ylim(ylims[0], ylims[1])
         ax.grid()
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
             
@@ -480,7 +482,7 @@ class UncertaintyEngine:
         plt.ylabel("Total uncertainty")
         plt.show()
         
-    def plotRelativeRootContributions(self, var, k=2):
+    def plotRelativeRootContributions(self, var, k=2, ylims=None):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         
@@ -501,7 +503,8 @@ class UncertaintyEngine:
         ax = plt.subplot(111)
         ax.stackplot(time_axis, *root_split, labels=[source.name for source in var.uncertainty.root_sources])
         
-        ax.set_ylim(0,10)
+        if ylims is not None:
+            ax.set_ylim(ylims[0], ylims[1])
         ax.grid()
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
             
