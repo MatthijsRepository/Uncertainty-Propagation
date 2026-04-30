@@ -550,8 +550,7 @@ class JobHandler:
         self.calculation_engine = CalculationEngine(time_engine        = self.time_engine, 
                                                     equation_engine    = self.equation_engine)
         self.uncertainty_engine = UncertaintyEngine(equation_engine    = self.equation_engine, 
-                                                    calculation_engine = self.calculation_engine, 
-                                                    time_engine        = self.time_engine)
+                                                    calculation_engine = self.calculation_engine)
         self.initialized_engines = True
     
     
