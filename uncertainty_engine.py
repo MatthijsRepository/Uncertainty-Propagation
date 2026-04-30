@@ -14,11 +14,14 @@ class UncertaintyEngine:
     
     Attributes
     ----------
-    variables: dict[str, Variable]
-        Internal variable registry.
+    equation_engine: EquationEngine
+        Equation engine used to take partial derivatives and build executables on the fly.
+    calculation_engine: CalculationEngine
+        Calculation engine used to calculate the partial derivatives during uncertainty evaluation.
     
     Notes
     -----
+    - Before ``calculateTotalUncertainty`` can be invoked on a derived (non-basic) variable, its values must have been calculated by a calculation engine.
     - Uncertainty timeseries are always kept in their root temporal resolution, even if they are combined with data of different temporal resolution.
       This is because partial aggregation of uncertainty timeseries is a destructive operation from an information perspective,
       aggregating a time-aggregation is mathematically incorrect. Time aggregations are therefore always calculated from root-resolution.
@@ -26,15 +29,17 @@ class UncertaintyEngine:
       This functionality is used to exclude uncertainty contributions from measurements at night.
       This setting only affects variables that are specified to be 'maskable' in the input script.
     """
-    def __init__(self, equation_engine=None, calculation_engine=None, time_engine=None):
+    def __init__(self, equation_engine=None, calculation_engine=None):
         self.equation_engine = equation_engine
         self.calculation_engine = calculation_engine
-        self.time_engine = time_engine
     
     def _calculateUncertaintySourceValues(self, var, source):
         """ 
         Internal function that calculates the uncertainty for a given uncertainty source
         Calculates the uncertainty values for a given uncertainty source """
+        if source.parent_variable is not None and source.parent_variable is not var:
+            raise RuntimeError(f"Error: passed variable {var.name} and registered parent variable {source.parent_variable.name} of uncertainty source {source.name} do not match. Cannot calculate uncertainties.")
+        
         if source.is_relative:
             source.values = source.sigma * var.values
         else:

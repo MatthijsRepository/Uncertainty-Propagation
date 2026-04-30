@@ -535,14 +535,15 @@ class JobHandler:
     def _prepareEngines(self):
         """ 
         Prepares the calculation, uncertainty and time engines using the loaded variable registry.
-        Calculation and uncertainty engines typically employ an internal variable registry and are therefore only initialized after the JobHandler has built one.
+        Calculation and uncertainty engines rely on an initialized equation engine with an internal variable registry,
+        and are therefore only initialized after the JobHandler has built a variable registry and initialized an equation engine.
         Furthermore, due to some elements and attributes being lazily calculated or created during job runtime, engines sometimes require each others' functionality.
         This function ensures engines are properly initialized.
         
         Raises
         ------
         RuntimeError
-            If no equation tree has been initialized, since a variable registry is given to the CalculationEngine and UncertaintyEngine.
+            If no equation tree has been initialized, since an equation engine is given to the CalculationEngine and UncertaintyEngine.
         """
         if not self.initialized_eq_tree:
             raise RuntimeError("Cannot initialize engines, since no equation tree appears to be loaded to the job handler. Please check your operations.")
@@ -550,8 +551,7 @@ class JobHandler:
         self.calculation_engine = CalculationEngine(time_engine        = self.time_engine, 
                                                     equation_engine    = self.equation_engine)
         self.uncertainty_engine = UncertaintyEngine(equation_engine    = self.equation_engine, 
-                                                    calculation_engine = self.calculation_engine, 
-                                                    time_engine        = self.time_engine)
+                                                    calculation_engine = self.calculation_engine)
         self.initialized_engines = True
     
     
