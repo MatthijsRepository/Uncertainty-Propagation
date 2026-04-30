@@ -547,11 +547,9 @@ class JobHandler:
         if not self.initialized_eq_tree:
             raise RuntimeError("Cannot initialize engines, since no equation tree appears to be loaded to the job handler. Please check your operations.")
         self.time_engine = TimeEngine()
-        self.calculation_engine = CalculationEngine(variables          = self.variables, 
-                                                    time_engine        = self.time_engine, 
+        self.calculation_engine = CalculationEngine(time_engine        = self.time_engine, 
                                                     equation_engine    = self.equation_engine)
-        self.uncertainty_engine = UncertaintyEngine(variables          = self.variables,
-                                                    equation_engine    = self.equation_engine, 
+        self.uncertainty_engine = UncertaintyEngine(equation_engine    = self.equation_engine, 
                                                     calculation_engine = self.calculation_engine, 
                                                     time_engine        = self.time_engine)
         self.initialized_engines = True
@@ -620,7 +618,7 @@ class JobHandler:
         #if not self.backend_variables_populated:
         #    print("WARNING: trying to perform calculations while no CSV data appears to be loaded. Crash may occur.")
             
-        self.calculation_engine.validateBasicVariables(equation_engine=self.equation_engine, variables=self.variables)
+        self.calculation_engine.validateBasicVariables(variables=self.variables, equation_engine=self.equation_engine)
         self.basic_variables_validated = True
         return
     

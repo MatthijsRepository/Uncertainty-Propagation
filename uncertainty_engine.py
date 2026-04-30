@@ -4,14 +4,37 @@ from copy import deepcopy
 
 
 class UncertaintyEngine:
-    def __init__(self, variables, equation_engine=None, calculation_engine=None, time_engine=None):
-        self.variables = variables
+    """ 
+    This engine handles the calculation of uncertainty.
+    
+    The engine is typically invoked by calling the ``calculateTotalUncertainty`` function on a variable.
+    The engine will then calculate and propagate all uncertainty downtree while properly handling time-aggregation.
+    Engine also populates ``variable.uncertainty`` objects with (sub)results. Also makes use of these previously calculated results, if available.
+    The uncertainty engine will invoke functionality of the equation, calculation and time engines wherever required.
+    
+    Attributes
+    ----------
+    variables: dict[str, Variable]
+        Internal variable registry.
+    
+    Notes
+    -----
+    - Uncertainty timeseries are always kept in their root temporal resolution, even if they are combined with data of different temporal resolution.
+      This is because partial aggregation of uncertainty timeseries is a destructive operation from an information perspective,
+      aggregating a time-aggregation is mathematically incorrect. Time aggregations are therefore always calculated from root-resolution.
+    - Uncertainties are allowed to be masked. This means that their uncertainties are set to zero whenever their parent variable is 0.
+      This functionality is used to exclude uncertainty contributions from measurements at night.
+      This setting only affects variables that are specified to be 'maskable' in the input script.
+    """
+    def __init__(self, equation_engine=None, calculation_engine=None, time_engine=None):
         self.equation_engine = equation_engine
         self.calculation_engine = calculation_engine
         self.time_engine = time_engine
     
     def _calculateUncertaintySourceValues(self, var, source):
-        """ Calculates the uncertainty values for a given uncertainty source """
+        """ 
+        Internal function that calculates the uncertainty for a given uncertainty source
+        Calculates the uncertainty values for a given uncertainty source """
         if source.is_relative:
             source.values = source.sigma * var.values
         else:

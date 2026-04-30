@@ -7,18 +7,15 @@ import copy
 
     
 class CalculationEngine:
-    def __init__(self, variables, time_engine, equation_engine=None):
-        self.variables = variables
+    def __init__(self, time_engine, equation_engine=None):
         self.time_engine = time_engine
         self.equation_engine = equation_engine
         return
     
-    def validateBasicVariables(self, equation_engine=None, variables=None):
+    def validateBasicVariables(self, variables, equation_engine=None):
         """ Validates whether all basic variables are well-defined, and if not, uses an equation engine to try to calculate the values using the provided equation """
         if equation_engine is None:
             equation_engine = self.equation_engine
-        if variables is None:
-            variables = self.variables
         
         for var in variables.values():
             if var.is_basic and var.values is None:
