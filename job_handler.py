@@ -194,9 +194,9 @@ class Results:
 
         Raises
         ------
-        RuntimeError
-            If both an identifier and index are given in the function input.
         ValueError
+            If both an identifier and index are given in the function input.
+        KeyError
             If the requested run identifier is not present in the results group.
         IndexError
             If the requested index exceeds the number of results present in the group.
@@ -209,7 +209,7 @@ class Results:
         group = self._getGroup(group)
         
         if not ( (identifier is None) ^ (index is None)):
-            raise RuntimeError("Cannot get result: provide either an identifier or an index, not both.")
+            raise ValueError("Cannot get result: provide either an identifier or an index, not both.")
 
         #Get index of the identifier        
         if identifier is not None:

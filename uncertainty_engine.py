@@ -51,7 +51,7 @@ class UncertaintyEngine:
         
         Raises
         ------
-        RuntimeError
+        ValueError
             If the source has a registered parent variable that does not match the passed variable in ``var``.
         RuntimeError
             If the source is defined through a more complex ``multiplier`` equation that must be evaluated, 
@@ -59,7 +59,7 @@ class UncertaintyEngine:
         """
         #If the source has a parent variable given, check whether is matches the passed variable
         if source.parent_variable is not None and source.parent_variable is not var:
-            raise RuntimeError(f"Error: passed variable {var.name} and registered parent variable {source.parent_variable.name} of uncertainty source {source.name} do not match. Cannot calculate uncertainties.")
+            raise ValueError(f"Error: passed variable {var.name} and registered parent variable {source.parent_variable.name} of uncertainty source {source.name} do not match. Cannot calculate uncertainties.")
         
         if source.is_relative:
             source.values = source.sigma * var.values
@@ -103,11 +103,11 @@ class UncertaintyEngine:
             
         Raises
         ------
-        RuntimeError
+        ValueError
             If no values are defined or calculated for the passed variable.
         """
         if var.values is None:
-            raise RuntimeError(f"Cannot prepare uncertainty for variable {var.name}, please evaluate the variable itself first!")
+            raise ValueError(f"Cannot prepare uncertainty for variable {var.name}, please evaluate the variable itself first!")
         if var.uncertainty.direct_uncertainties_calculated is True:
             return
         #Set is_calculated flag to true
