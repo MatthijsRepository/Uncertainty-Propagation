@@ -67,7 +67,7 @@ def main(handler, identifier=None):
     
 #Creating a dataframe from CSV data
 
-CSV_filepath = "C:\\Users\\mate\\Desktop\\local_work\\code\\Uncertainty-Propagation\\Dataset-SolarTechLab.csv"
+CSV_filepath = ".\\Dataset-SolarTechLab.csv"
 structure_list = ["Time", "Pout", "T", "-", "G", "W", "-"]
 timeformat = None
 
@@ -79,7 +79,7 @@ del data_handler
 ##############################################
 
 #Equation tree input file
-equation_tree_filepath = "C:\\Users\\mate\\Desktop\\local_work\\code\\Uncertainty-Propagation\\test_tree.txt"
+equation_tree_filepath = ".\\test_tree.txt"
 
 #Define coordinates and UTC offset of the location
 coordinates = (45.30103, 9.092366)
