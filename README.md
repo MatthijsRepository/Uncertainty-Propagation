@@ -8,7 +8,7 @@ This way, the user defines an equation tree, or more strictly a directed acyclic
 
  ![Alt text](https://github.com/user-attachments/assets/89cbe44e-ae13-467f-9d0a-1dd895465d20)
  
-In the textfile the user can specify the value of a variable, or express that the values are contained in a specific column of a CSV file. If no value is specified it means the value must be calculated from other variables.  
+In the textfile the user can specify the value of a variable, or express that the values are contained in a specific column of a pandas dataframe. If no value is specified it means the value must be calculated from other variables.  
 The user can also specify for each variable:
 - the aggregation rule (summing or averaging)
 - whether the variable is a rate of a quantity over time, or whether it is simply a quantity
@@ -18,13 +18,13 @@ The user can specify uncertainty sources for each variable. Multiple uncertainty
 - absolute or relative error
 - distribution
 - deviation (mean assumed 0)
-- autocorrelation over time (currently 0 and 1 are supported, extension to exponential decay is planned)
+- autocorrelation over time (currently 0 and 1 are supported, extension to linear/exponential decay is planned)
 - an optional multiplier to the magnitude, in the form of an equation. For instance, one can multiply the directional response error by a function of the solar zenith angle to more closely model its dependence on solar zenith angle.
 
 ## Points to keep in mind
 This tool is meant to calculate the minimally achievable uncertainty in a quantity based on the specifications on the used measurement systems. In case the magnitude or characteristics of an uncertainty are unknown, it cannot be included in this calculation.  
 Be aware that the results are always dependent on the used dataset. The uncertainty of a quantity $C = A * B$ with an uncertainty source in $B$, will always be dependent on the value(s) of $A$. To draw general conclusions, one needs to average or aggregate over a large amount of data.  
-The tool can be used for ‘normal’ equations: regular arithmetic, mathematical operations, exponents, trigonometric functions and integrals. Be aware that the code takes as the sensitivity coefficient for a source simply the instantaneous value of the partial derivative of the measurement equation with respect to the variable the uncertainty source acts on – which is a first-order approximation. The validity of this approximation may be questionable in case of highly nonlinear functions and large relative uncertainties.  
+The tool can be used for ‘normal’ equations: regular arithmetic, mathematical operations, exponents, trigonometric functions and discrete integrals. Be aware that the code takes as the sensitivity coefficient for a source simply the instantaneous value of the partial derivative of the measurement equation with respect to the variable the uncertainty source acts on – which is a first-order approximation. The validity of this approximation may be questionable in case of highly nonlinear functions and large relative uncertainties.  
 Also please keep in mind that the calculated uncertainty is only as good as the least accurate approximation used in the code. While the uncertainty propagation works with first-order approximations on the sensitivities, other approximations may be of even more significant influence. For instance, when estimating module temperature from ambient temperature, be aware that you are introducing another approximation to the model. When using such an approximation, it does not make sense to rigorously propagate the uncertainty in the measured wind speed to the final PR uncertainty, since the approximation itself may be a far greater source of (unquantified) uncertainty. Using such an approximation should be done with the intent of 'synthesizing' your own back-of-module temperature to extend the available dataset with. The temperature uncertainty should then be added to the synthesized back-of-module temperature measurement, not on the ambient temperature measurement.
 
 
@@ -34,32 +34,33 @@ Also please keep in mind that the calculated uncertainty is only as good as the 
 In mathematical terms: $u_T^2 * (s_1^2 + s_2^2) \neq u_T^2 (s_1 + s_2)^2$.  
 This means that in such cases there will be a slight under-estimation of the uncertainty.  
 To fix this issue, one can scan the var.uncertainty.root_sources list for duplicates to detect such cases, and implement exception handling in case duplicate sources are detected. This should be done when calculating the total uncertainty and when retrieving the root source contribution split. 
-- A final limitation of the code is the amount of data that can be processed at a time. Because of the nature of correlated uncertainties, the computational complexity of aggregating uncertainty over time scales quadratically with the included timeframe. It is therefore recommended to split calculations for large datasets into a set of smaller computations. 
+- A final limitation of the code is the amount of data that can be processed at a time. Because of the nature of correlated uncertainties, the computational complexity of aggregating uncertainty over time scales quadratically with the included timeframe. For trivial correlations (0 or 1), the code short-circuits to the analytical result to avoid matrix calculations. However, keep computational complexity in mind when working with slowly decaying temporal correlations.
 
-The code is structured such that the variable objects contain all information related to itself, including the timeseries of its values and uncertainties. Expansion of this code is recommended to move this data into a separate data storage handler that is pandas-based, and give variables pointers to their own data in this container. This would greatly improve data centralization and allow for easier handling of large datasets.
-
-It is recommended to further expand the code to be able to include exponentially decaying autocorrelation, with an inclusion-cutoff if the correlation is below a specified limit, resulting in a band correlation matrix. Correlated uncertainty aggregation over arbitrarily long timescales can then be performed iteratively and potentially parallelized for performance. Moreover, a short-circuit in case of zero correlation could be implemented to avoid redundant matrix multiplication with a diagonal matrix.  
-
-Plotting functionality was designed with orientation to variables in mind. However, after implementation of looping through datasets it became apparent that plots are mostly based on data stored inside the `Results` object. No integrated plotting functionality is included for this object. TThus, plotting results from multiple job calls must be done manually.
+It is recommended to further expand the code with decaying autocorrelation, with an inclusion-cutoff if the correlation is below a specified limit, leading to the correlation matrix being a band matrix. Correlated uncertainty aggregation over arbitrarily long timescales can then be performed iteratively and potentially parallelized for performance. 
 
 ## How the code works – general
 The tool is developed in an object-oriented way. All variables are objects that store information on their own values, uncertainties, dependencies and properties such as calculation rules and state indicators.  
 The operations on the variables, or on the equation tree as a whole, are performed by objects called engines. The calculation engine calculates variable values, the uncertainty engine calculates uncertainty, the time engine handles time matching between variables, et cetera.
 
 #### User Interface
-The JobHandler object is the main interface between the user and the internal functionality. The user can load equation trees and `CSVData` dataclass objects to this handler and specify which tasks should be executed. The job handler will then perform pre-execution checks, variable initialization, job execution and post-job result storing and data cleaning. The user needs to specify the preprocessing and main job routine to the jobhandler by defining a preprocessing and main function. The `JobHandler` object has wrapper functions for many of the main functionalities of the code that can be used inside these functions. Additionally, the JobHandler also has internal copies of all engines, so the user can also directly access the full engine functionality inside the preprocessing and main functions with the right syntax. The jobscript.py file contains an illustration on how this works.   
-To load CSV data to variables, the code makes use of a `CSVData` dataclass. This is a small dataclass that contains the values, the start and end time and the timestep of the data. The `PandasCSVHandler` object can read a CSV to a Pandas dataframe, and can compile it to `CSVData` objects. It can also do this for a specific day. For convenience, data cleaning methods are owned by this dataclass.  
-The usage of this dataclass is because of earlier architectural decisions. It is recommended to deprecate usage of this dataclass and move to a purely-pandas based method.
+The `JobHandler` object is the main interface between the user and the internal functionality. The user can load equation trees and pandas dataframes objects to this handler and specify which tasks should be executed. The job handler will then perform pre-execution checks, variable initialization, job execution and post-job result storing. The user needs to specify the main job routine to the jobhandler by defining a `main` function executed when the `execute` function is called. The `JobHandler` object has wrapper functions for many of the main functionalities of the code that can be used inside the `main` function. Additionally, the JobHandler also has internal copies of all engines, so the user can also directly access the full engine functionality inside the `main` function with the right syntax. The jobscript.py file contains an illustration on how this works.   
+To load timeseries data to variables, the JobHandler makes use of a custom data backend in which pandas dataframes are stored and that maps variables to the dataframes and columns containing their data. This datahandler also contains some rudimentary data cleaning and checking methods. 
+Days can be blacklisted in the datahandler, such that the data is masked or execution fails if calculations involve a specific day.
+Execution of the job is done through the `JobHandler.execute` function. Upon calling this function, the user can specify whether execution should be performed over the entire dataset or a subset of it, and how blacklisted days should be handled. Calling this function will cause the state of the equation tree to be reset, calculations to be performed and desired results, with some metadata, to be written to `JobHandler.Results`. The state of the equation tree will remain in place once execution is finished, for custom access and control.
 
 #### Dependencies
 The code is purely python-based and makes use mostly of standard python libraries: `numpy`, `matplotlib`, `pandas`. The code makes use of `SymPy` for the creation of executables of a variable's equation and to take symbolic partial derivatives of the variable's equation, which can subsequently be turned into executables, to calculate sensitivity coefficients. The code also uses `pvlib` to perform solar zenith angle calculations. In case you don't want to use this functionality, simply do not use functionality related to solar zenith angles and comment out the lines in `solar_module.py` related to it.
 
 ## Overall workflow
-- The user creates instances of the `JobHandler` and `PandasCSVHandler` classes.
+- The user defines an equation tree following the syntax of the example equation tree.
+- The user creates a `JobHandler` instance.
+- The user loads their data as pandas dataframes and passes these into the Job Handler.
 - The user gives the equation tree text file to the Job Handler. The handler will compile an equation tree from this text file, check whether it is well-defined and non-circular. It will populate all variables with pointers to their dependencies, and it will prepare all variable equation executables.
-- The user defines the data preprocessing function and the main job functions.
-- The user reads out the CSV data, splits the data in smaller segments, such as a single day, and executes the code for each of these smaller segments. Executing once for a large block of data is inhibited by the quadratic scaling of the computations to account for correlations. As stated in the limitations section: short-circuiting in case of zero correlation or imposing a cutoff for low correlations to reduce computational complexity is currently not implemented.
-- The user then simply loads the smaller segments of CSV data into the Job Handler and executes the predefined job.
+- The user defines the `main` job function and potentially a preprocessing function if the pandas dataframes are not already preprocessed.
+- The user executes the script by calling the `JobHandler.execute` function. In the function arguments, the user can specify the desired timerange of the execution and other execution parameters, such as the results group data is written to.
+- After execution, written results can be accessed via dedicated Job Handler retrieval functions. The equation tree also retains its state and can be manually accessed through `JobHandler.variables`. 
+ 
+The `main` function specifies which variables and uncertainties must be calculated, which data should be stored in the results storage and any further logic determining whether a result is considered successful.
 
 #### Time series matching
 When combining data from datasets with different temporal granularity, the code will try to perform a time harmonization. This means that the code will aggregate both timeseries to a timestep equal to the lowest common multiple of the involved timesteps in a calculation. Additionally, it will ensure that computations are performed with datapoints spanning the same time interval (i.e. a datapoint spanning 8:00-8:10 is not combined with data spanning 9:00-9:10).   
@@ -76,14 +77,14 @@ Timesums are effectively the time-integration of timeseries data. To start, we m
 On the other hand, the timesum operation completely integrates the timeseries and associated uncertainties. The result is not a timeseries of values with timeseries of uncertainties, but a single value with single values for all uncertainties.  
 Moreover, **the timesum operation converts rates to quantities**, while aggregation does not, even if the aggregation results in the timeseries being a single bin.  
  
-The internal handling of a timeseries in an equation is special. If a timeseries is defined in an equation, the code will detect it and create a new variable for this timeseries. Thus, an equation for `PR` like `TS(‘Pout’ / ‘P0’) / TS(‘G’ / ‘G_STC’)` will have two dependencies, the internally created variables `TS(‘Pout’ / ‘P0’)` and `TS(‘G’ / ‘G_STC’)`. Similarly, even if a variable, let’s say `A` is defined with an equation of just ` TS(‘Pout’ / ‘P0’)`, the code will create a separate variable for this timesum, and the equation for `A` simply trivially refers to this variable.  
+The internal handling of a timeseries in an equation is special. If a timeseries is defined in an equation, the code will detect it and create a new variable for this timeseries. Thus, an equation for `PR` like `TS(‘Pout’ / ‘P0’) / TS(‘G’ / ‘G_STC’)` will have two dependencies, the internally created variables `TS(‘Pout’ / ‘P0’)` and `TS(‘G’ / ‘G_STC’)`. Similarly, even if a variable `A` is defined with an equation of just `TS(‘Pout’ / ‘P0’)`, the code will create a separate variable for this timesum, and the equation for `A` trivially refers to this variable.  
 The reason behind this is for the code to be able to treat timesum calculations separately. In the above example for `PR`, the creation of intermediate variables helps during the evaluation of the equation for `PR`: instead of needing to internally resolve two timesum statements during calculation, instead the codes calculates the timesums first as dependencies, and then calculates the PR through a simple division.  
 The created timesum variables have as equation the equation specified inside the timesum, and an `is_timesum` flag that is set to `True`. The calculation and uncertainty engines will first treat the equation inside the timesums regularly, check for this flag and then handle the final aggregation of the values if this `is_timesum` flag is set to `True`.  
  
-This has further advantages. First of all, this allows the engines to make use of the regular framework for matching timeseries data of different temporal resolution. For instance, a timeseries`B` =  `TS(‘G’*’C_25’)` will first treat the equation `’G’*’C_25’` with time-matching, and then aggregate the final timeseries.  
-A second advantage is that it allows to separately define aggregation rules. For instance, the quantity `‘G’*’C_25’` is a rate over time, while the result stored in variable `B` is not a rate over time. The user can define the `is_rate` flag for `B` to be false in the input, but upon the evaluation of `TS(‘G’*’C_25’)`, we are calculating the timesum of a rate. The `is_rate` flag of the intermediate variable is inferred from the dependencies and will therefore be `True`, while for `B` it will remain false.  In general: the logic is that the intermediate timesum variables created by the equation engine will contain information on how to calculate the values of the timesum (aggregation rules, whether the summed quantity is a rate) while the variable above it, declared by the user, contains information on how to treat the result of the timesum in further computations.   
+This has further advantages. First of all, this allows the engines to make use of the regular framework for matching timeseries data of different temporal resolution. For instance, a timeseries `B` =  `TS(‘G’*’C_25’)` will first treat the equation `’G’*’C_25’` with time-matching, and then aggregate the final timeseries.  
+A second advantage is that it allows to separately define aggregation rules. In general: the logic is that the intermediate timesum variables created by the equation engine will contain information on how to calculate the values of the timesum (aggregation rules, whether the summed quantity is a rate) while the variable above it, declared by the user, contains information on how to treat the result of the timesum in further computations.   
 
-## Main classes and dataclasses – except engines
+## Short API overview: main classes and dataclasses – except engines
 Most dataclasses are stored in the my_dataclasses.py file. The attributes of classes and dataclasses, including descriptions of what the attributes are, are all listed in the `__init__` and `__post_init__` functions of these classes.
 
 #### The variable class
@@ -100,12 +101,8 @@ This is a small dataclass that stores the characteristics of a single uncertaint
 #### The TimeHarmonizationData dataclass
 This dataclass is stored to inform the code how the timeseries data of a specific dependency was changed when computing a variable’s values. This includes information on the timestep increase, how much data at the edges was discarded, etc.
 
-#### The CSVData dataclass
-A dataclass that is used to store CSV data. It is recommended to deprecate usage of this dataclass and move to a purely pandas-based framework.  
-The dataclass contains a dictionary with data, and the common data timestep and time range. Additionally, this dataclass contains cleaning methods for this data, including checking for extreme, missing or negative values, interpolating replacements for these. In case the CSVData contains a column named `zenith`, one can also use functionality to compare locations of nan or nonzero values to the solar zenith angle, and detect missing data during the day or erroneous nonzero data during the night.
 
-
-## The engines
+## Short API overview: engines
 The code makes use of 4 main engines. Engines act on a registry of variables and are designed to perform specific functions for the user.
 
 #### The Equation engine
@@ -125,7 +122,7 @@ This means it has functionality to:
 - check whether dependencies are time harmonious,
 - rebin timeseries and prune ends if this is not the case,
 - build TimeHarmonizationData objects for future reference, in case the harmonization must be repeated.  
-Additionally, the time engine can be used to perform a hard temporal resolution decrease for a variable to irreversibly bring it to a coarser temporal granularity. Be aware that this procedure is irreversible and destructive: information will be lost. For relative uncertainty: calculating uncertainty and aggregating to a new granularity is different from aggregating a variable and calculating the aggregate’s uncertainty! The former procedure is always more precise.
+Additionally, the time engine can be used to perform a hard temporal resolution decrease for a variable to irreversibly bring it to a coarser temporal granularity. Be aware that this procedure is irreversible and destructive: information will be lost.
 
 #### The Uncertainty engine
 The uncertainty engine is responsible for uncertainty calculation, propagation and aggregation. Recall that a variable’s uncertainty is defined by sources acting upon it directly (‘direct sources’) and sources acting on its dependencies (‘down-tree sources’). Down-tree sources are always multiplied by a sensitivity, which in first order equals the partial derivative of the variable with respect to the dependency this down-tree source acts on.  
