@@ -136,4 +136,28 @@ Suppose a variable is of hourly resolution and the uncertainty source is of 1-mi
 The uncertainty engine keeps track of the relative resolution difference factors through an “upsample factors” registry. At each node all this information is stored inside the variable’s own VariableUncertainty dataclass. So, at each node the user has information on the sources acting on the variable, the values of non-aggregated uncertainties times the sensitivities, the upsample factors and the propagation path for each uncertainty source.
 
 
+## Suggested changes and expansions
+Handling of non-trivial autocorrelations. Most workflow is already in place.
+- Adding builders for desired types of correlation matrix to `UncertaintySource`.
+- Implementing correlation limits to keep computational complexity manageable.
+- For calculations with large datasets: make efficeint use of sparseness of correlation matrix to keep calculations fast.
+ 
+Implement an `UncertaintyPackage` dataclass for use in the `UncertaintyEngine`. Currently the uncertainty sources, weighted sensitivities, upsample factors and propagation paths are passed in tuple.
+- Create a dedicated dataclass to replace this tuple with.
+- Create dedicated routines to add a new propagation layer, and retrieve uncertainty data from this dataclass, instead of handling this in-engine. Cleaner separation and dedicated update pipelines reduce risk of potential mistakes.
+- Implement usage of dataclass in the engine.
+- Make the data class time-aware for each uncertainty dataseries it contains.
+- Potentially create routine for calculating sensitivities from the weighed uncertainties by dividing these by their root direct uncertainty timeseries.
+ 
+Implement dedicated routines for partial recalculations, specifically for recalculating and repropagating a single uncertainty source. This would support detailed investigations into a single uncertainty source, without other uncertainties needing to be recalculated.
+- Recommended to implement `UncertaintyPackage` first.
+ 
+Improve time-awareness of the equation tree. Currently, gaps in the timeseries are not allowed. This can lead to small gaps in data invalidating large timespans (e.g. a few minutes invalidate an entire day).
+- Keeping calculations numpy-based is recommended, since automatic pandas time-index matching can complicate calculations with data of differing time resultions.
+- Instead, perhaps allow `nan` data to be passed to the variables, but account for it during aggregations. Missing data could also be passed as 0, where appropriate.
+ 
+Implement routine to write data to backend pandas dataframes, for complete input/output using pandas.
+- By writing from variable state to data backend, the tool can be used to populate new columns in existing loaded dataframes, or create new dataframes with calculated data. 
+
+
 
