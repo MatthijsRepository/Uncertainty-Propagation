@@ -11,14 +11,47 @@ class GroupInfo:
         self.timestep   = timestep
 
 class DataHandler:
+    """ 
+    The DataHandler class handles the data storage and retrieval backend for the `JobHandler` object.
+    This object stores the pandas dataframes containing all timeseries data, and can map variable names to dataframe columns.
+    Allows the JobHandler to easily retrieve data on demand by simply passing the desired timerange and variable names.
+    
+    Datahandler object also contains data cleaning and quality control routines, for optional use in the `JobHandler.preprocessing` function.
+    
+    Attributes
+    ----------
+    dataframes: dict[str or int, pd.DataFrame]
+        Dictionary containing pandas dataframes coupled to a specific unique index.
+    groups: dict[str or int, GroupInfo]
+        Dictionary with identical index keys as `dataframes`, containing GroupInfo objects (the dataframes grouped by date, and timedata).
+    lookup_dict: dict[str, str or int]
+        Dictionary of variable names and `dataframes` keys, coupling variables to the DataFrame containing their timeseries data.
+        Name of the variable must be identical to their respective dataframe column.
+    blacklist: dict[str, list[datetime.date]]
+        Dictionary containing various blacklist reasons, and a list of dates corresponding with this flag.
+    """
     def __init__(self):
-        self.dataframes     = {}  #Stores the dataframes and potentially their groupings as DataSet objects
+        self.dataframes     = {}  #Stores the dataframes
         self.groups         = {}  #Stores grouping information (typically by date) of the dataframes for easy by-day access, keys identical to those of dataframes
         self.lookup_dict    = {}  #Dictionary coupling variable names to a specific dataframe
-        self.blacklist      = {}  #Dictionary populated by preprocessing functions, blacklisting days for certain reasons
+        self.blacklist      = {}  #Dictionary containing blacklisted days and the reason for their blacklisting
         
-    def addDataFrame(self, df, index_by_date=True):
-        """ Adds dataframe to internal registry """
+    def addDataFrame(self, df):
+        """ 
+        Adds DataFrame to internal registry, automatically updates `lookup_dict`.
+        If dataframe contains columns named 'time', 'date' or 'zenith' (not case-sensitive), these are ignored.
+        
+        Parameters
+        ----------
+        df: pd.DataFrame
+            Dataframe to add to internal registry
+        
+        Raises
+        ------
+        ValueError
+            If a column inside the dataframe to be added has the same name as a column already present in the data registry,
+            with the exception of column names 'time', 'date' or 'zenith' (not case-sensitive).
+        """
         index = len(self.dataframes)
         df.df_index = index
         
@@ -33,8 +66,32 @@ class DataHandler:
         self.dataframes[index] = df
         
     def getDataFrame(self, name=None, coupled_name=None, df_index=None, return_index=False):
-        """ Get dataframe from registry
-            df_index > coupled_name > name  """
+        """ 
+        Gets dataframe from registry based on variable names, or the dataframe's registry index.
+        
+        Parameters
+        ----------
+        name: str or None, default=None
+            Name of the variable whose data is contained in the desired dataframe.
+        coupled_name: str or None, default=None
+            Name of another variable whose data is contained in the desired dataframe.
+            Passed by `getColumn` if the to-be-retrieved column is contained in multiple dataframes (e.g. 'time'), 
+            to uniquely identify which dataframe is desired (e.g. the 'time' corresponding to 'Pout').
+        df_index: str or int or None, default=None
+            Dictionary key of the desired dataframe.
+        return_index: bool, default=False
+            Whether the dataframe should be returned, or only the its key in the `dataframes` dictionary.
+            
+        Returns
+        -------
+        pd.DataFrame or int or str
+            pd.DataFrame if `return_index=False`, otherwise returns the dataframe key in `DataHandler.dataframes`
+            
+        Notes
+        -----
+        DataFrame selection rule:        
+        df_index > coupled_name > name  
+        """
         #Get the index of the data in self.dataframes
         if df_index is None:
             if coupled_name is not None:
@@ -50,33 +107,55 @@ class DataHandler:
         else:
             return self.dataframes[df_index]
            
-    def setColumn(self, name, values, base_values=None, day=None, coupled_name=None, df_index=None, df=None):
-        """ Set values of a column """
-        #Get dataframe
-        if df is None:
-            df = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index)
+    def getColumn(self, name, day=None, coupled_name=None, df_index=None, df=None, blacklist=[]):
+        """ 
+        Retrieves desired data column window in the desired format. 
+        Can be used to retrieve all data, or for a specific day. Data returned as a numpy array.
+        Blacklist of can be passed containing dates for which the values should be set to 0.
         
-        #Create column if it does not exist yet
-        if name not in df.columns:
-            self.createColumn(name, base_values=base_values, df=df)
+        If data is requested for a particular day, uses pre-calculated by-date grouping of the dataframe stored in `DataHandler.groups`.
+        For multiple consecutive data requests, this allows for quick access to the desired data.
+        If the by-date grouping has not yet been performed, this function does so by calling `DataHandler.ensureGroupedByDate`.
         
-        #Set values
-        if day is None:
-            df[name] = values
-        else:
-            self.ensureDateColumn(df=df)
-            df.loc[df["Date"] == day, name] = values
-            
-    def getColumn(self, name, day=None, coupled_name=None, df_index=None, df=None, as_array=False, as_copy=False, blacklist=[]):
-        """ Get data of name, potentially for selected days. Columns like 'time' or 'zenith' may be degenerate, so these can be retrieved using
-            'coupled_name', then the function returns the times of zenith angles corresponding to this column """
+        Parameters
+        ----------
+        name: str
+            Name of the column.
+        day: datetime.date or None, default=None
+            Desired day of data to be retrieved. If `None`, entire column is returned.
+        coupled_name: str, default=None
+            Coupled name for dataframe retrieval, if `name` is present in multiple dataframes (e.g. 'Time').
+        df_index: str or int or None, default=None
+            Key of the desired dataframe in the `DataHandler.dataframes` dictionary.
+        df: pd.DataFrame or None, default=None
+            Dataframe to retrieve column of.
+        blacklist: list[datetime.date]
+            List of days which should be masked (values set to 0) upon retrieval.
+        
+        Returns
+        -------
+        tuple[ np.ndarray, tuple[datetime, datetime, int] ]
+            Tuple containing:
+            - The desired timeseries data as a numpy array.
+            - A tuple containig the start time, end time and timestep in seconds of the returned data.
+        
+        Raises
+        ------
+        KeyError
+            If the desired column is not present in the retrieved dataframe.
+        
+        Notes
+        -----
+        DataFrame selection rule:
+        df > df_index > coupled_name > name
+        """
         #Get correct dataframe
         df_index = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index, return_index=True)
         df = self.dataframes[df_index]
 
         #Check if column exists
         if not name in df.columns:
-            raise ValueError(f"Data retrieval failed: column {name} not present in dataframe: {df.columns}")
+            raise KeyError(f"Data retrieval failed: column {name} not present in dataframe: {df.columns}. Did you pass the correct coupled name or dataframe index?")
         
         if day is not None:
             self.ensureGroupedByDate(df_index)
@@ -104,7 +183,34 @@ class DataHandler:
         return data, start_time, end_time, timestep
         
     def setColumn(self, name, values, base_values=None, day=None, coupled_name=None, df_index=None, df=None):
-        """ Set values of a column """
+        """ 
+        Method to set the values of a desired column (optionally at a specific day). 
+        Automatically creates new column if the column does not exist yet.
+        User is responsible to ensure proper alignment of the `values` array with shape expected by `pandas`.
+        
+        Parameters
+        ----------
+        name: str
+            Name of the column.
+        values: np.ndarray
+            Values to set the column to.
+        base_values: np.ndarray or None, default=None
+            If column does not exist yet will initiate a column with these base values.
+            If `None`, column will be initialized with `np.nan`.
+        day: datetime.date or None
+            Specific day for which the values must be set. If `None`, will set the entire column.
+        coupled_name: str, default=None
+            Coupled name for dataframe retrieval, if `name` is present in multiple dataframes (e.g. 'Time').
+        df_index: str or int or None, default=None
+            Key of the desired dataframe in the `DataHandler.dataframes` dictionary.
+        df: pd.DataFrame or None, default=None
+            Dataframe to set column of.
+        
+        Notes
+        -----
+        DataFrame selection rule:
+        df > df_index > coupled_name > name
+        """
         #Get dataframe
         if df is None:
             df = self.getDataFrame(name=name, coupled_name=coupled_name, df_index=df_index)
@@ -121,7 +227,36 @@ class DataHandler:
             df.loc[df["Date"] == day, name] = values
             
     def createColumn(self, name, base_values=None, coupled_name=None, df_index=None, df=None):
-        """ Creates a column 'name' and sets values to 'base_values' """
+        """ 
+        Initializes a new column in a desired dataframe of desired name and chosen base values.
+        Appends the column to the `DataHandler.loopup_dict` dictionary.
+        
+        Parameters
+        ----------
+        name: str
+            Name of the column to be created.
+        base_values: np.ndarray or None, default=None
+            If column does not exist yet will initiate a column with these base values.
+            If `None`, column will be initialized with `np.nan`.
+        day: datetime.date or None
+            Specific day for which the values must be set. If `None`, will set the entire column.
+        coupled_name: str, default=None
+            Coupled name for dataframe retrieval.
+        df_index: str or int or None, default=None
+            Key of the desired dataframe in the `DataHandler.dataframes` dictionary.
+        df: pd.DataFrame or None, default=None
+            Dataframe to create column in.
+        
+        Raises
+        ------
+        ValueError
+            If the column to be created is already present in another dataframe, and not among ('zenith', 'time' or 'date').
+        
+        Notes
+        -----
+        DataFrame selection rule:
+        df > df_index > coupled_name
+        """
         #Check if the name is already in the lookup dictionary
         if self.lookup_dict.get(name) is not None:
             raise ValueError(f"Column of name {name} already present in dataframe: {self.lookup_dict.get(name)}.")
@@ -141,7 +276,15 @@ class DataHandler:
     ### Routines for adding, ensuring or getting metadata
     ############################
     
-    def compileBlacklist(self): ###!!!
+    def compileBlacklist(self):
+        """ 
+        Transposes `DataHandler.blacklist` such that the keys are the blacklisted days, and the values is a list containing blacklist reasons.
+        
+        Returns
+        -------
+        dict[datetime.date, list[str]]
+            Dictionary of blacklisted days, coupled to a list of reasons for blacklisting.        
+        """
         temp = {}
         for code, days in self.blacklist.items():
             for day in days:
@@ -152,7 +295,23 @@ class DataHandler:
         return temp
     
     def getTimeRange(self, name=None, day=None, df_index=None, df=None):
-        """ Retrieve the timestamps of the first and last datapoints of the selected window """
+        """ 
+        Retrieve the timestamps of the first and last datapoints of the selected window for the chosen column or dataframe.
+        
+        name: str or None, default=None
+            Name of the column for which to determine the time range.
+        day: datetime.date or None, default=None
+            Day for which the timerange is desired. If `None`, returns timerange of full column.
+        df_index: str or int or None, default=None
+            Key of the desired dataframe in the `DataHandler.dataframes` dictionary.
+        df: pd.DataFrame or None, default=None
+            Dataframe to get time range of.
+        
+        Notes
+        -----
+        DataFrame selection rule:
+        df > df_index > name
+        """
         if df is None:
             df = self.getDataFrame(name=name, df_index=df_index)
         if day is None:
@@ -163,7 +322,21 @@ class DataHandler:
         
     
     def getDays(self, name=None, df_index=None, df=None):
-        """ Get all unique days in a timeseries """
+        """ 
+        Get all unique days in a column or dataframe.
+        
+        name: str or None, default=None
+            Name of the column for which to retrieve the unique days.
+        df_index: str or int or None, default=None
+            Key of the desired dataframe in the `DataHandler.dataframes` dictionary.
+        df: pd.DataFrame or None, default=None
+            Dataframe to get days for.
+        
+        Notes
+        -----
+        DataFrame selection rule:
+        df > df_index > name
+        """
         if df is None:
             df = self.getDataFrame(name=name, df_index=df_index)
         self.ensureDateColumn(df)
@@ -171,18 +344,35 @@ class DataHandler:
     
     
     def ensureGroupedByDate(self, df_index):
-        """ Ensures a dataframe is grouped by date """
+        """ 
+        Ensures a dataframe matching given key has grouping by date pre-calculated.
+        Calls `DataHandler.groupByDate` is grouping by date has not yet been performed.
+        
+        Parameters
+        ----------
+        df_index: str or int
+            Index of the desired dataframe.
+        """
         if self.groups.get(df_index) is not None:
             return
         else:
             self.groupByDate(df_index)
     
-    def groupByDate(self, df_index): ###!!!
+    def groupByDate(self, df_index):
+        """ 
+        Handles grouping by date of a dataframe matching the given key.
+        Populates the `DataHandler.groups` dictionary with a `GroupInfo` object stored under the same key.
+        Grouping is only performed if more than two unique days are included in the timerange.
+        
+        Parameters
+        ----------
+        df_index: str or int
+            Key of the desired dataframe in the `DataHandler.dataframes` dictionary.
+        """
         df = self.getDataFrame(df_index=df_index)
         self.ensureDateColumn(df)
         
         results = {}
-        
         for date, g in df.groupby("Date").groups.items():
             times = df.loc[g, "Time"]
             if len(times) < 2:
@@ -191,24 +381,55 @@ class DataHandler:
             end_time   = times.iloc[-1]
             timestep   = pd.Timedelta.total_seconds(times.iloc[1] - times.iloc[0])
             results[date] = GroupInfo(g, start_time, end_time, timestep)
-        
         self.groups[df_index] = results
         
     def ensureDateColumn(self, df=None, df_index=None):
-        """ Ensures a dataframe has a date column for indexing by days """
+        """ 
+        Ensures a dataframe has a date column for indexing by days.
+        
+        Parameters
+        ----------
+        df_index: str or int or None, default=None
+            Key of the desired dataframe in the `DataHandler.dataframes` dictionary.
+        df: pd.DataFrame or None, default=None
+            Dataframe to ensure date column for.
+        """
         if df is None:
             df = self.getDataFrame(df_index=df_index)
         if "Date" not in df.columns:
             self.addDateColumn(df=df)
         
     def addDateColumn(self, df=None, df_index=None):
-        """ Adds a date column, extracted from the datetime column. For easier subsetting by date. """
+        """ 
+        Adds a date column, extracted from the datetime column. For easier subsetting by date.
+        
+        Parameters
+        ----------
+        df_index: str or int or None, default=None
+            Key of the desired dataframe in the `DataHandler.dataframes` dictionary.
+        df: pd.DataFrame or None, default=None
+            Dataframe to add date column for.
+        """
         if df is None:
             df = self.getDataFrame(df_index=df_index)
         df["Date"] = pd.to_datetime(df["Time"]).dt.date ###!!!
     
     def addDateToTime(self, df=None, df_index=None):
-        """ If a csv has a date and a time column, uses the date column to inform the times of their date """
+        """ 
+        If a csv has a date and a time column, uses the date column to inform the times of their date. 
+        
+        Parameters
+        ----------
+        df_index: str or int or None, default=None
+            Key of the desired dataframe in the `DataHandler.dataframes` dictionary.
+        df: pd.DataFrame or None, default=None
+            Dataframe to add date column for.
+            
+        Returns
+        -------
+        pd.DataFrame
+            Dataframe with updated time column.
+        """
         if df is None:
             df = self.getDataFrame(df_index=df_index)
         df["Time"] = pd.Series([
@@ -217,8 +438,25 @@ class DataHandler:
         return df
     
     def addZenithColumn(self, coordinates, df=None, df_index=None, time_zone=None, UTC_offset=None):
-        """ Adds the solar zenith angle for each timestep with the given coordinates. 
-        User needs to provide the UTC offset of the local time, since PVLib always works in UTC """
+        """ 
+        Adds a column with the solar zenith angle for each timestep, using the given coordinates and UTC offset.
+        The `Time` column of the selected dataframe must contain both times and dates.
+        Employs PVLib through solar_module.py.
+        Adds a column named 'zenith' to the dataframe. This column is not added to the `DataHandler.lookup_dict`.
+        
+        Parameters
+        ----------
+        coordinates: tuple[float, float]
+            Latitude and longitude of for which to calculate solar zenith angles.
+        df_index: str or int or None, default=None
+            Key of the desired dataframe in the `DataHandler.dataframes` dictionary.
+        df: pd.DataFrame or None, default=None
+            Dataframe to add zenith column for.
+        time_zone: str or None, default=None
+            Time zone of the "Time" data.
+        UTC_offset: int or None, default=None
+            Hours offset from UTC.
+        """
         from solar_module import calculateZenithAngles
         if df is None:
             df = self.getDataFrame(df_index=df_index)
@@ -380,36 +618,3 @@ class DataHandler:
             df.fillna(new_value, inplace=True)
     
     
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
