@@ -406,6 +406,8 @@ class Variable:
         Equation defining the variable (required if not a basic variable).
     is_timesum : bool
         Defines whether a variable is an aggregation over time. Note: this flag is exclusive to auxiliary timesum variables created by the equation engine.
+    timesum_settings : str, optional
+        String containing timesum settings if variable is a timesum (aggregation rule, rate handling). Optional, can also be inferred from dependencies.
     
     Raises
     ------
@@ -428,7 +430,7 @@ class Variable:
         Dictionary of TimeHarmonizationData objects, storing how dependencies are time-harmonized during calculation. Used when dependencies have different temporal resolution.
     """
     def __init__(self, name, description=None, values=None, is_basic=True, is_hardcoded=False, is_maskable=True, 
-                 is_rate=None, aggregation_rule=None, equation=None, is_timesum=False):
+                 is_rate=None, aggregation_rule=None, equation=None, is_timesum=False, timesum_settings=None):
         self.name               = name              #str: variable name
         self.description        = description       #str: variable description
         self.is_basic           = is_basic          #bool: defines whether variable is basic or derived
@@ -454,6 +456,7 @@ class Variable:
         self.is_timesum         = is_timesum        #bool: defines whether variable is a timesum
         self.aggregation_step   = None              #float: timestep of the dependency over which the variable is time-integrated, required for uncertainty calculation
         self.non_aggregated_values = None           #array: values that are aggregated over - used in uncertainty calculation
+        self.timesum_settings   = timesum_settings  #str: string containing timesum aggregation rule and rate handling instructions
         
         self.sympy_symbol_map   = None              #dict: dictionary of sympy symbols
         self.sympy_equation     = None              #sympy interpretable of the variable equation
