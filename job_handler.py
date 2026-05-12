@@ -600,7 +600,6 @@ class JobHandler:
             data, start_time, end_time, timestep = self.data.getColumn(name         = column_name, 
                                                                        coupled_name = coupled_name, 
                                                                        day          = day, 
-                                                                       as_array     = True, 
                                                                        blacklist    = blacklist)
             var = self.variables[var_name]
             var.values     = data
