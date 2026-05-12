@@ -36,12 +36,12 @@ input BASIC VARIABLES
 		description: Pyranometer sensitivity
 		aggregation: average
 		UNCERTAINTIES:
-			-calibration: 		   relative, shape=rectangular, symmetric, correlation=1, bound=1
-			-non-stability: 	   relative, shape=rectangular, symmetric, correlation=1, bound=0.8
-			-nonlinearity: 		   relative, shape=rectangular, symmetric, correlation=1, bound=0.5
+			-calibration: 		   relative, shape=rectangular, symmetric, correlation=1, bound=0.6
+			-non-stability: 	   relative, shape=rectangular, symmetric, correlation=1, bound=0.1
+			-nonlinearity: 		   relative, shape=rectangular, symmetric, correlation=1, bound=0.2
 			-clear sky spectral error: relative, shape=rectangular, symmetric, correlation=1, bound=0.5
-			-temperature response: 	   relative, shape=rectangular, symmetric, correlation=1, bound=1
-			-tilt response: 	   relative, shape=rectangular, symmetric, correlation=1, bound=0.5
+			-temperature response: 	   relative, shape=rectangular, symmetric, correlation=1, bound=0.4
+			-tilt response: 	   relative, shape=rectangular, symmetric, correlation=1, bound=0.2
 		END UNCERTAINTIES
 	end var S
 	var V
@@ -90,11 +90,11 @@ input DERIVED VARIABLES
 		aggregation: sum
 		equation: 'V'/'S'
 		UNCERTAINTIES:
-			-zero off-set A: 			absolute, shape=rectangular, one-sided, correlation=1, bound=7
+			-zero off-set A: 			absolute, shape=rectangular, one-sided, correlation=1, bound=2
 			-zero off-set B: 			absolute, shape=rectangular, symmetric, correlation=1, bound=2
 			-zero off-set other sources: 		absolute, shape=rectangular, symmetric, correlation=1, bound=1
-			-directional response: 			absolute, shape=rectangular, symmetric, correlation=1, bound=10, multiplier='G'/(1000 * cos(pi*'zenith'/180))
-			-additional signal processing errors: 	absolute, shape=rectangular, symmetric, correlation=1, bound=2
+			-directional response: 			absolute, shape=rectangular, symmetric, correlation=1, bound=5, multiplier='G'/(1000 * cos(pi*'zenith'/180))
+			-additional signal processing errors: 	absolute, shape=rectangular, symmetric, correlation=1, bound=0
 		END UNCERTAINTIES
 	end eq G
 	eq C_25

@@ -1,4 +1,4 @@
-from my_dataclasses import Variable, UncertaintySource, ParsedVariableData, CSVData
+from my_dataclasses import Variable, UncertaintySource, ParsedVariableData
 import numpy as np
 import csv
 from datetime import datetime
@@ -72,8 +72,6 @@ class PandasCSVHandler:
         last_valid = valid[::-1].idxmax()
         
         return df.loc[first_valid:last_valid]
-        
-    
     
     def addDateColumn(self, df):
         """ Adds a date column, extracted from the datetime column. For easier subsetting by date. """
@@ -94,69 +92,8 @@ class PandasCSVHandler:
         df["zenith"] = np.array(solar_data["zenith"])
         
         
-    def compileOneDayCSVData(self, df, date):
-        """ Calls the compileCSVData function on the subset of the dataframe corresponding to the given date """
-        subset = df[df["Date"] == date]
-        return self.compileCSVData(subset)
         
-    
-    def compileCSVData(self, df):
-        """ Compile a CSVdata object from the given (subset of a) dataframe """
-        time_range = [df["Time"].iloc[0].to_pydatetime(), df["Time"].iloc[-1].to_pydatetime()] ###!!!
-        timestep = (df["Time"].iloc[1].to_pydatetime() - df["Time"].iloc[0].to_pydatetime()) ###!!!
-        timestep = timestep.total_seconds()
         
-        data = {name: (df[name] if name in ["Time", "Date"] else df[name].to_numpy() ) for name in df.columns} ###!!!
-        return CSVData(data, timestep, time_range)
-        
-
-
-class CSVHandler:
-    """ Deprecated CSV handler, recommended to use the PandasCSVHandler """
-    def _readCSV(self, filepath, delimiter, has_header, structure_list, timeformat=None):
-        """ Reads a CSV and populates the object data block """
-        with open(filepath, 'r', newline='') as csvfile:
-            reader = csv.reader(csvfile, delimiter=delimiter)
-            if has_header:
-                next(reader)
-            for row in reader:
-                for idx, name in enumerate(structure_list):
-                    #Skip element if it should be excluded, flagged by '-'
-                    if name != '-':
-                        #Time section handling
-                        if name.lower() == 'time':
-                            value = datetime.strptime(row[idx], timeformat)
-                        #All other data is attempted to be stored as a float
-                        else:
-                            try:
-                                value = float(row[idx])
-                            except ValueError:
-                                #In case of value errors, paste data as string
-                                value = row[idx]
-                        self.data[name].append(value)
-    
-    def compileCSVData(self, filepath, delimiter, has_header, structure_list, timeformat=None):
-        """ Read CSV and populate self.data block """
-        self.data = {name: [] for name in structure_list if name != '-'}
-        
-        self._readCSV(filepath, delimiter, has_header, structure_list, timeformat)
-        
-        #Check whether time was given as an input
-        has_timedata = False
-        if "Time" in structure_list:
-            has_timedata = True
-        
-        #If csv contains timedata, get range and timestep
-        if has_timedata:
-            time_range = [self.data["Time"][0], self.data["Time"][-1]]      ###!!! Not robust: Time, time
-            timestep = self.data["Time"][1] - self.data["Time"][0]          ###!!! Not robust: Time, time
-            timestep = timestep.total_seconds()
-        else:
-            time_range = None ; timestep = None
-        
-        return CSVData(self.data, timestep, time_range)
-
-
 class EquationTreeReader:
     def __init__(self):
         self.variables = {}

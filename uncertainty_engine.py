@@ -4,33 +4,86 @@ from copy import deepcopy
 
 
 class UncertaintyEngine:
-    def __init__(self, variables, equation_engine=None, calculation_engine=None, time_engine=None):
-        self.variables = variables
+    """ 
+    This engine handles the calculation of uncertainty.
+    
+    The engine is typically invoked by calling the ``calculateTotalUncertainty`` function on a variable.
+    The engine will then calculate and propagate all uncertainty downtree while properly handling time-aggregation.
+    Engine also populates ``variable.uncertainty`` objects with (sub)results. Also makes use of these previously calculated results, if available.
+    The uncertainty engine will invoke functionality of the equation, calculation and time engines wherever required.
+    
+    Attributes
+    ----------
+    equation_engine: EquationEngine
+        Equation engine used to take partial derivatives and build executables on the fly.
+    calculation_engine: CalculationEngine
+        Calculation engine used to calculate the partial derivatives during uncertainty evaluation.
+    
+    Notes
+    -----
+    - Before ``calculateTotalUncertainty`` can be invoked on a derived (non-basic) variable, its values must have been calculated by a calculation engine.
+    - Uncertainty timeseries are always kept in their root temporal resolution, even if they are combined with data of different temporal resolution.
+      This is because partial aggregation of uncertainty timeseries is a destructive operation from an information perspective,
+      aggregating a time-aggregation is mathematically incorrect. Time aggregations are therefore always calculated from root-resolution.
+    - Uncertainties are allowed to be masked. This means that their uncertainties are set to zero whenever their parent variable is 0.
+      This functionality is used to exclude uncertainty contributions from measurements at night.
+      This setting only affects variables that are specified to be 'maskable' in the input script.
+    """
+    def __init__(self, equation_engine=None, calculation_engine=None):
         self.equation_engine = equation_engine
         self.calculation_engine = calculation_engine
-        self.time_engine = time_engine
     
-    def _calculateUncertaintySourceValues(self, var, source):
-        """ Calculates the uncertainty values for a given uncertainty source """
+    def _calculateUncertaintySourceValues(self, var, source, equation_engine=None):
+        """ 
+        Helper function that calculates and populates the uncertainty for a given uncertainty source.
+        
+        For relative uncertainty sources, uses the variables of the given variable to calculate the uncertainty.
+        If the uncertainty source has an internal parent variable registered, checks whether this matches the given variable.
+        In case the uncertainty source is defined through a more complex equation, through ``multiplier``, 
+        the internal equation engine is used to build the required executable.
+        
+        Parameters
+        ----------
+        var: Variable
+            Variable that owns the uncertainty source.
+        source: UncertaintySource
+            Uncertainty source for which to calculate the uncertainty values.
+        
+        Raises
+        ------
+        ValueError
+            If the source has a registered parent variable that does not match the passed variable in ``var``.
+        RuntimeError
+            If the source is defined through a more complex ``multiplier`` equation that must be evaluated, 
+            but the uncertainty engine has no equation engine to build the executable with.
+        """
+        #If the source has a parent variable given, check whether is matches the passed variable
+        if source.parent_variable is not None and source.parent_variable is not var:
+            raise ValueError(f"Error: passed variable {var.name} and registered parent variable {source.parent_variable.name} of uncertainty source {source.name} do not match. Cannot calculate uncertainties.")
+        
         if source.is_relative:
             source.values = source.sigma * var.values
         else:
             source.values = source.sigma
-            
+        
+        #This block handles complex uncertainty sources with a multiplier.
         if source.multiplier is not None:
             #Check if there is already an executable in place. If not: we create it now
             if source.executable is None:
-                if self.equation_engine is None:
-                    raise ValueError(f"Cannot calculate the uncertainty values of uncertainty source {source.name} of variable {var.name}. \
-                                     Please provide the calculation engine with an uncertainty engine to interpret the source equation.")
+                
+                if equation_engine is None:
+                    equation_engine = self.equation_engine
+                if equation_engine is None:
+                    raise RuntimeError(f"Cannot calculate the uncertainty values of uncertainty source {source.name} of variable {var.name}. \
+                                     Please provide the uncertainty engine with an equation engine to interpret the source equation.")
                 #Preparing source dependencies
                 source.equation = source.multiplier
                 source.dependencies = {}
-                self.equation_engine.populateVariableDependencyNames(source)
-                self.equation_engine.populateVariableDependencies(source)
+                equation_engine.populateVariableDependencyNames(source)
+                equation_engine.populateVariableDependencies(source)
                 
                 #Preparing and executing equation
-                self.equation_engine.buildVariableExecutable(source)
+                equation_engine.buildVariableExecutable(source)
             #Execute executable
             args = source.dependencies.values()
             rescale_values = source.executable(*args)
@@ -40,7 +93,19 @@ class UncertaintyEngine:
         source.values = abs(source.values)
         
     def _prepareVariableDirectUncertainties(self, var):
-        """ Prepares all direct uncertainties acting on variable var. """
+        """ 
+        Helper function that ensures all direct uncertainty sources acting on ``var`` have their values calculated.
+        
+        Parameters
+        ----------
+        var: Variable
+            Variable for which the direct uncertainties must be calculated.
+            
+        Raises
+        ------
+        ValueError
+            If no values are defined or calculated for the passed variable.
+        """
         if var.values is None:
             raise ValueError(f"Cannot prepare uncertainty for variable {var.name}, please evaluate the variable itself first!")
         if var.uncertainty.direct_uncertainties_calculated is True:
@@ -56,12 +121,33 @@ class UncertaintyEngine:
                 self._calculateUncertaintySourceValues(var, source)
             
     def prepareAllDirectUncertainties(self, variables):
-        """ Prepares the direct uncertainties for all variables in the given variable set """
+        """ 
+        Prepares the direct uncertainties for all variables in the given variable set.
+        
+        Parameters
+        ----------
+        variables: list
+            Variables for which the direct uncertainties must be calculated.
+        
+        """
         for var in variables:
             self._prepareVariableDirectUncertainties(var)
     
     def prepareDownTreeDirectUncertainties(self, var):
-        """ Prepares the direct uncertainties acting on var, and all variables downtree from var """
+        """ 
+        Recursively ensures all direct uncertainties acting on ``var``, and all variables downtree, are calculated.
+        Recursion occurs depth-first and stops traversing a node when a variable has no dependencies.
+        
+        Parameters
+        ----------
+        var: Variable
+            Starting node of the recursive step.
+        
+        Notes
+        -----
+        - Recursion has no protection for cyclically defined equation trees. This will not cause problems for well-defined trees. 
+          Upon initialization, the equation engine checks if the tree is well-defined.
+        """
         self._prepareVariableDirectUncertainties(var)
         if var.is_basic:
             return
@@ -70,26 +156,99 @@ class UncertaintyEngine:
                 self.prepareDownTreeDirectUncertainties(dep)
 
     def _getDependencyPartialsValues(self, var, equation_engine=None, calculation_engine=None):
-        """ Executes partial derivative executable builder form the equation engine and executes calculation of partial values, 
-            returns dictionary of partial derivative values per dependency """
+        """ 
+        Get the absolute values of a variable's partial derivatives with respect to each dependency.
+        
+        Uses an equation engine to ensure the executables of all partial derivatives are in place for the passed variable.
+        Uses a calculation engine to execute all partial derivatives.
+        
+        Parameters
+        ----------
+        var: Variable
+            Variable for which the partial derivatives are to be calculated.
+        equation_engine: EquationEngine, optional
+            Equation engine used to build partial derivative executables. Required if uncertainty engine has no internal equation engine.
+        calculation_engine: CalculationEngine, optional
+            Calculation engine used to evaluate all partial derivatives. Required if uncertainty engine has no internal calculation engine.
+        
+        Raises
+        ------
+        RuntimeError
+            If no equation or calculation engines are owned by the uncertainty engine, or given in the function call.
+        
+        Returns
+        -------
+        dict[str, float or array_like]
+            Dictionary containing as keys the variables to which the partial derivatives are taken,
+            and as values the float or array_like calculated values of the partial derivatives.
+        """
         if equation_engine is None:
             equation_engine = self.equation_engine
+            if equation_engine is None:
+                raise RuntimeError("Please provide an equation engine when calling this function.")
         if calculation_engine is None:
             calculation_engine = self.calculation_engine
+            if calculation_engine is None:
+                raise RuntimeError("Please provide a calculation engine when calling this function.")
         #Populate variable partial executables
         equation_engine.buildPartialDerivativeExecutables(var)
         partials_dict = calculation_engine.executeAllPartials(var, absolute_values=True, store_results=False, force_recalculation=False)
         return partials_dict
     
     def _convertNestedListTo2DArray(self, lst, forced_length=None):
-        """ Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array """
+        """ 
+        Deprecated: Converts a nested list of various sizes to a 2D array block - extends scalars to the length of the rest of the array.
+        
+        Parameters
+        ----------
+        lst: list
+            2D nested list to be converted to a square array.
+        forced_length: int or None, default = None
+            Size of the output matrix. If ``None``, the output matrix will have the size of the longest list in ``lst``.
+        
+        Returns
+        -------
+        np.ndarray[dtype=float]
+            2D array conversion of the nested input list, with padded values where necessary.
+        """
         if forced_length is None:
             forced_length = max((np.size(v) if np.ndim(v)>0 else 1) for v in lst)
         lst = [np.full(forced_length, v) if (np.isscalar(v) or (isinstance(v, np.ndarray) and v.size == 1))  else v for v in lst]
         return np.vstack(lst).astype(float)
 
     def _initializeUncertaintyPropagation(self, var, mask):
-        """ initializer for the getWeightedRootUncertainties function, prepares direct uncertainties and helps to short circuit the main retriever in trivial cases """
+        """ 
+        Short-circuits uncertainty calculation if the variable has been flagged as certain, or if its uncertainties have been previously calculated.
+        Helper for ``UncertaintyEngine.getWeightedRootUncertainties`` function.
+        
+        Parameters
+        ----------
+        var: Variable
+            Variable for which uncertainty data retrieval has been called.
+        mask: bool
+            Whether uncertainty is allowed to be masked. 
+            Previously calculated uncertainties only match the requested data if they were calculated with the same masking setting.
+        
+        Returns
+        tuple
+            If the helper determines that previously computed results can be used.
+            For more info on this tuple, see ``UncertaintyEngine.getWeightedRootUncertainties``
+            Tuple has structure
+            (
+                list[UncertaintySource],
+                list[ np.ndarray ],
+                list[int],
+                list[ list[int] ],
+                list[ list[Variable] ]
+            )
+        None
+            If the helper determines that the uncertainties must be (re)calculated by the engine.
+            
+        Notes
+        -----
+        - Recommended to replace the uncertainty data tuple with a dedicated dataclass, with integrated
+          routines for merging, adding recursion layers and retrieving human-readable recursion stacks.
+        """
         if var.uncertainty.is_certain:
             return [], [], [], [], []
         if var.uncertainty.total_uncertainty_calculated and var.uncertainty.root_weighted_uncertainties is not None:
@@ -104,11 +263,45 @@ class UncertaintyEngine:
 
     def _rootWeightedUncertaintyCalculator(self, var, dep_name, new_sensitivities, dep_weighted_uncertainties, 
                                            total_upsample_factors, local_upsample_factors):
-        """ For a given variable and dependency, this function will prune the weighted uncertainties to the right length, and multiply sections
-            of length 'total_upsample_factor' of the old sensitivities by its corresponding entry in the new_sensitivities
-            in other words: if variable var has timesep of a factor 'total_upsample_factor=x' greater than the timestep of the original uncertainty 
-            then each set of x consecutive entries of the source weighted uncertainty should be reweighted by the same factor in new_sensitivities 
-            important to note is that dep_weighted_uncertainties has the original temporal resolution of the uncertainty source, not necessarily that of the variable or dependency """
+        """ 
+        Applies sensitivity to uncertainty while accounting for temporal resolution differences, and updates the temporal upsample factors.
+        
+        For a given variable and dependency, this function prunes the weighted uncertainties to the right length such that start and end times match.
+        Multiplies sections of length 'total_upsample_factor' of the old sensitivities by its corresponding entry in the ``new_sensitivities``.
+        In other words: if ``var`` has timesep of a factor ``total_upsample_factor=x`` greater than the timestep of the original uncertainty 
+        then each set of x consecutive entries of this source's weighted uncertainty should be reweighted by the same factor in ``new_sensitivities``.
+        Note that ``dep_weighted_uncertainties`` has the original temporal resolution of each uncertainty source, not necessarily that of the variable or dependency. 
+        
+        Parameters
+        ----------
+        var: Variable
+            Variable that the uncertainty is being calculated for.
+        dep_name: str
+            Name of the dependency that the uncertainties are propagated upward from.
+        new_sensitivities: dict[str, float or np.ndarray]
+            Dictionary of dependency names with their respective partial derivatives of ``var``.
+        dep_weighted_uncertainties: list[ np.ndarray ]
+            The weighted uncertainties of the dependency.
+        total_upsample_factors: list[int]
+            The total upsample factors for each uncertainty compared to their original temporal resolution.
+        local_upsample_factors: list[ list[int] ]
+            The stack of upsample factors for each uncertainty at each recursion step.
+            
+        Returns
+        -------
+        tuple
+            Updated weighted uncertainties, total and local upsample factors.
+            Tuple has structure
+            (
+                list[ np.ndarray ],
+                list[int],
+                list[ list[int] ]
+            )
+        
+        Notes
+        -----
+        - This function updates the weighted_uncertainties, total_upsample_factors and local_upsample_factors.
+        """
         
         local_upsample_factor = 1
         #If a temporal resolution decrease was performed at the calculation of var, then we should prune the weighted uncertainties and update the total upsample factor accordingly
@@ -139,18 +332,44 @@ class UncertaintyEngine:
 
     
     def _handleDirectUncertaintyData(self, var, mask):
-        """ Handles the direct uncertainty sources for the getWeightedRootUncertainties function. """
+        """ 
+        Initializes the uncertainty stack for the direct uncertainty sources acting on ``var``. 
+        Helper to the ``getWeightedRootUncertainties`` function.
+        
+        Parameters
+        ----------
+        var: Variable
+            Variable for which to initialize an uncertainty stack.
+        mask: bool
+            Boolean indicating whether uncertainties should be masked if their parent variable is zero.
+        
+        Returns
+        -------
+        tuple
+            Initialized uncertainty stack for the direct uncertainties acting on ``var``.
+            For more info on this tuple, see ``UncertaintyEngine.getWeightedRootUncertainties``
+            Tuple has structure
+            (
+                list[UncertaintySource],
+                list[ np.ndarray ],
+                list[int],
+                list[ list[int] ],
+                list[ list[Variable] ]
+            )
+        
+        Notes
+        -----
+        - Recommended to replace the uncertainty data tuple with a dedicated dataclass, with integrated
+          routines for merging, adding recursion layers and retrieving human-readable recursion stacks.
+        """
         #Initialize the length of our timeseries
         n_values = 1 if isinstance(var.values, (float,int)) else len(var.values)
         
         uncertainty_mask = np.ones(n_values)
         if mask and var.is_maskable and not np.isscalar(var.values):
-            nz = np.nonzero(var.values)[0]
-            if len(nz)>0:
-                uncertainty_mask[:nz[0]] = 0  
-                uncertainty_mask[nz[-1]:] = 0
-                
-        
+            uncertainty_mask = np.zeros(n_values)
+            uncertainty_mask[np.nonzero(var.values)] = 1
+
         #Initialize the relevant objects using the direct uncertainty sources of this variable
         all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths = [], [], [], [], []
         for source in var.uncertainty.direct_uncertainty_sources:
@@ -162,13 +381,47 @@ class UncertaintyEngine:
         return all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
 
     def getWeightedRootUncertainties(self, var, mask):
-        """ Get all weighted root uncertainties of a variable. Specifically, for all uncertainty sources downtree,
-            it returns an array of the weighted uncertainties with respect to the present variable, in the original temporal resolution of the uncertainty.
-            Thus, if the temporal timestep of this variable is 10 times greater than that of a root uncertainty,
-            each 10 consecutive entries in the weighted root uncertainty will be multiplied by the same top-level sensitivity.
-            Returns a list of uncertainty source objects, a list of their corresponding weighted uncertainties, 
-            and the total temporal resolution difference factor between the source and the present variable """
+        """ 
+        Recursively retrieves or calculates all uncertainties acting on or downtree from var, and passes them on as an uncertainty stack.
         
+        Calculates direct uncertainties acting on ``var``.
+        Retrieves all uncertainties downtree from ``var``, and ensures they are properly multiplied with their sensitivities.
+        Applies time-aggregation if the present variable is a timesum, and resets the total upsample factors in this case.
+        Recursion occurs depth-first and stops traversing a node when:
+            - it encounters a basic variable.
+            - it encounters a variable flagged as certain.
+            - it encounters a variable with uncertainty already calculated with the same masking setting.
+        
+        Parameters
+        ----------
+        var: Variable
+            Variable for which the uncertainty stack is requested.
+        mask: bool
+            Whether uncertainties to be retrieved should be masked if their parent variable is zero and maskable.
+        
+        Returns
+        -------
+        tuple
+            Calculated uncertainty stack.
+            Tuple has structure
+            (
+                list[UncertaintySource],
+                list[ np.ndarray ],
+                list[int],
+                list[ list[int] ],
+                list[ list[Variable] ]
+            )
+            - list of ``UncertaintySource`` objects acting on or downtree from ``var``.
+            - list of arrays containing the weighted uncertainties (uncertainties multiplied by sensitivities) of each source.
+            - list of integer total upsample factors: difference factor between timestep of ``var`` and uncertainty's root timestep.
+            - list of lists containing the integer upsample factors along the propagation path, for each source.
+            - list of lists containing the propagation path of each uncertainty source to their root variable.
+            
+        Notes
+        -----
+        - Recommended to replace the uncertainty data tuple with a dedicated dataclass, with integrated
+          routines for merging, adding recursion layers and retrieving human-readable recursion stacks.
+        """
         #Prepare the direct uncertainties acting on this variable
         if not var.uncertainty.direct_uncertainties_calculated:
             self._prepareVariableDirectUncertainties(var)
@@ -225,10 +478,79 @@ class UncertaintyEngine:
             all_total_upsample_factors = [1 for _ in all_total_upsample_factors]
         #Pass on the package
         return all_sources, all_weighted_uncertainties, all_total_upsample_factors, all_local_upsample_factors, all_propagation_paths
+    
+    def _calculateUncertaintyAggregation(self, weighted_uncertainties, source):
+        """ 
+        Function performing the aggregation of uncertainty timeseries data using source autocorrelation.
         
+        If source correlation is trivial (0 or 1), short-circuits calculation to avoid matrix multiplications.
+        Aggregation occurs along last axis of the ``weighted_uncertainties`` array. 
+        For full aggregation, simply pass a 1D array. For partial aggregation, ensure 2D array of desired shape beforehand.
+        
+        Parameters
+        ----------
+        weighted_uncertainties: np.ndarray
+            Array containing uncertainty timeseries data.
+        source: UncertaintySource
+            Uncertainty source corresponding to the uncertainty timeseries.
+        
+        Returns
+        -------
+        np.ndarray or float
+            Array of 1 dimension less than ``weighted_uncertainties``. Aggregated weighted uncertainty array.
+            If ``weighted_uncertainties`` is 1D, returns a scalar.
+        """
+        #Check for trivial instances, 0 or 1 autocorrelation
+        if isinstance(source.correlation, (float, int)):
+            if source.correlation == 0:
+                return np.sqrt(np.sum(weighted_uncertainties**2, axis=-1))
+            if source.correlation == 1:
+                return np.sum(weighted_uncertainties, axis=-1)
+        #If case is not trivial, build correlation matrix of correct size and calculate the vector-matrix-vector product
+        size = np.shape(weighted_uncertainties)[-1]
+        corr_matrix = source.getCorrelationMatrix(size)
+        return np.sqrt(np.vecdot(weighted_uncertainties, np.matvec(corr_matrix, weighted_uncertainties)))
+    
     def timeSumWeightedRootUncertainties(self, calling_var, sources, weighted_uncertainties, local_upsample_factors, propagation_paths):
-        """ This function performs a full timesum of the uncertainty of all root sources while keeping it split by source
-            Temporal autocorrelation is included. Cross-correlation between sources is not included - sources are assumed independent """
+        """ 
+        Calculates aggregation factor and performs complete timesum of the uncertainty data.
+        
+        Timesums aggregate uncertainty timeseries according to source correlation and variable aggregation rules.
+        Timesums convert rates to quantities by multiplying with the timestep (e.g. power will become energy).
+        For each source, function parses backward through propagation path and applies a correction factor if upsampling occured for an intensive variable,
+        see Notes for further explanation.
+        Propagation path parsing stops either at the root, or if a previous timesum is encountered in the path.
+        
+        Parameters
+        ----------
+        calling_var: Variable
+            Variable calling the timesum.
+        sources: list[UncertaintySource]
+            List containing all uncertainty sources acting on ``calling_var``.
+        weighted_uncertainties: list[ np.ndarray ]
+            Array containing uncertainty timeseries data.
+        local_upsample_factors: list[ list[int] ]
+            List of lists containing the integer upsample factors along the propagation path, for each source.
+        propagation_paths: list[ list[Variable] ]
+            List of lists containing the propagation path of each uncertainty source to their root variable.
+        
+        Returns
+        -------
+        list[ float ]
+            The time-aggregated uncertainty due to each uncertainty source.
+        
+        Notes
+        -----
+        - Axiom: combining an intensive variable with an extensive variable results in an extensive variable, unless otherwise specified.
+        - Time aggregation of intensive variables corresponds to taking the average.
+        - Strictly speaking, one should do a dimensional analysis of the sensitivity it is multiplied with. However, as a rule of thumb,
+          it is assumed that if the total is an extensive quantity and the variable is intensive, then the partial derivative with respect
+          to the variable must still be extensive. Hence the product will be extensive. This logic also works the other way around.
+        - If a partial aggregation occurs somewhere in the propagation path, we must account for this with a separate factor.
+          Let 'A'  intensive and 'B' extensive, then 'A*B' is extensive and must be summed upon aggregation. 
+          If 'B' has twice the timestep of 'A', then the uncertainty timeseries of 'A*B' is in the resolution of 'A'.
+          We must therefore divide the reuslt by a factor 2, to account for the partial aggregation of 'A' to the timestep of 'B'.
+        """
         new_weighted_uncertainties = []
         
         for i, source in enumerate(sources):
@@ -249,8 +571,7 @@ class UncertaintyEngine:
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-(j+1)] 
             
             #Perform the time aggregation
-            corr_matrix = source.getCorrelationMatrix(len(weighted_uncertainties[i]))
-            result = np.sqrt(np.vecdot(weighted_uncertainties[i], np.matvec(corr_matrix, weighted_uncertainties[i])))
+            result = self._calculateUncertaintyAggregation(weighted_uncertainties[i], source)
             
             #Handle rules for the calling timesum
             if calling_var.aggregation_rule.startswith("ave"):
@@ -261,15 +582,38 @@ class UncertaintyEngine:
             #Apply correction factor                
             result *= aggregation_correction_factor
             new_weighted_uncertainties.append(result)
-            
         return new_weighted_uncertainties
                  
     def aggregateWeightedRootUncertainties(self, sources, weighted_uncertainties, total_upsample_factors, 
                                            local_upsample_factors, propagation_paths):
-        """ Performs a time-aggregation on a retrieved set of root sources, weighted root uncertainties and upsample factors
-            In other words, this function brings the weighted root uncertainties for a variable retrieved by the getWeightedRootUncertainties function
-            and aggregates all uncertainty arrays to the timestep of the variable.
-            Note that the time aggregation is a destructive procedure in general; time aggregation of time aggregates only makes sense for fully (un)correlated error sources """
+        """ 
+        Performs time-aggregation on an uncertainty stack (set of root sources, weighted uncertainties and upsample factors),
+        by applying time aggregation for all upsample factors in the ``local_upsample_factors`` list.
+        
+        Time aggregation is a destructive procedure: aggregating a time aggregation leads to incorrect results.
+        
+        Parameters
+        ----------
+        sources: list[UncertaintySource]
+            List of ``UncertaintySource`` objects acting on or downtree from ``var``.
+        weighted_uncertainties: list[np.ndarray]
+            List of arrays containing the weighted uncertainties (uncertainties multiplied by sensitivities) of each source.
+        total_upsample_factors: list[int]
+            List of integer total upsample factors: difference factor between timestep of ``var`` and uncertainty's root timestep.
+        local_upsample_factors: list[ list[int] ]
+            List of lists containing the integer upsample factors along the propagation path, for each source.
+        propagation_paths: list[ list[Variable] ]
+            List of lists containing the propagation path of each uncertainty source to their root variable.
+        
+        Returns
+        -------
+        list[np.ndarray]
+            List of arrays containing the uncertainty data in their new temporal resolution.
+        
+        Notes
+        -----
+        The notes on uncertainty aggregation of ``UncertaintyEngine.timeSumWeightedRootUncertainties`` apply here.
+        """
         #Note, we cannot make this function fully numpy in general, because the arrays inside weighted_uncertainties can be of different lengths
         new_weighted_uncertainties = []
         
@@ -294,19 +638,35 @@ class UncertaintyEngine:
                     #Here we do not skip the last step, hence we index with j
                     aggregation_correction_factor *= 1/local_upsample_factors[i][-j]
             
-            #Building correlation matrix and uncertainty vector
-            corr_matrix = source.getCorrelationMatrix(factor)
-            wu = weighted_uncertainties[i].reshape((-1, factor))
             #Calculate new uncertainties, append to list
-            result = np.sqrt(np.vecdot(wu, np.matvec(corr_matrix, wu)))
+            wu = weighted_uncertainties[i].reshape((-1, factor))
+            result = self._calculateUncertaintyAggregation(wu, source)
+            
+            #Apply correction factor, append to lists
             result *= aggregation_correction_factor
             new_weighted_uncertainties.append(result)
             
         return new_weighted_uncertainties
 
-    def calculateTotalUncertainty(self, var, recurse=True, mask=False):
-        """ Calculates the total uncertainty, and uncertainty split per source, for the given variable
-            The calculation populates the root uncertainties, propagation paths and upsample factors of all root ucnertainties downtree """
+    def calculateTotalUncertainty(self, var, mask=False):
+        """ 
+        Calculates the uncertainty stack (root weighted uncertainties, upsample factors, propagation paths) and total uncertainty for the given variable.
+        Function requests uncertainty stack by calling the recursive ``UncertaintyEngine.getWeightedRootUncertainties`` function.
+        Populates the uncertainty information of the called variable.
+        
+        Parameters
+        ----------
+        var: Variable
+            Variable for which the uncertainty must be calculated.
+        mask: bool, default=False
+            Whether masking of uncertainties should be applied if the source's parent variable is zero, and is maskable.
+            Intended to exclude uncertainty of e.g. zero readings during the night to be included in calculations.            
+        
+        Returns
+        -------
+        np.ndarray or float
+            Calculated uncertainty (timeseries) of the variable values.
+        """
         if var.uncertainty.total_uncertainty_calculated is True:
             return
         if not var.uncertainty.direct_uncertainties_calculated:
@@ -343,9 +703,30 @@ class UncertaintyEngine:
         return var.uncertainty.total_uncertainty
     
     def calculateRootContributions(self, var):
-        """ Returns the fractional contribution of the variance of each root source to the total variance in the variable """
+        """ 
+        Calculates the fractional contribution of each root source to the total variance in the variable.
+        
+        Parameters
+        ----------
+        var: Variable
+            Variable for which the uncertainty contribution split is desired.
+        
+        Raises
+        ------
+        RuntimeError
+            If the uncertainty of the variable has not yet been calculated.
+        
+        Returns
+        -------
+        np.ndarray or None
+            An array or array of timeseries arrays of the fractional contributions to the total uncertainty of each source.
+            Returns None if the variable has no uncertainty.
+        """
         if not var.uncertainty.total_uncertainty_calculated:
-            raise ValueError(f"Cannot split uncertainty of variable {var.name} to contributions. Please calculate the total uncertainty first.")
+            raise RuntimeError(f"Cannot split uncertainty of variable {var.name} to contributions. Please calculate the total uncertainty first.")
+        
+        if var.uncertainty.is_certain:
+            return None
         
         result = np.divide(var.uncertainty.aggregated_weighted_uncertainties**2,
                            var.uncertainty.total_uncertainty**2,
@@ -445,7 +826,7 @@ class UncertaintyEngine:
         plt.ylabel("Percentage contribution split")
         plt.show()
         
-    def plotAbsoluteRootContributions(self, var, k=1):
+    def plotAbsoluteRootContributions(self, var, k=2, ylims=None):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         
@@ -457,6 +838,8 @@ class UncertaintyEngine:
         ax = plt.subplot(111)
         ax.stackplot(time_axis, *root_split, labels=[source.name for source in var.uncertainty.root_sources])
         
+        if ylims is not None:
+            ax.set_ylim(ylims[0], ylims[1])
         ax.grid()
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
             
@@ -471,7 +854,7 @@ class UncertaintyEngine:
         plt.ylabel("Total uncertainty")
         plt.show()
         
-    def plotRelativeRootContributions(self, var, k=2):
+    def plotRelativeRootContributions(self, var, k=2, ylims=None):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         
@@ -492,7 +875,8 @@ class UncertaintyEngine:
         ax = plt.subplot(111)
         ax.stackplot(time_axis, *root_split, labels=[source.name for source in var.uncertainty.root_sources])
         
-        ax.set_ylim(0,10)
+        if ylims is not None:
+            ax.set_ylim(ylims[0], ylims[1])
         ax.grid()
         ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M:%S'))
             
