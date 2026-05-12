@@ -4,6 +4,21 @@ import pandas as pd
 
     
 class GroupInfo:
+    """ 
+    Small data container that stores precomputed by-date grouping of a dataframe for a specific date.
+    
+    Attributes
+    ----------
+    group: pd.core.indexes.base.Index
+        The group labels corresponding to the specific date this groupinfo object is stored at.
+        Interpretable by pandas to easily access the dataframe slice corresponding to this date.
+    start_time: datetime.datetime
+        Start time of the corresponding timeseries.
+    end_time: datetime.datetime
+        End time of the corrsponding timeseries.
+    timestep: int
+        Timestep of the timeseries in seconds.
+    """
     def __init__(self, group, start_time, end_time, timestep):
         self.group      = group
         self.start_time = start_time
@@ -22,8 +37,9 @@ class DataHandler:
     ----------
     dataframes: dict[str or int, pd.DataFrame]
         Dictionary containing pandas dataframes coupled to a specific unique index.
-    groups: dict[str or int, GroupInfo]
-        Dictionary with identical index keys as `dataframes`, containing GroupInfo objects (the dataframes grouped by date, and timedata).
+    groups: dict[str or int, dict[datetime.date, GroupInfo] ]
+        Dictionary with identical index keys as `dataframes`, containing a dictionary of dates and GroupInfo objects for each dataframe.
+        Used to access pre-computed by-date grouping per dataframe, per date.
     lookup_dict: dict[str, str or int]
         Dictionary of variable names and `dataframes` keys, coupling variables to the DataFrame containing their timeseries data.
         Name of the variable must be identical to their respective dataframe column.
