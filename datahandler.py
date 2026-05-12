@@ -27,14 +27,14 @@ class DataHandler:
     lookup_dict: dict[str, str or int]
         Dictionary of variable names and `dataframes` keys, coupling variables to the DataFrame containing their timeseries data.
         Name of the variable must be identical to their respective dataframe column.
-    blacklist: dict[str, list[datetime.date]]
-        Dictionary containing various blacklist reasons, and a list of dates corresponding with this flag.
+    blacklist: dict[datetime.date, list[str]]
+        Dictionary containing blacklisted days and the reasons for their blacklisting.
     """
     def __init__(self):
         self.dataframes     = {}  #Stores the dataframes
         self.groups         = {}  #Stores grouping information (typically by date) of the dataframes for easy by-day access, keys identical to those of dataframes
         self.lookup_dict    = {}  #Dictionary coupling variable names to a specific dataframe
-        self.blacklist      = {}  #Dictionary containing blacklisted days and the reason for their blacklisting
+        self.blacklist      = {}  #Dictionary containing blacklisted days, and the reasons for blacklisting. 
         
     def addDataFrame(self, df):
         """ 
@@ -276,22 +276,45 @@ class DataHandler:
     ### Routines for adding, ensuring or getting metadata
     ############################
     
-    def compileBlacklist(self):
+    def addToBlacklist(self, reason, dates):
+        """
+        Adds a date or list of dates to the blacklist for a specific reason.
+        
+        Parameters
+        ----------
+        reason: str
+            Reason for blacklisting the given date(s).
+        dates: datetime.date or list[datetime.date]
+            Date(s) to be blacklisted.
+        """
+        
+        #Ensure dates is a list
+        if type(dates) is not list:
+            dates = list(dates)
+        #Append dates to the blacklist
+        for date in dates:
+            entry = self.blacklist.get(date)
+            if entry is None:
+                self.blacklist[date] = [reason]
+            else:
+                entry.append(reason)
+    
+    def getBlacklistByReason(self):
         """ 
-        Transposes `DataHandler.blacklist` such that the keys are the blacklisted days, and the values is a list containing blacklist reasons.
+        Transposes `DataHandler.blacklist` to have reasons as keys and a list of dates as their values.
         
         Returns
         -------
-        dict[datetime.date, list[str]]
-            Dictionary of blacklisted days, coupled to a list of reasons for blacklisting.        
+        dict{str, list[datetime.date]}
+            Dictionary containing the reasons in `DataHandler.blacklist` and the dates blacklisted due to this reason.
         """
         temp = {}
-        for code, days in self.blacklist.items():
-            for day in days:
-                entry = temp.get(day)
-                if entry is None:
-                    temp[day] = []
-                temp[day].append(code)
+        for date, reasons in self.blacklist.items():
+            for r in reasons:
+                if temp.get(r) is None:
+                    temp[r] = [date]
+                else:
+                    temp[r].append(date)
         return temp
     
     def getTimeRange(self, name=None, day=None, df_index=None, df=None):
@@ -495,7 +518,7 @@ class DataHandler:
         self.ensureDateColumn(df=df)
         
         mask = df[column_name].abs() > value_limit
-        self.blacklist[f"Extreme_{column_name}"] = list(df.loc[mask, "Date"].unique())
+        self.addToBlacklist(f"Extreme_{column_name}", list(df.loc[mask, "Date"].unique()))
     
     
     def checkForNaNInBody(self, column_name, day, body_start_after=0): ###!!!
@@ -523,7 +546,7 @@ class DataHandler:
         self.ensureDateColumn(df=df)
         
         mask = (df[column_name].isna() | (df[column_name]==0)) & (df["zenith"] < zenith_limit)
-        self.blacklist[f"Nan_zenith_{column_name}"] = list(df.loc[mask, "Date"].unique())
+        self.addToBlacklist(f"Nan_zenith_{column_name}", list(df.loc[mask, "Date"].unique()))
     
     def cleanNonZeroToZenith(self, column_name, day=None, max_value=1.01, zenith_limit=100):
         """ Checks if the column is nonzero after the solar zenith angle is below a certain height
@@ -549,7 +572,7 @@ class DataHandler:
         self.ensureDateColumn(df=df)
         
         mask = ~(df[column_name].isna() | (df[column_name]==0)) & (df["zenith"] > zenith_limit)
-        self.blacklist[f"Nonzero_zenith_{column_name}"] = list(df.loc[mask, "Date"].unique())
+        self.addToBlacklist(f"Nonzero_zenith_{column_name}", list(df.loc[mask, "Date"].unique()))
 
         
     def interpolateNaN(self, column_name, day=None, min_value=0, else_value=np.nan):

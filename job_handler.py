@@ -492,8 +492,6 @@ class JobHandler:
         self.derived_variables_names = None
         self.var_backend_pointers = None
         
-        self.blacklist = {}
-    
         self.results = Results()
         
         ##computational control flow booleans
@@ -623,14 +621,13 @@ class JobHandler:
     
     def _prepareForExecution(self):
         """ 
-        Function ensuring the state of the JobHandler is ready for execution and any preprocessing function given to the it is executed.
+        Function ensuring the state of the JobHandler is ready for execution and any preprocessing function given to it is executed.
         """
         if not self.initialized_engines:
             self._prepareEngines()
         
         if self.preprocessing is not None:
             self.preprocessing(self)
-        self.blacklist = self.data.compileBlacklist()
         
         if self.main is None:
             raise ValueError("No main jobscript is provided to the job handler. Please provide a main function under JobHandler.main")
@@ -667,11 +664,11 @@ class JobHandler:
         #Handle the 'fail' blacklist mode
         if blacklist_mode == "fail":
             #Day is None
-            if day is None and len(self.blacklist)>0:
+            if day is None and len(self.data.blacklist)>0:
                 fail_code = "Any day blacklisted"
                 return False, fail_code, []
             #Day is not None
-            preprocessing_error = self.blacklist.get(day)
+            preprocessing_error = self.data.blacklist.get(day)
             if preprocessing_error is not None:
                 fail_code = preprocessing_error[0]
                 return False, fail_code, []
@@ -680,7 +677,7 @@ class JobHandler:
         
         #Handle the 'mask' blacklist mode
         elif blacklist_mode == "mask":
-            return True, None, list(self.blacklist.keys())
+            return True, None, list(self.data.blacklist.keys())
         #Handle the 'ignore' blacklist mode
         elif blacklist_mode == "ignore":
             return True, None, []
