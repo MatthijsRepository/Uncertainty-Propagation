@@ -826,7 +826,7 @@ class UncertaintyEngine:
         plt.ylabel("Percentage contribution split")
         plt.show()
         
-    def plotAbsoluteRootContributions(self, var, k=2, ylims=None):
+    def plotAbsoluteRootContributions(self, var, k=2, ylims=None, date=None):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         
@@ -849,12 +849,16 @@ class UncertaintyEngine:
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(0.848, 0.5))
         
-        plt.title(f"Total uncertainty of variable {var.name}, k={k}")
+        title = f"Total uncertainty of variable {var.name}, k={k}"
+        if date is not None:
+            title += ", " + str(date)
+            
+        plt.title(title)
         plt.xlabel("Time")
         plt.ylabel("Total uncertainty")
         plt.show()
         
-    def plotRelativeRootContributions(self, var, k=2, ylims=None):
+    def plotRelativeRootContributions(self, var, k=2, ylims=None, date=None):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         
@@ -886,18 +890,16 @@ class UncertaintyEngine:
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(1, 0.5))
         
-        plt.title(f"Uncertainty relative to total signal, k={k}")
+        title = f"Uncertainty relative to total signal, k={k}"
+        if date is not None:
+            title += ", " + str(date)
+            
+        plt.title(title)
         plt.xlabel("Time")
         plt.ylabel("Relative contribution split [%]")
         plt.show()    
     
    
-
-    
-    
-    
-    
-    
     
     def getWeightedRootUncertainties_OLD(self, var, store=False):
         """ Get all weighted root uncertainties of a variable. Specifically, for all uncertainty sources downtree,
