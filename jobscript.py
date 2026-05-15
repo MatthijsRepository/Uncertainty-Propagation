@@ -6,8 +6,9 @@ import numpy as np
 import pandas as pd
 
 
-
-##############################################
+# =============================================================================
+# Defining preprocessing and main functions
+# =============================================================================
 
 def preprocessing(handler):
     handler.data.interpolateNaN("Pout")
@@ -63,9 +64,10 @@ def main(handler, identifier=None):
 
     return True, None
    
-##############################################
-    
-#Creating a dataframe from CSV data
+
+# =============================================================================
+# Loading pandas dataframe
+# =============================================================================
 
 CSV_filepath = ".\\Dataset-SolarTechLab.csv"
 structure_list = ["Time", "Pout", "T", "-", "G", "W", "-"]
@@ -76,7 +78,10 @@ data_handler = PandasCSVHandler()
 df = data_handler.readCSVData(CSV_filepath, ";", structure_list=structure_list, timeformat=timeformat, select_days=None)
 del data_handler
 
-##############################################
+
+# =============================================================================
+# Primary jobscript
+# =============================================================================
 
 #Equation tree input file
 equation_tree_filepath = ".\\test_tree.txt"
@@ -100,9 +105,8 @@ job.data.addZenithColumn(coordinates, UTC_offset=UTC_offset, df_index=0)
 
 
 
+# Execution over entire year of data
 
-
-#Execution over all data
 job.execute(identifier="year", blacklist_mode="mask", results_group="year")
 res = job.results.getResult(identifier="year", group="year")
 print()
@@ -115,17 +119,14 @@ print()
 
 
 
-#Execution over daily data
+# Execution over daily data
+
 days = job.data.getDays(name="Pout")
 unique_days = days[:-1]
 #Loop through the data day-by-day and execute the job
 for i, day in enumerate(unique_days):
     #print(day)
     job.execute(day=day, identifier=day, blacklist_mode="fail")
-
-
-
-
 
 
 print()
@@ -152,18 +153,18 @@ PR_T_u_sources   = job.results.getUniqueResult("PR T u sources")
 
 job.results.summariseFails()
 
-print(f"Avg daily PR                        : {PR_avg} +/- {PR_u_avg*2} (k=2)")
-print(f"Avg daily PR (temperature corrected): {PR_T_avg} +/- {PR_T_u_avg*2} (k=2)")
+print(f"Avg daily PR                        : {np.round(PR_avg*100, decimals=5)} +/- {np.round(PR_u_avg*2*100, decimals=5)} % (k=2)")
+print(f"Avg daily PR (temperature corrected): {np.round(PR_T_avg*100, decimals=5)} +/- {np.round(PR_T_u_avg*2*100, decimals=5)} % (k=2)")
 
 print()
 print("Source contribution splits [%]:")
 print("PR")
 for i, s in enumerate(PR_u_sources):
-    print(f"{s}  {PR_u_split_avg[i]}")
+    print(f"{s}  {np.round(PR_u_split_avg[i], decimals=2)} %")
 print()
 print("PR temperature corrected")
 for i, s in enumerate(PR_T_u_sources):
-    print(f"{s}  {PR_T_u_split_avg[i]}")
+    print(f"{s}  {np.round(PR_T_u_split_avg[i], decimals=2)} %")
 
 
 success_booleans, identifiers = job.results.getSuccessBooleans(as_array=True)
@@ -177,6 +178,24 @@ plt.xlabel("Date")
 plt.legend()
 plt.grid()
 plt.show()
+
+
+
+# Direct execution scripting for greater control
+
+
+import datetime
+
+date = datetime.date(2017, 5, 30)
+job._populateVariablesFromBackend(date)
+job._validateBasicVariables()
+
+job.evaluateVariable("G")
+job.calculateTotalUncertainty("G", mask=True)
+
+job.uncertainty_engine.plotAbsoluteRootContributions(job.variables["G"], ylims=(0, 25), date=date)
+
+
 
 
 
