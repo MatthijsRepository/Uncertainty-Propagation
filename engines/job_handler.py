@@ -1,9 +1,9 @@
-from input_handler_modules import EquationTreeReader
-from equation_engine import EquationEngine
-from calculation_engine import CalculationEngine
-from uncertainty_engine import UncertaintyEngine
-from time_engine import TimeEngine
-from datahandler import DataHandler
+from engines.input_handler_modules import EquationTreeReader
+from engines.equation_engine import EquationEngine
+from engines.calculation_engine import CalculationEngine
+from engines.uncertainty_engine import UncertaintyEngine
+from engines.time_engine import TimeEngine
+from engines.datahandler import DataHandler
 
 import numpy as np
 from dataclasses import dataclass

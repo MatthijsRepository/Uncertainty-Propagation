@@ -1,5 +1,5 @@
-from job_handler import JobHandler
-from input_handler_modules import PandasCSVHandler
+from engines.job_handler import JobHandler
+from engines.input_handler_modules import PandasCSVHandler
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -78,6 +78,9 @@ del data_handler
 
 ##############################################
 
+import time
+t0 = time.time()
+
 #Equation tree input file
 equation_tree_filepath = ".\\test_tree.txt"
 
@@ -125,7 +128,7 @@ for i, day in enumerate(unique_days):
 
 
 
-
+print(time.time()-t0)
 
 
 print()

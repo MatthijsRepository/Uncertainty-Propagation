@@ -1,6 +1,6 @@
 import numpy as np
 from datetime import datetime, timedelta
-from my_dataclasses import Variable, TimeHarmonizationData
+from engines.my_dataclasses import Variable, TimeHarmonizationData
 
 
 class TimeEngine:
