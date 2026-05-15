@@ -164,7 +164,7 @@ class CalculationEngine:
             if force_recalculation is True:
                 print(f"WARNING: executing equation of variable {var.name} while values are already defined!")
             else:
-                return var.values
+                return var.values, var.getTimeData(), var.non_aggregated_values, var.aggregation_step, var.harmonization_cache
         
         args, timedata, harmonized_data = self.time_engine.ensureDependencyTimeHarmony(var, force_recalculation=force_recalculation)
 
