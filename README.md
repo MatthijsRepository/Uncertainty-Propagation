@@ -2,7 +2,7 @@
 
 This Python tool is an object-oriented uncertainty calculation framework that can be used to propagate uncertainty through user-defined equation trees. The user specifies a set of variables in a text file, which include basic variables with defined values (scalars or timeseries), and derived variables that are calculated from basic variables and other derived variables. The user can specify custom uncertainty sources that can act on any variable. Executing the evaluation of derived variables and the uncertainty of any variable in the tree due is then done by running a small execution script. The code will automatically handle engine initialization, equation tree verification, timeseries matching, partial derivative handling and time-aggregation of uncertainty. The workflow is designed to easily integrated with pandas dataframes of timeseries data, such that users can perform their own quality control and correction procedures on these dataframes before loading them into the engine.
  
-The the code comes with an example PV system dataset, equation tree and execution script that serve to illustrate the workflow of this framework. In order to execute the example, please ensure you have the following dependencies installed: `numpy`, `pandas`, `matplotlib`, `sympy`, `pvlib`.
+The code comes with an example PV system dataset, equation tree and execution script that serve to illustrate the workflow of this framework. In order to execute the example, please ensure you have the following dependencies installed: `numpy`, `pandas`, `matplotlib`, `sympy`, `pvlib`.
 
 ## The calculation tool: what is it and what can you do with it?
 
