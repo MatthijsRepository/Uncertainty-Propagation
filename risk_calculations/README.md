@@ -1,0 +1,4 @@
+## The Risk Calculations Tool
+This folder contains python modules used to calculate financial risk in EPC and O&M performance guarantee acceptance testing. The code in this folder is completely separate from the uncertainty propagation functionality. However, PR uncertainties obtained from the uncertainty code can be used in to calculate  financial risk using in acceptance testing using realistic uncertainty values. 
+ 
+For more information on the financial risk calculations in these modules, including the mathematical derivation of the used formulas and calculated results, refer to sections 3.3 & 4.3 of this master thesis: https://resolver.tudelft.nl/uuid:2c9560ac-396a-4486-b6af-7518637b9556.
