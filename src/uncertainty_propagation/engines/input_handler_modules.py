@@ -1,4 +1,4 @@
-from engines.my_dataclasses import Variable, UncertaintySource, ParsedVariableData
+from .my_dataclasses import Variable, UncertaintySource, ParsedVariableData
 import numpy as np
 import csv
 from datetime import datetime

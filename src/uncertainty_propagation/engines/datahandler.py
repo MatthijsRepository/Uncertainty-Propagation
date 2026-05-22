@@ -496,7 +496,7 @@ class DataHandler:
         UTC_offset: int or None, default=None
             Hours offset from UTC.
         """
-        from engines.solar_module import calculateZenithAngles
+        from .solar_module import calculateZenithAngles
         if df is None:
             df = self.getDataFrame(df_index=df_index)
         solar_data = calculateZenithAngles(coordinates, df["Time"], time_zone=time_zone, UTC_offset=UTC_offset)

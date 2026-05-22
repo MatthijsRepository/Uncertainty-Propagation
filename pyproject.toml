@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+ 
+[project]
+name = "uncertainty-propagation"
+authors = [
+    {name = "MATE", email = "matthijs.ates@hukx.com"},
+]
+description = "Package for propagating uncertainty through equation trees of timeseries data."
+version = "1.0"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "setuptools",
+	"numpy >= 2.3.5",
+	"pandas >= 2.3.3",
+	"matplotlib >= 3.10.7",
+	"sympy >= 1.14.0",
+	"pvlib >= 0.13.1",
+]

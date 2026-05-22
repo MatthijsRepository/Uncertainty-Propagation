@@ -1,4 +1,4 @@
-from engines.my_dataclasses import Variable
+from .my_dataclasses import Variable
 import re
 import sympy as sp
 
