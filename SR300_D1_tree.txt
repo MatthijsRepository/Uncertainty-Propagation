@@ -79,7 +79,9 @@ input DERIVED VARIABLES
 		aggregation: average
 		maskable: False
 		UNCERTAINTIES:
-			-temperature uncertainty: absolute, shape=rectangular, symmetric, correlation=1, bound=1, include=True
+			#-temperature uncertainty: absolute, shape=rectangular, symmetric, correlation=1, bound=1, include=True
+			-temperature uncertainty: absolute, shape=rectangular, symmetric, correlation=1, bound=1
+			-temperature offset: absolute, shape=rectangular, one-sided, correlation=1, bound=2
 		end UNCERTAINTIES
 	end eq T_mod
 	eq G

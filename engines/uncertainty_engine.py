@@ -826,7 +826,7 @@ class UncertaintyEngine:
         plt.ylabel("Percentage contribution split")
         plt.show()
         
-    def plotAbsoluteRootContributions(self, var, k=2, ylims=None, date=None):
+    def plotAbsoluteRootContributions(self, var, k=2, ylims=None, return_ax=False):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         
@@ -848,17 +848,16 @@ class UncertaintyEngine:
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(0.848, 0.5))
-        
-        title = f"Total uncertainty of variable {var.name}, k={k}"
-        if date is not None:
-            title += ", " + str(date)
             
-        plt.title(title)
-        plt.xlabel("Time")
-        plt.ylabel("Total uncertainty")
-        plt.show()
+        ax.set_title(f"Total uncertainty of variable {var.name}, k={k}")
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Total uncertainty")
+        if return_ax:
+            return ax
+        else:
+            plt.show()
         
-    def plotRelativeRootContributions(self, var, k=2, ylims=None, date=None):
+    def plotRelativeRootContributions(self, var, k=2, ylims=None, return_ax=False):
         import matplotlib.pyplot as plt
         import matplotlib.dates as mdates
         
@@ -889,15 +888,14 @@ class UncertaintyEngine:
         ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])
         handles, labels = ax.get_legend_handles_labels()
         ax.legend(handles[::-1], labels[::-1], loc='center left', bbox_to_anchor=(1, 0.5))
-        
-        title = f"Uncertainty relative to total signal, k={k}"
-        if date is not None:
-            title += ", " + str(date)
             
-        plt.title(title)
-        plt.xlabel("Time")
-        plt.ylabel("Relative contribution split [%]")
-        plt.show()    
+        ax.set_title( f"Uncertainty relative to total signal, k={k}")
+        ax.set_xlabel("Time")
+        ax.set_ylabel("Relative contribution split [%]")
+        if return_ax:
+            return ax
+        else:
+            plt.show()    
     
    
     

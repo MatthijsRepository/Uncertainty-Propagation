@@ -83,6 +83,10 @@ del data_handler
 # Primary jobscript
 # =============================================================================
 
+############
+# Preamble
+############
+
 #Equation tree input file
 equation_tree_filepath = ".\\test_tree.txt"
 
@@ -105,7 +109,10 @@ job.data.addZenithColumn(coordinates, UTC_offset=UTC_offset, df_index=0)
 
 
 
+
+###########
 # Execution over entire year of data
+###########
 
 job.execute(identifier="year", blacklist_mode="mask", results_group="year")
 res = job.results.getResult(identifier="year", group="year")
@@ -116,10 +123,9 @@ print(f"PR_T: {np.round( res.data['PR T values'], decimals=5)} +/- {np.round( re
 print()
 
 
-
-
-
+###########
 # Execution over daily data
+###########
 
 days = job.data.getDays(name="Pout")
 unique_days = days[:-1]
@@ -180,9 +186,9 @@ plt.grid()
 plt.show()
 
 
-
-# Direct execution scripting for greater control
-
+###########
+# Example of direct execution scripting for greater control
+###########
 
 import datetime
 
@@ -193,7 +199,52 @@ job._validateBasicVariables()
 job.evaluateVariable("G")
 job.calculateTotalUncertainty("G", mask=True)
 
-job.uncertainty_engine.plotAbsoluteRootContributions(job.variables["G"], ylims=(0, 25), date=date)
+ax = job.uncertainty_engine.plotAbsoluteRootContributions(job.variables["G"], ylims=(0, 25), return_ax=True)
+ax.set_xlabel(r"Total uncertainty [$W/m^2$]")
+ax.set_title(f"Irradiance uncertainty, k=2, {str(date)}")
+plt.show()
+
+
+
+###########
+# Comparing PR achievable using ISO class A and SR300
+###########
+
+job.loadEquationTree(".\\SR300_D1_tree.txt")
+job.execute(identifier="year", blacklist_mode="mask", results_group="year_SR300_D1")
+
+
+res_ISO   = job.results.getResult(identifier="year", group="year")
+res_SR300 = job.results.getResult(identifier="year", group="year_SR300_D1")
+
+PR_T_ISO       = res_ISO.data["PR T uncertainty"] * 2 * 100
+PR_T_ISO_split = res_ISO.data["PR T u split"]
+PR_T_300       = res_SR300.data["PR T uncertainty"] * 2 * 100
+PR_T_300_split = res_SR300.data["PR T u split"]
+
+u_sources = job.results.getUniqueResult("PR T u sources")
+
+
+def make_barplot(uncertainty, split_dict, name):
+    fig, ax = plt.subplots(figsize=(6,6), dpi=300)
+    
+    bottom = 0
+    for src, val in split_dict.items():
+        val *= uncertainty
+        ax.bar(name, val, bottom=bottom, label=src)
+        bottom += val
+    ax.margins(x=0.4)
+
+    ax.set_ylim(0, 5)
+    ax.grid(axis='y')
+
+    ax.legend(loc='center left', bbox_to_anchor=(1.05, 0.5),)
+    ax.set_ylabel("PR uncertainty [%] (k=2)")
+    plt.show()
+
+
+make_barplot(PR_T_ISO, dict(zip(u_sources, PR_T_ISO_split)), "Class A - ISO 9060")
+make_barplot(PR_T_300, dict(zip(u_sources, PR_T_300_split)), "SR300-D1")
 
 
 
