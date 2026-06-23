@@ -199,7 +199,7 @@ job.evaluateVariable("G")
 job.calculateTotalUncertainty("G", mask=True)
 
 ax = job.uncertainty_engine.plotAbsoluteRootContributions(job.variables["G"], ylims=(0, 25), return_ax=True)
-ax.set_xlabel(r"Total uncertainty [$W/m^2$]")
+ax.set_ylabel(r"Total uncertainty [$W/m^2$]")
 ax.set_title(f"Irradiance uncertainty, k=2, {str(date)}")
 plt.show()
 

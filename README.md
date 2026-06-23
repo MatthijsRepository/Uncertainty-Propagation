@@ -1,8 +1,8 @@
 ## Introduction and quickstart guide
 
-This Python tool is an object-oriented uncertainty calculation framework that can be used to propagate uncertainty through user-defined equation trees. The user specifies a set of variables in a text file, which include basic variables with defined values (scalars or timeseries), and derived variables that are calculated from basic variables and other derived variables. The user can specify custom uncertainty sources that can act on any variable. Executing the evaluation of derived variables and the uncertainty of any variable in the tree due is then done by running a small execution script. The code will automatically handle engine initialization, equation tree verification, timeseries matching, partial derivative handling and time-aggregation of uncertainty. The workflow is designed to easily integrated with pandas dataframes of timeseries data, such that users can perform their own quality control and correction procedures on these dataframes before loading them into the engine.
- 
-The code comes with an example PV system dataset, equation tree and execution script that serve to illustrate the workflow of this framework. In order to execute the example, please ensure you have the following dependencies installed: `numpy`, `pandas`, `matplotlib`, `sympy`, `pvlib`.
+This Python tool is an object-oriented uncertainty calculation framework that can be used to propagate uncertainty through user-defined equation trees. The user specifies a set of variables in a text file, which include basic variables with defined values (scalars or timeseries), and derived variables that are calculated from basic variables and other derived variables. The user can specify custom uncertainty sources that can act on any variable. Calculating derived variables and uncertainty in the tree is then done by running a small execution script. The code will automatically handle engine initialization, equation tree verification, timeseries matching, partial derivative handling and time-aggregation of uncertainty. The workflow is designed to easily integrate with pandas dataframes of timeseries data, such that users can perform their own quality control and correction procedures on these dataframes before loading them into the engine.
+  
+The code comes with an example PV system dataset, equation tree and execution script that serve to illustrate the workflow of this framework. The code is wrapped as a package and can be installed by running `pip install -e` in the package root directory. Code dependencies include `numpy`, `pandas`, `matplotlib`, `sympy`, `pvlib`. The package versions this code is tested on are found in the `pyproject.toml` file.
 
 
 ## The calculation tool: what is it and what can you do with it?
@@ -30,10 +30,11 @@ The user can specify uncertainty sources for each variable. Multiple uncertainty
 
 ## Points to keep in mind
 This tool is meant to calculate the minimally achievable uncertainty in a quantity based on the specifications on the used measurement systems. In case the magnitude or characteristics of an uncertainty are unknown, it cannot be included in this calculation.  
+ 
 Be aware that the results are always dependent on the used dataset. The uncertainty of a quantity $C = A * B$ with an uncertainty source in $B$, will always be dependent on the value(s) of $A$. To draw general conclusions, one needs to average or aggregate over a large amount of data.  
 The tool can be used for ‘normal’ equations: regular arithmetic, mathematical operations, exponents, trigonometric functions and discrete integrals. Be aware that the code takes as the sensitivity coefficient for a source simply the instantaneous value of the partial derivative of the measurement equation with respect to the variable the uncertainty source acts on – which is a first-order approximation. The validity of this approximation may be questionable in case of highly nonlinear functions and large relative uncertainties.  
-Also please keep in mind that the calculated uncertainty is only as good as the least accurate approximation used in the code. While the uncertainty propagation works with first-order approximations on the sensitivities, other approximations may be of even more significant influence. For instance, when estimating module temperature from ambient temperature, be aware that you are introducing another approximation to the model. When using such an approximation, it does not make sense to rigorously propagate the uncertainty in the measured wind speed to the final PR uncertainty, since the approximation itself may be a far greater source of (unquantified) uncertainty. Using such an approximation should be done with the intent of 'synthesizing' your own back-of-module temperature to extend the available dataset with. The temperature uncertainty should then be added to the synthesized back-of-module temperature measurement, not on the ambient temperature measurement.
-
+ 
+Also please keep in mind that the calculated uncertainty is only as good as the least accurate approximation used in the code. While the uncertainty propagation works with first-order approximations on the sensitivities, other approximations may be of even more significant influence. For instance, when synthesizing module temperature from ambient meteorological variables, it does not make sense to rigorously propagate the uncertainty from the root variables in this case, since the approximation itself may be a far greater source of (unquantified) uncertainty. A chosen temperature uncertainty should instead be applied to the synthesized back-of-module temperature.
 
 ## Assumptions, calculation errors and other limitations
 - Importantly, the tool works under the assumption that separate uncertainty sources are independent (not cross-correlated).
@@ -45,20 +46,17 @@ To fix this issue, one can scan the var.uncertainty.root_sources list for duplic
 
 It is recommended to further expand the code with decaying autocorrelation, with an inclusion-cutoff if the correlation is below a specified limit, leading to the correlation matrix being a band matrix. Correlated uncertainty aggregation over arbitrarily long timescales can then be performed iteratively and potentially parallelized for performance. 
 
-## How the code works – general
+## Overview of code structure
 The tool is developed in an object-oriented way. All variables are objects that store information on their own values, uncertainties, dependencies and properties such as calculation rules and state indicators.  
 The operations on the variables, or on the equation tree as a whole, are performed by objects called engines. The calculation engine calculates variable values, the uncertainty engine calculates uncertainty, the time engine handles time matching between variables, et cetera.
 
 #### User Interface
-The `JobHandler` object is the main interface between the user and the internal functionality. The user can load equation trees and pandas dataframes objects to this handler and specify which tasks should be executed. The job handler will then perform pre-execution checks, variable initialization, job execution and post-job result storing. The user needs to specify the main job routine to the jobhandler by defining a `main` function executed when the `execute` function is called. The `JobHandler` object has wrapper functions for many of the main functionalities of the code that can be used inside the `main` function. Additionally, the JobHandler also has internal copies of all engines, so the user can also directly access the full engine functionality inside the `main` function with the right syntax. The jobscript.py file contains an illustration on how this works.   
-To load timeseries data to variables, the JobHandler makes use of a custom data backend in which pandas dataframes are stored and that maps variables to the dataframes and columns containing their data. This datahandler also contains some rudimentary data cleaning and checking methods. 
+The `JobHandler` object is the main interface between the user and the internal functionality. The user can load equation trees and pandas dataframes objects to this handler and specify which tasks should be executed. The job handler will then perform pre-execution checks, variable initialization, job execution and post-job result storing. The user needs to specify the main job routine to the jobhandler by defining a `main` function executed when the `execute` function is called. The `JobHandler` object has wrapper functions for many of the main functionalities of the code that can be used inside the `main` function. Additionally, the `JobHandler` also has internal copies of all engines, so the user can also directly access the full engine functionality inside the `main` function with the right syntax. The provided jobscript contains an example of this workflow.
+To load timeseries data to variables, the `JobHandler` makes use of a custom data backend in which pandas dataframes are stored and that maps variables to the dataframes and columns containing their data. This datahandler also contains some rudimentary data cleaning and checking methods. 
 Days can be blacklisted in the datahandler, such that the data is masked or execution fails if calculations involve a specific day.
-Execution of the job is done through the `JobHandler.execute` function. Upon calling this function, the user can specify whether execution should be performed over the entire dataset or a subset of it, and how blacklisted days should be handled. Calling this function will cause the state of the equation tree to be reset, calculations to be performed and desired results, with some metadata, to be written to `JobHandler.Results`. The state of the equation tree will remain in place once execution is finished, for custom access and control.
+Execution of the job is done through the `JobHandler.execute` function. Upon calling this function, the user can specify whether execution should be performed over the entire dataset or a subset of it, and how blacklisted days should be handled. Calling this function will cause the equation tree to be reset and repopulated, calculations to be performed and desired results to be written to `JobHandler.Results`. The state of the equation tree will remain in place once execution is finished, for custom access and control.
 
-#### Dependencies
-The code is purely python-based and makes use mostly of standard python libraries: `numpy`, `matplotlib`, `pandas`. The code makes use of `SymPy` for the creation of executables of a variable's equation and to take symbolic partial derivatives of the variable's equation, which can subsequently be turned into executables, to calculate sensitivity coefficients. The code also uses `pvlib` to perform solar zenith angle calculations. In case you don't want to use this functionality, simply do not use functionality related to solar zenith angles and comment out the lines in `solar_module.py` related to it.
-
-## Overall workflow
+## Workflow summary
 - The user defines an equation tree following the syntax of the example equation tree.
 - The user creates a `JobHandler` instance.
 - The user loads their data as pandas dataframes and passes these into the Job Handler.
@@ -107,7 +105,6 @@ This is a small dataclass that stores the characteristics of a single uncertaint
 
 #### The TimeHarmonizationData dataclass
 This dataclass is stored to inform the code how the timeseries data of a specific dependency was changed when computing a variable’s values. This includes information on the timestep increase, how much data at the edges was discarded, etc.
-
 
 ## Short API overview: engines
 The code makes use of 4 main engines. Engines act on a registry of variables and are designed to perform specific functions for the user.
